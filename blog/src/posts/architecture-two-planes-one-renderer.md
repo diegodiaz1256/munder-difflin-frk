@@ -136,7 +136,7 @@ A few properties fall out of the two-plane design:
 
 It's the architecture that lets "a hive of Claude Code agents" be both something you can *read* (the
 terminals) and something you can *watch* (the floor) — which is the heart of what a
-[multi-agent harness](https://munderdiffl.in/#what) is.
+[multi-agent harness](https://scranton-branch.example/#what) is.
 
 ## FAQ
 
@@ -152,5 +152,5 @@ streams) rather than needing a new one.
 
 Munder Difflin's two-plane architecture — authentic node-pty terminals plus an event-driven Pixi.js
 floor, converging in one renderer — is what makes a hive both legible and real.
-[Download Munder Difflin](https://munderdiffl.in/#install) to see the architecture in action; it's
+[Download Munder Difflin](https://scranton-branch.example/#install) to see the architecture in action; it's
 free and open source.

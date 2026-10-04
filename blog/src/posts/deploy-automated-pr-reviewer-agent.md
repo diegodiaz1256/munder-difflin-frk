@@ -99,7 +99,7 @@ Within those limits, what you get is genuinely useful: a reviewer that never sle
 
 If you maintain a repo with more inbound than time, this is roughly a five-minute setup and zero ongoing babysitting:
 
-1. [Download Munder Difflin](https://munderdiffl.in/#install) — free, open source, local-first, macOS/Windows/Linux (and yes, [Windows is first-class as of v0.4.4](/blog/launching-munder-difflin-v0-4-4/)).
+1. [Download Munder Difflin](https://scranton-branch.example/#install) — free, open source, local-first, macOS/Windows/Linux (and yes, [Windows is first-class as of v0.4.4](/blog/launching-munder-difflin-v0-4-4/)).
 2. Add a CLI agent on whichever engine subscription you already have — the app supports ten, and **Settings → Prerequisites** confirms which binaries it can see.
 3. Brief Michael with the prompt above, swapping in your repo and your escalation bar.
 4. Leave it running on a second monitor and let new PRs get reviewed on the hour.

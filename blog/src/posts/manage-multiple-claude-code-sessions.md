@@ -127,6 +127,6 @@ the same progression with the orchestration layer in view.
 
 ---
 
-When the checklist starts feeling like a second job, that's what a [multi-agent harness](https://munderdiffl.in/#what) like Munder Difflin automates: roles,
+When the checklist starts feeling like a second job, that's what a [multi-agent harness](https://scranton-branch.example/#what) like Munder Difflin automates: roles,
 isolated agents, shared memory, and a single committer, all on your own machine.
-[Download Munder Difflin](https://munderdiffl.in/#install) — it's free and open source.
+[Download Munder Difflin](https://scranton-branch.example/#install) — it's free and open source.

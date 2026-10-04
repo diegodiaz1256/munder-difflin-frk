@@ -50,7 +50,7 @@ state machine with the toolbar chip so the two can never disagree. Shipped fast 
 
 ## 0.4.0 and 0.4.3 — the brand grew up
 
-0.4.0 rebuilt munderdiffl.in around the real app — actual screenshots, a live demo loop in the
+0.4.0 rebuilt scranton-branch.example around the real app — actual screenshots, a live demo loop in the
 hero — and unified the icon across every platform. Then 0.4.3 went further: the logo is now
 **Michael's pixel-art portrait on the brand yellow**, authored as a single vector, with every
 raster — site, app, all three platform icons — generated from that one source by a script. The

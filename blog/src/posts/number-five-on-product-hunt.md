@@ -94,7 +94,7 @@ Here's the part nobody puts in their launch thread: the badge is not a traffic c
 applause was loud; the click-through to the site was a trickle. If you're launching a developer
 tool and expecting Product Hunt to fill your funnel, adjust that expectation now.
 
-What it *is*: a credibility artifact (the badge now lives on [munderdiffl.in](https://munderdiffl.in)),
+What it *is*: a credibility artifact (the badge now lives on [scranton-branch.example](https://scranton-branch.example)),
 and a filter that surfaces a handful of unusually serious evaluators. The questions those
 evaluators asked — about trust, about unattended runs, about
 [what runs where](/blog/why-local-first-matters-for-ai-agents/) — were the enterprise questions,

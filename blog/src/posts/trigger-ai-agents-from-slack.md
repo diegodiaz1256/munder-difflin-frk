@@ -131,6 +131,6 @@ to reach it — nothing to host, and the local handler runs even if the tunnel d
 ---
 
 Munder Difflin turns a Slack channel into a remote control for a hive that still lives entirely on your
-machine — [orchestrated by GOD](https://munderdiffl.in/#how), verified at the edge, queued like any
-other task. [Download Munder Difflin](https://munderdiffl.in/#install) to drive your agents from chat;
+machine — [orchestrated by GOD](https://scranton-branch.example/#how), verified at the edge, queued like any
+other task. [Download Munder Difflin](https://scranton-branch.example/#install) to drive your agents from chat;
 it's free and open source.

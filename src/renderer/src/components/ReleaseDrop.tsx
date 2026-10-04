@@ -8,7 +8,7 @@
  * The chrome follows the landing site (docs/DESIGN.md), not the app's pixel
  * idiom and not a generic rounded sheet: warm paper, square corners, a thick
  * ink border, a hard offset shadow with no blur, and a dark mono title bar with
- * three square dots. It is the `.win` window from munderdiffl.in, so the moment
+ * three square dots. It is the `.win` window from scranton-branch.example, so the moment
  * a user opens the drop it reads as the same product they downloaded from.
  *
  * There is NO chrome button here, on purpose. The app frames the drop and gets

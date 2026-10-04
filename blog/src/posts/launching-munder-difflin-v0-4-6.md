@@ -245,7 +245,7 @@ Merge a pull request and a workflow hands you the **employee of the month** role
 ## Get it
 
 If you are on 0.3.5 or later the app will offer the update itself, and this time clicking the
-badge actually installs it. Fresh install: [munderdiffl.in](https://munderdiffl.in). Every receipt
+badge actually installs it. Fresh install: [scranton-branch.example](https://scranton-branch.example). Every receipt
 is in [the changelog](https://github.com/chaitanyagiri/munder-difflin/blob/main/CHANGELOG.md).
 
 If you run the app in Chinese or Arabic, we want to hear what is broken. Especially Arabic, and

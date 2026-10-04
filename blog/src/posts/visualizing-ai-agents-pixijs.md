@@ -42,7 +42,7 @@ The value of a visualization is answering "what is everyone doing right now?" in
 - an envelope flying between desks = a message being routed.
 
 You get the team's state in one look. That's not a gimmick — it's
-[an office you can actually see](https://munderdiffl.in/#how), the visible counterpart to reading the
+[an office you can actually see](https://scranton-branch.example/#how), the visible counterpart to reading the
 [event log](/blog/append-only-event-log-agents/).
 
 ## The Pixi.js setup
@@ -150,5 +150,5 @@ you want it.
 ---
 
 Munder Difflin renders your hive of Claude Code agents as a live Pixi.js office floor — real avatars,
-driven by real events, that you can actually watch. [Download Munder Difflin](https://munderdiffl.in/#install)
+driven by real events, that you can actually watch. [Download Munder Difflin](https://scranton-branch.example/#install)
 to see your agents at work; it's free and open source.

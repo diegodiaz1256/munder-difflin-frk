@@ -5,8 +5,8 @@ export default {
   name: "Munder Difflin",
   blogName: "Munder Difflin Blog",
   // Origin with no trailing slash; pathPrefix (/blog/) is applied by Eleventy.
-  origin: "https://munderdiffl.in",
-  baseUrl: "https://munderdiffl.in/blog/",
+  origin: "https://scranton-branch.example",
+  baseUrl: "https://scranton-branch.example/blog/",
   // Blog-index description (Kevin's SEO_METADATA.md §3.9).
   description:
     "Guides, deep dives, and comparisons on running multi-agent Claude Code: orchestration, agent memory, automation, and the tooling landscape.",
@@ -16,23 +16,23 @@ export default {
   author: {
     name: "Chaitanya Giri",
     twitter: "",
-    url: "https://munderdiffl.in",
+    url: "https://scranton-branch.example",
   },
   // Home-page pillar anchors blog posts link UP to (SEO_METADATA.md §5.7).
   pillars: {
-    what: "https://munderdiffl.in/#what",
-    how: "https://munderdiffl.in/#how",
-    why: "https://munderdiffl.in/#why",
-    install: "https://munderdiffl.in/#install",
-    claude: "https://munderdiffl.in/#claude",
-    opensource: "https://munderdiffl.in/#opensource",
+    what: "https://scranton-branch.example/#what",
+    how: "https://scranton-branch.example/#how",
+    why: "https://scranton-branch.example/#why",
+    install: "https://scranton-branch.example/#install",
+    claude: "https://scranton-branch.example/#claude",
+    opensource: "https://scranton-branch.example/#opensource",
   },
   social: {
     github: "https://github.com/chaitanyagiri/munder-difflin",
-    site: "https://munderdiffl.in",
+    site: "https://scranton-branch.example",
   },
   // Default OG image (absolute). Per-post `ogImage` overrides this.
-  defaultOgImage: "https://munderdiffl.in/media/og.png",
+  defaultOgImage: "https://scranton-branch.example/media/og.png",
   themeColor: "#F5F2E8",
   // Topic clusters (categories), aligned to Kevin's keyword taxonomy + the
   // technical/non-technical split in BLOG_IDEAS.md. A post's `category` field

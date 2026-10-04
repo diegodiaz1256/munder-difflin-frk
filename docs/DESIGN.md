@@ -1,6 +1,6 @@
 # Munder Difflin — Landing Site Design System
 
-> Source of truth for `docs/index.html` (the marketing site at **munderdiffl.in**).
+> Source of truth for `docs/index.html` (the marketing site at **scranton-branch.example**).
 > This is **not** the app design system — see the root `DESIGN.md` for the Electron app.
 >
 > **Direction:** light, warm-paper, monospace, lightly **neo-brutalist** — in the lineage of
@@ -251,9 +251,9 @@ The retired `media/how-*.{webm,mp4}` footage stays on disk but is no longer refe
 
 ## 10. SEO / meta
 
-Title, description, canonical (`https://munderdiffl.in/`), favicon (`./logo.png`),
+Title, description, canonical (`https://scranton-branch.example/`), favicon (`./logo.png`),
 Open Graph + Twitter card (`og:image` → `./media/og.png`), `theme-color` `#F5F2E8`.
-CNAME → `munderdiffl.in`.
+CNAME → `scranton-branch.example`.
 
 ---
 

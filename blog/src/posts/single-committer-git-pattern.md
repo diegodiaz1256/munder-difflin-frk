@@ -164,7 +164,7 @@ age-based cleanup, not just retries.
 
 ---
 
-Munder Difflin uses the single-committer pattern across the [multi-agent harness](https://munderdiffl.in/#what): agents write
+Munder Difflin uses the single-committer pattern across the [multi-agent harness](https://scranton-branch.example/#what): agents write
 files, one process commits with retry and stale-lock recovery, and the repo stays a clean audit log.
-[Download Munder Difflin](https://munderdiffl.in/#install) to run a hive of Claude Code agents that
+[Download Munder Difflin](https://scranton-branch.example/#install) to run a hive of Claude Code agents that
 never corrupt their own state; it's free and open source.

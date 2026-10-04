@@ -12,7 +12,7 @@ The two tables below are the backlog. Schema for each row:
 | Column | Meaning |
 |---|---|
 | `#` | Stable id (don't renumber; reference posts by id) |
-| `Slug` | URL: `https://munderdiffl.in/blog/<slug>/` — use verbatim |
+| `Slug` | URL: `https://scranton-branch.example/blog/<slug>/` — use verbatim |
 | `Title` | Catchy, ≤60 chars where possible; becomes `<h1>` + `<title>` (append " — Munder Difflin") |
 | `Type` | `Technical` or `Non-technical` (drives `articleSection`) |
 | `Primary keyword` | Single focus keyword (one per post) |

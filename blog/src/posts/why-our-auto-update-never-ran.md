@@ -19,7 +19,7 @@ faq:
   - q: "How do you debug an Electron app that only misbehaves when packaged?"
     a: "Launch the installed binary directly from a terminal with an isolated data directory: `/Applications/YourApp.app/Contents/MacOS/YourApp --user-data-dir=/tmp/probe`. Electron's single-instance lock is keyed to the user-data directory, so this runs alongside the copy the user already has open, and every console.log and stack trace lands in your terminal instead of disappearing."
   - q: "Do I need to reinstall Munder Difflin to get v0.3.7?"
-    a: "Yes, once. Every build from v0.3.4 through v0.3.6 carries the broken updater, so it cannot fetch this fix by itself. Download v0.3.7 manually from munderdiffl.in or the GitHub releases page. From v0.3.7 onward, updates download in the background and wait for your restart."
+    a: "Yes, once. Every build from v0.3.4 through v0.3.6 carries the broken updater, so it cannot fetch this fix by itself. Download v0.3.7 manually from scranton-branch.example or the GitHub releases page. From v0.3.7 onward, updates download in the background and wait for your restart."
   - q: "How do you stop a bug like this from hiding again?"
     a: "Three changes. Errors are never swallowed — every updater failure is emitted to the UI and appended to a log file on disk. The notify-only fallback is per-check rather than a permanent latch, so one blip doesn't disable updates for the session. And the state model moved into a plain electron-free module with unit tests, so the rules can be verified without booting the app."
 ---
@@ -162,7 +162,7 @@ ask.
 
 You'll need to install v0.3.7 by hand, once. Your current build carries the broken updater,
 so it can't fetch the fix that repairs it — the one bootstrap problem a self-updating app
-can't solve for itself. Grab it from [munderdiffl.in](https://munderdiffl.in/) or the
+can't solve for itself. Grab it from [scranton-branch.example](https://scranton-branch.example/) or the
 [releases page](https://github.com/chaitanyagiri/munder-difflin/releases/latest).
 
 After that, it updates itself. For real this time — and if it ever doesn't, it'll tell you

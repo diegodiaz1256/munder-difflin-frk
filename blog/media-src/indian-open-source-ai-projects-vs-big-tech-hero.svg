@@ -125,5 +125,5 @@
 </g>
 <path transform="translate(1150,190)" d="M0,0 C7,10 7,17 0,19 C-7,17 -7,10 0,0Z" fill="#A9D4F5" stroke="#1A1320" stroke-width="2.5"/><path transform="translate(1560,330)" d="M0,0 C7,10 7,17 0,19 C-7,17 -7,10 0,0Z" fill="#A9D4F5" stroke="#1A1320" stroke-width="2.5"/><path transform="translate(1210,150)" d="M0,0 C7,10 7,17 0,19 C-7,17 -7,10 0,0Z" fill="#A9D4F5" stroke="#1A1320" stroke-width="2.5"/>
 <g fill="#E4DEE9" stroke="#1A1320" stroke-width="2"><circle cx="1150" cy="784" r="12"/><circle cx="1128" cy="776" r="8"/><circle cx="1560" cy="786" r="10"/></g>
-<text x="1514" y="870" text-anchor="end" font-family="Space Grotesk, system-ui, sans-serif" font-weight="600" font-size="20" fill="#6F6680">munderdiffl.in/blog</text>
+<text x="1514" y="870" text-anchor="end" font-family="Space Grotesk, system-ui, sans-serif" font-weight="600" font-size="20" fill="#6F6680">scranton-branch.example/blog</text>
 </svg>

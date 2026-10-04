@@ -141,8 +141,8 @@ read, what they ingest, and especially what they can send. Cut one leg and a tri
 instead of a breach.
 
 Munder Difflin is built to make that easy: [local-first by default and human-in-the-loop on the actions
-that matter](https://munderdiffl.in/#how), so the dangerous leg is gated, not open. [Download Munder
-Difflin](https://munderdiffl.in/#install) to run coding agents that can't be talked into leaking your
+that matter](https://scranton-branch.example/#how), so the dangerous leg is gated, not open. [Download Munder
+Difflin](https://scranton-branch.example/#install) to run coding agents that can't be talked into leaking your
 secrets; it's free and open source.
 
 Sources: [Simon Willison — The lethal trifecta for AI agents](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/);

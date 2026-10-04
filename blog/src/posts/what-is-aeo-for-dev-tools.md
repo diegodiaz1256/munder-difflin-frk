@@ -146,7 +146,7 @@ Allow: /
 User-agent: Google-Extended
 Allow: /
 
-Sitemap: https://munderdiffl.in/sitemap.xml
+Sitemap: https://scranton-branch.example/sitemap.xml
 ```
 
 There's a real tradeoff here, and you should decide it deliberately. Allowing `GPTBot`,

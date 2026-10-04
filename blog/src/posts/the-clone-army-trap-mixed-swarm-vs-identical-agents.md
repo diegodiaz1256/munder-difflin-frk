@@ -142,7 +142,7 @@ isn't cheap on that measure at all.
 
 ## How Munder Difflin is built around this
 
-This isn't just a thesis — it's the architecture of the product. [Munder Difflin](https://munderdiffl.in)
+This isn't just a thesis — it's the architecture of the product. [Munder Difflin](https://scranton-branch.example)
 runs a virtual office where a [god orchestrator](/blog/how-the-god-orchestrator-works/) decomposes your
 intent and delegates to Office-themed worker agents of *varying* capability. The cheap workers handle the
 routine; the orchestrator and any escalated workers handle the hard reasoning — [per-agent model
@@ -163,5 +163,5 @@ specialization and delegation beat undifferentiated horsepower. Don't buy more o
 team out of the right ones.
 
 Want to run a swarm that routes by capability instead of brute-forcing with clones? [Download Munder
-Difflin](https://munderdiffl.in/#install) — a local, 24/7 virtual office of AI agents. It's free and open
+Difflin](https://scranton-branch.example/#install) — a local, 24/7 virtual office of AI agents. It's free and open
 source.

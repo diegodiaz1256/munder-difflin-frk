@@ -160,6 +160,6 @@ that actually matters in production — not an agent that never breaks, but one 
 job anyway.
 
 Munder Difflin is built this way from the ground up — [a replayable log, atomic mailboxes, single-writer
-files, and isolated agents](https://munderdiffl.in/#how) — so a hive keeps going when individual agents
-stumble. [Download Munder Difflin](https://munderdiffl.in/#install) to run an agent team that's resilient
+files, and isolated agents](https://scranton-branch.example/#how) — so a hive keeps going when individual agents
+stumble. [Download Munder Difflin](https://scranton-branch.example/#install) to run an agent team that's resilient
 by design; it's free and open source.

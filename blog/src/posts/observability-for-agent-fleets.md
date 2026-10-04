@@ -118,6 +118,6 @@ meter polls transcripts every several seconds. Plenty fast for agent turns measu
 
 Munder Difflin ships this as the orchestrator's control surface — a live activity feed, per-agent token
 and cost meters, a task board, and a memory graph for a whole
-[hive of Claude Code agents](https://munderdiffl.in/#how), all local.
-[Download Munder Difflin](https://munderdiffl.in/#install) to watch your fleet at a glance; it's free and
+[hive of Claude Code agents](https://scranton-branch.example/#how), all local.
+[Download Munder Difflin](https://scranton-branch.example/#install) to watch your fleet at a glance; it's free and
 open source.

@@ -9,7 +9,7 @@ type: Non-technical
 primaryKeyword: "what is chatgpt dots"
 secondaryKeywords: ["chatgpt dots", "openai dots", "chatgpt dots pricing", "how to use chatgpt dots", "are chatgpt dots available in the uk"]
 tags: ["Concepts", "AI Agents", "Automation", "Human-in-the-Loop"]
-ogImage: "https://munderdiffl.in/blog/assets/media/what-is-chatgpt-dots/lead-still.png"
+ogImage: "https://scranton-branch.example/blog/assets/media/what-is-chatgpt-dots/lead-still.png"
 faq:
   - q: "Are ChatGPT dots available in the UK or EU?"
     a: "Not on a personal Pro plan. At launch, Pro users in the EEA, Switzerland and the UK are excluded. Business Premium is available in all supported ChatGPT regions, so a company workspace on that plan can use dots there."

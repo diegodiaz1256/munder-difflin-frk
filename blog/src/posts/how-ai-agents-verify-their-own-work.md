@@ -138,7 +138,7 @@ the obvious failures cheaply, so scarce human attention lands on the decisions t
 ---
 
 Munder Difflin runs a hive of Claude Code agents that verify their own work and
-[re-verify each other's before anything integrates](https://munderdiffl.in/#how) — locally, with a human
+[re-verify each other's before anything integrates](https://scranton-branch.example/#how) — locally, with a human
 gate on anything that ships.
-[Download Munder Difflin](https://munderdiffl.in/#install) to run agents you can actually trust; it's free
+[Download Munder Difflin](https://scranton-branch.example/#install) to run agents you can actually trust; it's free
 and open source.

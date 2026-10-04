@@ -29,7 +29,7 @@ core problem. Here's how to fix it.
 An agent's "memory" is its context window — and the context window is wiped at the end of a session.
 Nothing it learned persists unless you **write it somewhere the next session will read.** That's the
 whole trick: long-term memory is just durable storage plus a habit of reading it on startup. This is
-the foundation of [agent long-term memory](https://munderdiffl.in/#how) in general.
+the foundation of [agent long-term memory](https://scranton-branch.example/#how) in general.
 
 {% img "note-1" %}
 
@@ -61,7 +61,7 @@ notes and let the agent **recall by meaning**, not by filename:
 2. On a new task, embed the task description and fetch the few most similar notes.
 3. Inject only those into context.
 
-This is what [semantic memory for AI agents](https://munderdiffl.in/#how) buys you: recall stays
+This is what [semantic memory for AI agents](https://scranton-branch.example/#how) buys you: recall stays
 near-instant and the context window stays small, even as the knowledge base grows. In Munder Difflin
 this layer is **MemPalace** — a shared, searchable store the whole hive reads, mined automatically
 from each agent's markdown notes.
@@ -90,5 +90,5 @@ write get shorter every week — the team stops needing context re-explained.
 ---
 
 Munder Difflin ships this memory model out of the box — markdown notes plus a shared semantic
-MemPalace, for a whole hive of agents. [Download Munder Difflin](https://munderdiffl.in/#install)
+MemPalace, for a whole hive of agents. [Download Munder Difflin](https://scranton-branch.example/#install)
 to try it; it's free and open source.

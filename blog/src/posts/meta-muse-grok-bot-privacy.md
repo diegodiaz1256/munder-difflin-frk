@@ -9,7 +9,7 @@ type: Non-technical
 primaryKeyword: "is meta muse safe"
 secondaryKeywords: ["meta muse privacy", "grok bot security", "grok bot privacy", "meta muse training opt out", "open source ai agent", "local ai agent", "private ai agent"]
 tags: ["Comparisons", "Security", "Local-First", "Open Source", "AI Agents"]
-ogImage: "https://munderdiffl.in/blog/assets/media/meta-muse-grok-bot-privacy/lead-still.png"
+ogImage: "https://scranton-branch.example/blog/assets/media/meta-muse-grok-bot-privacy/lead-still.png"
 author:
   name: Chaitanya Giri
   initials: CG

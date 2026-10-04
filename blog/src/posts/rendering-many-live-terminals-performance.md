@@ -146,6 +146,6 @@ switch over.
 
 ---
 
-Munder Difflin streams [a whole floor of live Claude Code terminals](https://munderdiffl.in/#what) with this exact approach — a
-persistent pool, visible-only rendering, and teardown-safe IPC. [Download Munder Difflin](https://munderdiffl.in/#install)
+Munder Difflin streams [a whole floor of live Claude Code terminals](https://scranton-branch.example/#what) with this exact approach — a
+persistent pool, visible-only rendering, and teardown-safe IPC. [Download Munder Difflin](https://scranton-branch.example/#install)
 to run many real terminals without melting your CPU; it's free and open source.

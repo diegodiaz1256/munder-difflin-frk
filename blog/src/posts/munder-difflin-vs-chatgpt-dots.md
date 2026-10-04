@@ -8,7 +8,7 @@ type: Non-technical
 primaryKeyword: "chatgpt dots vs munder difflin"
 secondaryKeywords: ["munder difflin vs chatgpt dots", "chatgpt dots open source alternative", "chatgpt dots local", "always on ai agents on your own computer", "chatgpt dots alternative"]
 tags: ["Comparisons", "AI Agents", "Local-First", "Multi-Agent", "Open Source"]
-ogImage: "https://munderdiffl.in/blog/assets/media/munder-difflin-vs-chatgpt-dots/lead-still.png"
+ogImage: "https://scranton-branch.example/blog/assets/media/munder-difflin-vs-chatgpt-dots/lead-still.png"
 faq:
   - q: "What is the difference between ChatGPT dots and Munder Difflin?"
     a: "A dot is one always on agent that OpenAI hosts on its own cloud computer, powered by GPT-6 Astra and reached through ChatGPT, Slack, Teams or a voice call. Munder Difflin is a free and open source desktop app that runs a team of named agents on your own computer, each one a CLI engine you choose, such as Claude Code, Codex or Gemini CLI."
