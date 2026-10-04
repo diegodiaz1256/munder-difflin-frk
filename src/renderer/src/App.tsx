@@ -195,7 +195,8 @@ export function App() {
   // hook) so Michael doesn't boot against the current home while the user may be
   // about to switch to a different one.
   // A seeded demo office has nothing to pick between — open it directly.
-  const officeOpen = hiveOpened || !!config?.demoMode;
+  // Headless servers have no one to pick, either (--office chose it).
+  const officeOpen = hiveOpened || !!config?.demoMode || !!window.cth.headless;
   useHive(officeOpen ? config : null);
   // The demo exists to show the Pro screens, so its first launch opens there.
   // Only while no layout was ever chosen: switching to Classic sticks.
