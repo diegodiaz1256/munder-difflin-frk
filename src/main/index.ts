@@ -1,5 +1,7 @@
 // Demo mode redirects userData — must load before anything else (see demo.ts).
 import { DEMO_HOME } from './demo';
+// Headless (server) mode sets Chromium switches — must load before ready too.
+import { HEADLESS, HEADLESS_SETUP } from './headless';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, powerSaveBlocker, screen, shell, Notification } from 'electron';
 import { spawn } from 'node:child_process';
 import {
@@ -9,7 +11,7 @@ import {
 } from 'node:fs';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { join, resolve, sep, basename, dirname, isAbsolute } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import { request as httpsRequest } from 'node:https';
 import { PtyManager, type SpawnOptions } from './pty';
 import { resolveCommand as resolveCliCommand, isSafeCommandName, userShellPath } from './shellEnv';
@@ -2606,6 +2608,9 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
+      // Tells the preload (and so the renderer) that no one is looking: skip
+      // the launch picker, never pop anything up.
+      ...(HEADLESS ? { additionalArguments: ['--md-headless'] } : {}),
       // Keep Chromium's OS renderer sandbox active; privileged work stays behind
       // the narrow contextBridge/IPC surface owned by the main process.
       sandbox: true,
@@ -2679,7 +2684,8 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
   }
 
 
-  win.once('ready-to-show', () => win.show());
+  // Headless: the window exists (the renderer runs the floor) but is never shown.
+  win.once('ready-to-show', () => { if (!HEADLESS) win.show(); });
 
   // Never opens a window; hands the URL to the OS browser instead.
   //
@@ -5524,7 +5530,20 @@ function bootstrapHiveServices(): void {
   startEphemeralWorkerWatcher(); // poll HIVE_ROOT/spawn-requests → ephemeral workers
   // Phase 2: the loopback secret broker. Bind it BEFORE workers spawn so each spawn can
   // be granted a capability token + the broker URL in its env. Loopback-only, idempotent.
+  // Headless: --team-join pairs this office with yours (an invite made in your
+  // desktop's Pro → Team). Team is switched on first if needed.
+  if (HEADLESS_SETUP?.teamJoin) {
+    if (!teamEnabled()) {
+      const r = enableTeam(HEADLESS_SETUP.name ?? `${hostname()} (server)`);
+      if (!r.ok) console.error('[headless] could not turn Team on:', r.error);
+    }
+  }
   startTeam();
+  if (HEADLESS_SETUP?.teamJoin && teamNode) {
+    void teamNode.join(HEADLESS_SETUP.teamJoin).then((r) => {
+      console.log(r.ok ? `[headless] joined the team; ${r.peer?.name} will see this office once both are online` : `[headless] team join failed: ${r.error}`);
+    });
+  }
   void mcpGateway.start().then((r) => {
     if (!r.ok) console.error('[mcp-gateway] failed to start (keyed MCP servers disabled):', r.error);
   });
@@ -5769,6 +5788,23 @@ function onSystemResume(reason: string): void {
 }
 
 app.whenReady().then(() => {
+  // Headless first run from the command line: --office sets the office and
+  // skips onboarding (an explicit --office always wins over a saved one).
+  if (HEADLESS_SETUP?.office) {
+    const ensured = ensureHarnessHome(HEADLESS_SETUP.office);
+    if (!ensured.ok) console.error('[headless] cannot use --office:', ensured.error);
+    else {
+      const cfg = readConfig();
+      if (!cfg.onboardingComplete || cfg.harnessHome !== HEADLESS_SETUP.office) {
+        writeConfig({ onboardingComplete: true, harnessHome: HEADLESS_SETUP.office, notifications: false });
+      }
+    }
+  }
+  if (HEADLESS) {
+    console.log(`[headless] office: ${readConfig().harnessHome ?? '(none — pass --office <dir>)'}`);
+    // systemd stop / Ctrl+C: the same full teardown as closing the window.
+    for (const sig of ['SIGTERM', 'SIGINT'] as const) process.once(sig, () => { console.log(`[headless] ${sig}, shutting down`); teardownAndQuit(); });
+  }
   // Realtime Michael mic-gate hygiene (rt-8 / Pam rt-10 nit): the voice session
   // opens the mic permission gate by persisting realtimeVoiceEnabled=true and
   // closes it on disconnect — but a hard crash/reload mid-session skips that
