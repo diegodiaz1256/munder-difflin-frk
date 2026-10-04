@@ -69,7 +69,7 @@ import { cleanCustomBundles } from '../shared/roleBundles';
 import { addConnection, connectionKeyStored, connectionLaunchEnv, instancesOf, listConnections, removeConnection, renameConnection, serviceOf, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
 import { McpGateway } from './mcpGateway';
 import { TeamNode, type TeamInbound } from './teamNode';
-import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, saveTeamState, teamEnabled, teamPublicStatus } from './team';
+import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, relayToken, saveTeamState, setRelayToken, teamEnabled, teamPublicStatus } from './team';
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
@@ -623,7 +623,8 @@ function startTeam(): void {
     save: saveTeamState,
     onMessage: onTeamMessage,
     onChange: () => { writeTeamMirror(); notifyTeam(); },
-    log: (msg) => console.log('[team]', msg)
+    log: (msg) => console.log('[team]', msg),
+    relayToken
   });
   teamNode.start();
   writeTeamMirror();
@@ -709,6 +710,13 @@ ipcMain.handle('team:setMember', (_evt, id: unknown, patch: unknown) => {
 });
 ipcMain.handle('team:join', async (_evt, code: unknown) =>
   teamNode && typeof code === 'string' ? teamNode.join(code) : { ok: false, error: 'Team is off' });
+// Write-only: a token goes into the encrypted store and is never read back out.
+ipcMain.handle('team:setRelayToken', (_evt, arg: unknown) => {
+  const p = (arg ?? {}) as { relay?: unknown; token?: unknown };
+  const r = setRelayToken(p.relay, p.token);
+  if (r.ok) { teamNode?.reconnect(); notifyTeam(); }
+  return r;
+});
 ipcMain.handle('team:removePeer', (_evt, id: unknown) => { if (teamNode && typeof id === 'string') teamNode.removePeer(id); return { ok: true }; });
 ipcMain.handle('team:send', (_evt, arg: unknown) => {
   const p = (arg ?? {}) as { to?: unknown; subject?: unknown; body?: unknown };
@@ -5532,6 +5540,14 @@ function bootstrapHiveServices(): void {
   // be granted a capability token + the broker URL in its env. Loopback-only, idempotent.
   // Headless: --team-join pairs this office with yours (an invite made in your
   // desktop's Pro → Team). Team is switched on first if needed.
+  // Servers: MD_RELAY_TOKEN="https://relay.example.com=tk_…[,…]" stores each
+  // token in the encrypted store (set before joining, which talks to the relay).
+  // headless.ts already took it out of the environment agents inherit.
+  for (const entry of HEADLESS_SETUP?.relayTokens ?? []) {
+    const i = entry.lastIndexOf('=');
+    const r = i > 0 ? setRelayToken(entry.slice(0, i), entry.slice(i + 1)) : { ok: false, error: 'expected <relay>=<token>' };
+    if (!r.ok) console.error('[headless] relay token not stored:', r.error);
+  }
   if (HEADLESS_SETUP?.teamJoin) {
     if (!teamEnabled()) {
       const r = enableTeam(HEADLESS_SETUP.name ?? `${hostname()} (server)`);

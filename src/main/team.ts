@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { generateIdentity, type Identity } from './teamCrypto';
 import { randomBytes } from 'node:crypto';
 import type { Peer, TeamGroup, TeamState } from './teamNode';
-import { deleteSecret, getSecret, setSecret } from './integrations';
+import { deleteSecret, getSecret, hasSecret, setSecret } from './integrations';
 
 const SECRET_REF = 'team:identity-keys';
 export const DEFAULT_RELAY = 'https://ntfy.sh';
@@ -112,17 +112,50 @@ export function saveTeamState(st: TeamState): void {
   writeAtomic(statePath(), { enabled: prev?.enabled ?? true, identity: pub, relay: st.relay, teams: st.teams, peers: st.peers, invites: st.invites, cursors: st.cursors, seen: st.seen } satisfies StoredTeam);
 }
 
+// ─── relay access tokens ─────────────────────────────────────────────────────
+// A relay that needs a token (a paid ntfy.sh plan, a self-hosted ntfy with
+// access control) gets one per relay URL, in the encrypted store. Write-only
+// from the UI: main uses it in the Authorization header and nothing reads it
+// back out. Never given to an agent.
+
+function relayKey(relay: string): string | null {
+  try {
+    const u = new URL(relay.trim().replace(/\/+$/, ''));
+    return u.protocol === 'https:' ? `team:relay-token:${u.origin}${u.pathname === '/' ? '' : u.pathname}` : null;
+  } catch { return null; }
+}
+
+export function relayToken(relay: string): string | undefined {
+  const k = relayKey(relay);
+  return k ? getSecret(k) : undefined;
+}
+
+export function hasRelayToken(relay: string): boolean {
+  const k = relayKey(relay);
+  return !!k && hasSecret(k);
+}
+
+/** Store (or, with an empty token, forget) a relay's access token. */
+export function setRelayToken(relay: unknown, token: unknown): { ok: boolean; error?: string } {
+  const k = typeof relay === 'string' ? relayKey(relay) : null;
+  if (!k) return { ok: false, error: 'the relay must be an https:// address' };
+  const t = typeof token === 'string' ? token.trim() : '';
+  if (!t) { deleteSecret(k); return { ok: true }; }
+  if (t.length > 512 || /\s/.test(t)) return { ok: false, error: 'that does not look like an access token' };
+  return setSecret(k, t);
+}
+
 export function teamPublicStatus(): {
   enabled: boolean;
   me: { id: string; name: string; relay: string } | null;
-  teams: TeamGroup[];
+  teams: Array<TeamGroup & { relayAuth: boolean }>;
   peers: Array<Pick<Peer, 'id' | 'name' | 'confirmed' | 'addedAt' | 'teamId' | 'level' | 'mode'>>;
 } {
   const s = readStored();
   return {
     enabled: teamEnabled(),
     me: s?.identity?.id ? { id: s.identity.id, name: s.identity.name, relay: s.relay } : null,
-    teams: s?.teams ?? [],
+    teams: (s?.teams ?? []).map((t) => ({ ...t, relayAuth: hasRelayToken(t.relay) })),
     // Overrides as stored (absent = inherits the team default); never keys or topics.
     peers: (s?.peers ?? []).map((p) => ({ id: p.id, name: p.name, confirmed: p.confirmed, addedAt: p.addedAt, teamId: p.teamId, level: p.level, mode: p.mode }))
   };

@@ -18,7 +18,7 @@ const LEVELS: { value: Level; label: string; blurb: string; soon?: boolean }[] =
 ];
 const TEAM_STEPS: Array<[string, string]> = [
   ['Your office gets an identity', 'Turning Team on gives this office a name and a pair of keys. The keys never leave this machine; teammates only ever see your name.'],
-  ['Teams group people, each on its own relay', 'Make a team per group you work with (“Barcelona branch”, “Partners”) with “+ New team”. Each team has a relay: an ntfy server that passes messages along. ntfy.sh works out of the box; a company can run its own and put that team on it.'],
+  ['Teams group people, each on its own relay', 'Make a team per group you work with (“Barcelona branch”, “Partners”) with “+ New team”. Each team has a relay: an ntfy server that passes messages along. ntfy.sh works out of the box (250 messages a day per office); a company can run its own, with no cap, and put that team on it. A relay that needs an access token takes it in the team’s Edit form.'],
   ['Invite, or join', '“Invite to <team>” makes a code that works once, for 24 hours. Send it over a channel you trust (Slack, Signal…). They paste it into “Got an invite?” and both offices appear in that team. You can join other people’s teams the same way, so one office can be in many teams.'],
   ['Decide what each person may do', 'Each team sets a default for its members. “May”: Messages lets them write to your orchestrator (View and Manage, to see and run your floor from their office, come next). “Messages”: strict holds every message for you in Inbox → Outside; communication only lets information through and holds requests for action; allow all sends everything straight to your orchestrator. Open a person to give them their own setting instead of the team’s.'],
   ['Talk', 'Write from a person’s conversation, or just ask your orchestrator (“tell Barcelona the release moves to Monday”): it writes to them itself, and their replies land in its inbox.'],
@@ -162,6 +162,16 @@ function TeamCard({ team, members, open, onOpen, onChanged, onError }: {
   const [relay, setRelay] = useState(team.relay);
   const [code, setCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [token, setToken] = useState('');
+
+  // Write-only: the token goes to main's encrypted store; the app never shows it again.
+  const saveToken = async (value: string) => {
+    onError(null);
+    const r = await window.cth.teamSetRelayToken({ relay: team.relay, token: value });
+    if (!r.ok) onError(r.error ?? 'Token not saved.');
+    else setToken('');
+    onChanged();
+  };
 
   const update = async (patch: Parameters<typeof window.cth.teamUpdateTeam>[1]) => {
     onError(null);
@@ -187,6 +197,16 @@ function TeamCard({ team, members, open, onOpen, onChanged, onError }: {
           <input className="pro-input" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
           <input className="pro-input pro-mono" value={relay} onChange={(e) => setRelay(e.target.value)} title="Relay (ntfy server)" />
           <span className="pro-sub" style={{ fontSize: 11 }}>A new relay applies to people who join after the change.</span>
+          <label className="pro-sub" style={{ fontSize: 12 }} htmlFor={`relay-token-${team.id}`}>
+            Relay access token {team.relayAuth ? '(stored — enter a new one to replace it)' : '(only for a private relay or a paid ntfy.sh plan)'}
+          </label>
+          <div className="pro-row">
+            <input id={`relay-token-${team.id}`} className="pro-input pro-mono" type="password" autoComplete="off" placeholder="tk_…"
+              value={token} onChange={(e) => setToken(e.target.value)} style={{ flex: 1 }} />
+            <button className="pro-btn" disabled={!token.trim()} onClick={() => void saveToken(token)}>Save token</button>
+            {team.relayAuth && <button className="pro-btn" onClick={() => void saveToken('')}>Remove</button>}
+          </div>
+          <span className="pro-sub" style={{ fontSize: 11 }}>Kept encrypted on this machine and used only to talk to the relay. Agents never see it.</span>
           <div className="pro-row">
             <button className="pro-btn pro-btn-primary" onClick={() => { void update({ name, relay }).then((ok) => ok && setEditing(false)); }}>Save</button>
             <button className="pro-btn" onClick={() => { setEditing(false); setName(team.name); setRelay(team.relay); }}>Cancel</button>
@@ -196,7 +216,7 @@ function TeamCard({ team, members, open, onOpen, onChanged, onError }: {
         <div className="pro-row">
           <div style={{ minWidth: 0, flex: 1 }}>
             <p className="pro-title">{team.name}</p>
-            <p className="pro-sub pro-mono" style={{ fontSize: 11, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{team.relay}</p>
+            <p className="pro-sub pro-mono" style={{ fontSize: 11, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{team.relay}{team.relayAuth ? ' · token' : ''}</p>
           </div>
           <button className="pro-btn" onClick={() => setEditing(true)}>Edit</button>
           <button className="pro-btn" onClick={remove}>Delete</button>

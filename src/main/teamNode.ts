@@ -91,6 +91,9 @@ export interface TeamNodeDeps {
   onChange?: () => void;
   fetch?: typeof fetch;
   log?: (msg: string) => void;
+  /** Access token for a relay that requires one (a paid ntfy.sh plan, a
+   *  self-hosted ntfy with access control), by relay URL. Main-only. */
+  relayToken?: (relay: string) => string | undefined;
 }
 
 /** ntfy rejects bodies over 4096 bytes; stay well under with the envelope overhead. */
@@ -100,6 +103,12 @@ const INVITE_TTL_MS = 24 * 3600_000;
 
 const sha = (s: string): string => createHash('sha256').update(s).digest('hex');
 const now = (): number => Date.now();
+
+function relayError(status: number): string {
+  if (status === 429) return 'the relay is rate-limiting this office (the public ntfy.sh allows 250 messages a day per IP; a team on its own relay has no such cap)';
+  if (status === 401 || status === 403) return 'the relay refused access: it needs an access token (Pro → Team → the team → Relay token)';
+  return `relay answered ${status}`;
+}
 const trimRelay = (r: string): string => r.replace(/\/+$/, '');
 
 /** A member's policy: their own setting, else their team's, else the safest. */
@@ -119,6 +128,10 @@ export class TeamNode {
   }
 
   private state(): TeamState { return this.deps.load(); }
+  private headers(relay: string, extra: Record<string, string> = {}): Record<string, string> {
+    const token = this.deps.relayToken?.(trimRelay(relay));
+    return { 'User-Agent': 'munder-difflin-team', ...extra, ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  }
   private persist(s: TeamState): void { this.deps.save(s); this.syncListeners(); this.deps.onChange?.(); }
   private log(m: string): void { this.deps.log?.(m); }
 
@@ -127,6 +140,13 @@ export class TeamNode {
   start(): void {
     if (!this.stopped) return;
     this.stopped = false;
+    this.syncListeners();
+  }
+
+  /** Reconnect every listener (a relay's token changed). */
+  reconnect(): void {
+    for (const c of this.listeners.values()) c.abort();
+    this.listeners.clear();
     this.syncListeners();
   }
 
@@ -156,8 +176,8 @@ export class TeamNode {
       const cursor = s.cursors?.[relay];
       const url = `${relay}/${s.identity.topic}/json${cursor ? `?since=${encodeURIComponent(cursor)}` : ''}`;
       try {
-        const res = await this.fetchImpl(url, { signal: ctl.signal, headers: { 'User-Agent': 'munder-difflin-team' } });
-        if (!res.ok || !res.body) throw new Error(`relay answered ${res.status}`);
+        const res = await this.fetchImpl(url, { signal: ctl.signal, headers: this.headers(relay) });
+        if (!res.ok || !res.body) throw new Error(relayError(res.status));
         backoff = 2000;
         const reader = res.body.getReader();
         const dec = new TextDecoder();
@@ -275,9 +295,9 @@ export class TeamNode {
     const res = await this.fetchImpl(`${trimRelay(peer.relay)}/${peer.topic}`, {
       method: 'POST',
       body: JSON.stringify(env),
-      headers: { 'Content-Type': 'text/plain', 'User-Agent': 'munder-difflin-team' }
+      headers: this.headers(peer.relay, { 'Content-Type': 'text/plain' })
     });
-    if (!res.ok) throw new Error(res.status === 429 ? 'the relay is rate-limiting this connection; try again shortly' : `relay answered ${res.status}`);
+    if (!res.ok) throw new Error(relayError(res.status));
   }
 
   /** Send a message to a teammate (by id, or by name). Long ones go as several sealed parts. */
