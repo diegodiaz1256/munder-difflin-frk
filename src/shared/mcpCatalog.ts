@@ -132,21 +132,17 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
     tier: 'secret',
     defaultEnabled: false
   },
-  {
-    id: 'email-calendar',
-    label: 'Email & Calendar',
-    description: 'Read/send mail and read/write calendar events. Requires account credentials.',
-    // TODO-verify provider package (Gmail/Google Calendar assumed).
-    spec: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-gsuite'], env: { GOOGLE_OAUTH_TOKEN: '' } },
-    tier: 'secret',
-    defaultEnabled: false
-  },
+  // No Email & Calendar entry: it pointed at @modelcontextprotocol/server-gsuite,
+  // which was never published (npm 404), so switching it on could not work.
+  // Google's servers need an OAuth client file plus a browser sign-in, not a
+  // token, and come back with their own flow.
   {
     id: 'search-with-key',
     label: 'Web Search',
     description: 'Keyed web search. Requires a search-provider API key.',
-    // TODO-verify provider package (Brave Search assumed).
-    spec: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-brave-search'], env: { BRAVE_API_KEY: '' } },
+    // Brave's official server (stdio by default). The @modelcontextprotocol one
+    // it replaces is deprecated on npm.
+    spec: { command: 'npx', args: ['-y', '@brave/brave-search-mcp-server'], env: { BRAVE_API_KEY: '' } },
     tier: 'secret',
     defaultEnabled: false
   }
