@@ -1,3 +1,4 @@
+- **Team:** post-quantum, and over MQTT.
 - **Server build:** offices on Ubuntu or Docker, no GUI.
 - **Team:** sealed messages between offices.
 - **Agents never see Connections keys.**

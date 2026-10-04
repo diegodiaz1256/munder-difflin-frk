@@ -1,6 +1,6 @@
 {
   "name": "munder-difflin",
-  "version": "0.4.6-fork.5",
+  "version": "0.4.6-fork.6",
   "private": true,
   "description": "Clones for you and your team, working 24/7 — a free, local-first multi-agent harness that turns the CLI coding agent you already run into a clone of you, coordinating an office of agents on your machine.",
   "main": "out/main/index.js",
@@ -55,6 +55,7 @@
     "i18next": "^26.3.6",
     "localtunnel": "^2.0.2",
     "monaco-editor": "^0.52.2",
+    "mqtt": "^5.16.0",
     "node-pty": "^1.0.0",
     "pixi.js": "^8.5.1",
     "posthog-node": "^5.48.2",
@@ -69,6 +70,7 @@
   "devDependencies": {
     "@electron/notarize": "^2.5.0",
     "@electron/rebuild": "^3.7.0",
+    "@noble/post-quantum": "^0.7.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/localtunnel": "^2.0.4",
     "@types/node": "^22.7.5",
@@ -76,6 +78,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.2",
     "@xterm/headless": "^5.5.0",
+    "aedes": "^0.51.3",
     "electron": "^32.2.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",

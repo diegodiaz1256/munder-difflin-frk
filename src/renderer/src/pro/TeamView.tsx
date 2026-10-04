@@ -18,11 +18,11 @@ const LEVELS: { value: Level; label: string; blurb: string; soon?: boolean }[] =
 ];
 const TEAM_STEPS: Array<[string, string]> = [
   ['Your office gets an identity', 'Turning Team on gives this office a name and a pair of keys. The keys never leave this machine; teammates only ever see your name.'],
-  ['Teams group people, each on its own relay', 'Make a team per group you work with (“Barcelona branch”, “Partners”) with “+ New team”. Each team has a relay: an ntfy server that passes messages along. ntfy.sh works out of the box (250 messages a day per office); a company can run its own, with no cap, and put that team on it. A relay that needs an access token takes it in the team’s Edit form.'],
+  ['Teams group people, each on its own relay', 'Make a team per group you work with (“Barcelona branch”, “Partners”) with “+ New team”. Each team has a relay that passes sealed messages along: a public MQTT broker by default (fast, no daily cap), or an ntfy server (keeps messages 12 h for someone offline; ntfy.sh allows 250 a day per office). A company can run its own relay and put the team on it; one that needs an access token takes it in the team’s Edit form.'],
   ['Invite, or join', '“Invite to <team>” makes a code that works once, for 24 hours. Send it over a channel you trust (Slack, Signal…). They paste it into “Got an invite?” and both offices appear in that team. You can join other people’s teams the same way, so one office can be in many teams.'],
   ['Decide what each person may do', 'Each team sets a default for its members. “May”: Messages lets them write to your orchestrator (View and Manage, to see and run your floor from their office, come next). “Messages”: strict holds every message for you in Inbox → Outside; communication only lets information through and holds requests for action; allow all sends everything straight to your orchestrator. Open a person to give them their own setting instead of the team’s.'],
   ['Talk', 'Write from a person’s conversation, or just ask your orchestrator (“tell Barcelona the release moves to Monday”): it writes to them itself, and their replies land in its inbox.'],
-  ['What is protected', 'Every message is encrypted on the sending machine and opened only on the receiving one, and signed so nobody can pose as a teammate. A relay sees a random mailbox name and unreadable bytes. Without a valid invite nobody can get in, even if they know your mailbox. Remove a person or delete a team at any time.']
+  ['What is protected', 'Every message is encrypted on the sending machine and opened only on the receiving one, and signed so nobody can pose as a teammate. Pairs are post-quantum: each message key also depends on an ML-KEM secret agreed when you paired, so traffic recorded today stays sealed against a future quantum computer. A relay sees a random mailbox name and unreadable bytes. Without a valid invite nobody can get in, even if they know your mailbox. Remove a person or delete a team at any time.']
 ];
 
 const levelLabel = (l: Level): string => LEVELS.find((x) => x.value === l)?.label ?? l;
@@ -77,7 +77,7 @@ export function TeamView() {
             <TeamCard key={t.id} team={t} members={st.peers.filter((p) => p.teamId === t.id)}
               open={openPeer} onOpen={setOpenPeer} onChanged={reload} onError={setError} />
           ))}
-          <NewTeam onChanged={reload} onError={setError} defaultRelay={st.me?.relay ?? 'https://ntfy.sh'} />
+          <NewTeam onChanged={reload} onError={setError} defaultRelay={st.me?.relay ?? DEFAULT_RELAY} />
           <JoinCard onChanged={reload} onError={setError} />
         </div>
 
@@ -91,7 +91,7 @@ export function TeamView() {
 
 function TeamSetup({ current, onDone }: { current: Status; onDone: () => void }) {
   const [name, setName] = useState(current.me?.name ?? '');
-  const [relay, setRelay] = useState(current.me?.relay ?? 'https://ntfy.sh');
+  const [relay, setRelay] = useState(current.me?.relay ?? DEFAULT_RELAY);
   const [advanced, setAdvanced] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +116,8 @@ function TeamSetup({ current, onDone }: { current: Status; onDone: () => void })
         {advanced ? (
           <>
             <label className="pro-sub" style={{ fontSize: 12 }} htmlFor="team-relay">Default relay (an ntfy server; each team can use its own)</label>
-            <input id="team-relay" className="pro-input pro-mono" value={relay} onChange={(e) => setRelay(e.target.value)} />
+            <input id="team-relay" className="pro-input pro-mono" list="relay-presets" value={relay} onChange={(e) => setRelay(e.target.value)} />
+            <RelayPresets />
           </>
         ) : (
           <button className="pro-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setAdvanced(true)}>Relay settings</button>
@@ -151,6 +152,19 @@ function PolicySelects({ level, mode, inheritLevel, inheritMode, onLevel, onMode
         {TRIGGER_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
       </select>
     </div>
+  );
+}
+
+const DEFAULT_RELAY = 'mqtts://broker.emqx.io:8883';
+
+/** Public relays that work out of the box (all carry only sealed bytes). */
+function RelayPresets() {
+  return (
+    <datalist id="relay-presets">
+      <option value="mqtts://broker.emqx.io:8883">EMQX public MQTT broker — fast, no daily cap</option>
+      <option value="wss://broker.hivemq.com:8884/mqtt">HiveMQ public MQTT broker (WebSocket)</option>
+      <option value="https://ntfy.sh">ntfy.sh — keeps messages 12 h, 250 a day per office</option>
+    </datalist>
   );
 }
 
@@ -195,10 +209,11 @@ function TeamCard({ team, members, open, onOpen, onChanged, onError }: {
       {editing ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input className="pro-input" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
-          <input className="pro-input pro-mono" value={relay} onChange={(e) => setRelay(e.target.value)} title="Relay (ntfy server)" />
+          <input className="pro-input pro-mono" list="relay-presets" value={relay} onChange={(e) => setRelay(e.target.value)} title="Relay (MQTT broker or ntfy server)" />
+          <RelayPresets />
           <span className="pro-sub" style={{ fontSize: 11 }}>A new relay applies to people who join after the change.</span>
           <label className="pro-sub" style={{ fontSize: 12 }} htmlFor={`relay-token-${team.id}`}>
-            Relay access token {team.relayAuth ? '(stored — enter a new one to replace it)' : '(only for a private relay or a paid ntfy.sh plan)'}
+            Relay access token {team.relayAuth ? '(stored — enter a new one to replace it)' : '(only for a private relay: an MQTT user:password, or an ntfy token)'}
           </label>
           <div className="pro-row">
             <input id={`relay-token-${team.id}`} className="pro-input pro-mono" type="password" autoComplete="off" placeholder="tk_…"
@@ -234,6 +249,7 @@ function TeamCard({ team, members, open, onOpen, onChanged, onError }: {
               <strong style={{ fontSize: 13 }}>{p.name}</strong>
               <span className="pro-sub" style={{ fontSize: 11 }}>
                 {levelLabel(p.level ?? team.level)}{p.level ? ' (own)' : ''} · {modeLabel(p.mode ?? team.mode)}{p.mode ? ' (own)' : ''}
+                {p.pq === 'on' ? ' · post-quantum' : p.confirmed ? ' · classical (their app is older)' : ''}
               </span>
             </span>
             <StateBadge label={p.confirmed ? 'Paired' : 'Waiting'} tone={p.confirmed ? 'green' : 'amber'} />
@@ -271,7 +287,8 @@ function NewTeam({ onChanged, onError, defaultRelay }: { onChanged: () => void; 
     <section className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <strong style={{ fontSize: 13 }}>New team</strong>
       <input className="pro-input" placeholder="Name, e.g. Barcelona branch" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-      <input className="pro-input pro-mono" placeholder="https://ntfy.sh" value={relay} onChange={(e) => setRelay(e.target.value)} title="Relay (ntfy server) for this team" />
+      <input className="pro-input pro-mono" list="relay-presets" placeholder="mqtts://broker.emqx.io:8883" value={relay} onChange={(e) => setRelay(e.target.value)} title="Relay (MQTT broker or ntfy server) for this team" />
+      <RelayPresets />
       <div className="pro-row">
         <button className="pro-btn pro-btn-primary" disabled={!name.trim()} onClick={() => void create()}>Create</button>
         <button className="pro-btn" onClick={() => setOpen(false)}>Cancel</button>
