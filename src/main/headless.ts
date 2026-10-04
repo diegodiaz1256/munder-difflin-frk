@@ -1,11 +1,18 @@
 /**
- * Headless mode: the whole app, with no window shown — for a server (Ubuntu
- * under systemd, say) or a machine that just hosts an office.
+ * Headless mode: the whole app, with no window shown — for a machine that just
+ * hosts an office. Two hosts:
  *
- *   munder-difflin --headless --office /srv/office [--name "Build server"]
- *                  [--team-join <invite code>]
+ *   munder-difflin --headless …          the desktop app, window never shown
+ *   node server/index.cjs …              the server build (src/server): plain
+ *                                        Node, no Chromium — what Ubuntu
+ *                                        servers and containers run
  *
- * The renderer still runs, in a window that is never shown, so every bit of
+ *   --office <dir>        MD_OFFICE        the office (first run: skips onboarding)
+ *   --name <name>         MD_NAME          this office's name on Team
+ *   --team-join <code>    MD_TEAM_JOIN     pair with an invite from Pro → Team
+ *   --max-workers <n>     MD_MAX_WORKERS   cap on concurrent workers
+ *
+ * In the desktop host the renderer still runs, in a window that is never shown, so every bit of
  * orchestration (the orchestrator's boot, team restore, inbox wake-ups, queue
  * delivery, context rules) behaves exactly as on a desktop. On Linux with no
  * display server, Chromium's headless Ozone backend is selected so nothing needs
@@ -21,7 +28,14 @@
 import { app } from 'electron';
 import { resolve } from 'node:path';
 
+/** A flag's value, else its environment variable (systemd units and
+ *  containers configure through the environment). */
 function argValue(name: string): string | undefined {
+  const env = process.env[`MD_${name.toUpperCase().replace(/-/g, '_')}`];
+  return flagValue(name) ?? (env && env.trim() ? env.trim() : undefined);
+}
+
+function flagValue(name: string): string | undefined {
   const argv = process.argv;
   const eq = argv.find((a) => a.startsWith(`--${name}=`));
   if (eq) return eq.slice(name.length + 3);
@@ -31,16 +45,20 @@ function argValue(name: string): string | undefined {
 
 export const HEADLESS = process.argv.includes('--headless') || process.env.MD_HEADLESS === '1';
 
+/** The GUI-less server build (src/server): plain Node, no Electron at all. */
+export const SERVER = process.env.MD_SERVER === '1';
+
 /** First-run setup from the command line (headless only). */
 export const HEADLESS_SETUP = HEADLESS
   ? {
       office: argValue('office') ? resolve(argValue('office')!) : undefined,
       name: argValue('name'),
-      teamJoin: argValue('team-join')
+      teamJoin: argValue('team-join'),
+      maxWorkers: Number(argValue('max-workers')) || undefined
     }
   : null;
 
-if (HEADLESS) {
+if (HEADLESS && !SERVER) {
   // No display server (a typical server): Chromium's headless Ozone platform.
   if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
     app.commandLine.appendSwitch('ozone-platform', 'headless');
