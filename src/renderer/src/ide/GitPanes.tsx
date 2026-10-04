@@ -95,7 +95,7 @@ export function HistoryPane({ gitRoot, onOpenRevDiff }: {
   }, [commits, gitRoot]);
 
   const jump = async (c: GitCommitRow) => {
-    if (!window.confirm(t('gitPanes.jumpConfirm', { sha: c.shortSha, subject: c.subject.slice(0, 60) }))) return;
+    if (!(await window.cth.confirm(t('gitPanes.jumpConfirm', { sha: c.shortSha, subject: c.subject.slice(0, 60) })))) return;
     const res = await window.cth.gitCheckout(gitRoot, c.sha, true);
     setNote(res.ok ? t('gitPanes.nowAt', { sha: c.shortSha }) : res.error);
     if (res.ok) void load(page);
@@ -193,7 +193,7 @@ export function ComparePane({ gitRoot, onOpenRevDiff }: {
 
   const switchTo = async () => {
     if (!head) return;
-    if (!window.confirm(t('gitPanes.switchConfirm', { head }))) return;
+    if (!(await window.cth.confirm(t('gitPanes.switchConfirm', { head })))) return;
     const res = await window.cth.gitCheckout(gitRoot, head.replace(/^origin\//, ''), false);
     setNote(res.ok ? t('gitPanes.switchedTo', { head }) : res.error);
   };

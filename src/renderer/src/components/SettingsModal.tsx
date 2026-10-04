@@ -376,8 +376,8 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
 
   /** Closing with staged changes used to be impossible, because everything wrote
    *  on click. Now it is, so say so rather than dropping the edit silently. */
-  const requestClose = (): void => {
-    if (dirty && !window.confirm(t('settings.unsavedWarning'))) return;
+  const requestClose = async (): Promise<void> => {
+    if (dirty && !(await window.cth.confirm(t('settings.unsavedWarning')))) return;
     onClose();
   };
 

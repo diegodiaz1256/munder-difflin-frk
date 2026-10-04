@@ -10,6 +10,7 @@ import { loadTheme, resolveThemeMap, themeTilesetUrls } from './themeLoader';
 import type { OfficeCharacterName } from './cast';
 import type { Tile } from './themeRegistry';
 import type { FactoryAgentView, FactoryEventView, FactoryFloorView } from '../../../../preload/index';
+import { tagFor } from './factoryTags';
 
 /**
  * A factory's floor in pixel art (Manager → Factories): the same office map
@@ -33,13 +34,14 @@ export const ROLE_GLOW: Record<string, number> = {
   reviewer: colors.accent.peach, qa: colors.accent.lemon, automation: colors.ink[300]
 };
 
-/** A role short enough for a name tag ("Senior Frontend Developer" → "Frontend Developer"). */
-function shortRole(role: string): string {
-  const r = role.trim();
-  if (r.length <= 18) return r;
-  const words = r.split(/\s+/);
-  return words.slice(-2).join(' ').slice(0, 18);
+
+/** Thought clouds stay short so neighbours' clouds do not pile up; the full
+ *  text is in the Line view and the worker's panel. */
+function brief(text: string, max = 50): string {
+  const t = text.replace(/\s+/g, ' ').trim();
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
+
 
 export function faceFor(name: string): OfficeCharacterName {
   let h = 0;
@@ -132,7 +134,7 @@ export function FactoryScene({ floor, events, dimmed, onPick }: {
         c.setStatusGlyph(a.state === 'waiting' ? 'blocked' : 'none');
         if (a.state === 'resting' && breakSpots.length) {
           c.walkToAndThen(breakSpots[seatIndexOf(rt) % breakSpots.length], () => c.setIdle());
-          c.showThought(a.waiting_for ?? 'on a break');
+          c.showThought(brief(a.waiting_for ?? 'on a break'));
           return;
         }
         if (a.state === 'away' && meeting.length) {
@@ -143,8 +145,8 @@ export function FactoryScene({ floor, events, dimmed, onPick }: {
         const sit = () => c.sitAtDesk(a.state === 'working');
         if (first) sit(); else c.walkToAndThen(rt.seat, sit);
         // waiting_for is already a sentence ("waiting for review"): show it as is.
-        if (a.state === 'waiting') c.showThought(a.waiting_for ?? 'waiting');
-        else if (a.state === 'working' && a.task && newTask) c.showThought(`${a.task.title}${a.task.stage ? ` · ${a.task.stage}` : ''}`);
+        if (a.state === 'waiting') c.showThought(brief(a.waiting_for ?? 'waiting'));
+        else if (a.state === 'working' && a.task && newTask) c.showThought(brief(`${a.task.title}${a.task.stage ? ` · ${a.task.stage}` : ''}`));
       };
       const seatIndexOf = (rt: Runtime) => Math.max(0, seats.findIndex((s) => s.x === rt.seat.x && s.y === rt.seat.y));
 
@@ -172,7 +174,7 @@ export function FactoryScene({ floor, events, dimmed, onPick }: {
               if (!alive || runtimes.get(id) !== r) return;
               r.character = new Character({
                 // The name tag carries the role, so the map reads without a legend.
-                agentId: id, displayName: `${a.display_name ?? a.name} · ${shortRole(a.role)}`, mapRenderer: map, frames,
+                agentId: id, displayName: tagFor(a, pending.current?.floor.agents ?? []), mapRenderer: map, frames,
                 seatTile: seat, seatDirection: facing(seat), spawnTile: entrance,
                 glowColor: ROLE_GLOW[a.role_kind ?? ''] ?? colors.ink[300],
                 onClick: (aid) => pick.current(aid)

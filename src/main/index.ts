@@ -4227,6 +4227,25 @@ function finishTeardown(): void {
   try { ptyManager.killAll(); } catch (e) { console.error('[quit] killAll:', e); }
   app.quit();
 }
+// A yes/no question for the renderer, instead of window.confirm(): Chromium's
+// native confirm on Windows leaves the page without keyboard focus afterwards —
+// text boxes look fine but no longer take input until the window is refocused
+// ("the invite box is locked after deleting a team"). This asks through main
+// and hands focus back to the page when the dialog closes.
+ipcMain.handle('app:confirm', async (evt, message: unknown, detail: unknown, ok: unknown) => {
+  const win = BrowserWindow.fromWebContents(evt.sender);
+  const opts = {
+    type: 'question' as const,
+    buttons: [typeof ok === 'string' && ok ? ok.slice(0, 40) : 'OK', 'Cancel'],
+    defaultId: 0, cancelId: 1, noLink: true,
+    message: typeof message === 'string' ? message.slice(0, 500) : 'Are you sure?',
+    detail: typeof detail === 'string' ? detail.slice(0, 1000) : undefined
+  };
+  const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
+  if (win && !win.isDestroyed()) { win.focus(); win.webContents.focus(); }
+  return response === 0;
+});
+
 ipcMain.handle('app:confirmClose', () => {
   closingTime.cancel(); // a hard quit overrides a closing time in progress
   teardownAndQuit();

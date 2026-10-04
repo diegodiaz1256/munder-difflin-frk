@@ -95,11 +95,18 @@ function TeamSetup({ current, onDone }: { current: Status; onDone: () => void })
   const [advanced, setAdvanced] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [invite, setInvite] = useState('');
   const go = async () => {
     setBusy(true); setError(null);
     const r = await window.cth.teamEnable({ name, relay }).catch((e) => ({ ok: false, error: String(e) }));
+    if (!r.ok) { setBusy(false); setError(r.error ?? 'Could not turn Team on.'); return; }
+    // Came with an invite: join it right away (Team has to be on first).
+    if (invite.trim()) {
+      const j = await window.cth.teamJoin(invite.trim()).catch((e) => ({ ok: false, error: String(e) }));
+      if (!j.ok) { setBusy(false); setError(`Team is on, but the invite did not work: ${j.error ?? 'unknown error'}`); onDone(); return; }
+    }
     setBusy(false);
-    if (!r.ok) setError(r.error ?? 'Could not turn Team on.'); else onDone();
+    onDone();
   };
   return (
     <div className="pro-page">
@@ -122,9 +129,12 @@ function TeamSetup({ current, onDone }: { current: Status; onDone: () => void })
         ) : (
           <button className="pro-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setAdvanced(true)}>Relay settings</button>
         )}
+        <label className="pro-sub" style={{ fontSize: 12 }} htmlFor="team-invite">Got an invite? Paste it here (optional)</label>
+        <textarea id="team-invite" className="pro-input pro-mono" rows={2} placeholder="mdteam1.…" value={invite}
+          onChange={(e) => setInvite(e.target.value)} style={{ fontSize: 11, resize: 'vertical' }} />
         {error && <p className="pro-text" style={{ color: 'var(--cth-coral)', margin: 0 }}>{error}</p>}
         <button className="pro-btn pro-btn-primary" style={{ alignSelf: 'flex-start' }} disabled={busy || !name.trim()} onClick={() => void go()}>
-          {busy ? 'Turning on…' : 'Turn on Team'}
+          {busy ? 'Turning on…' : invite.trim() ? 'Turn on Team and join' : 'Turn on Team'}
         </button>
       </section>
       <div style={{ maxWidth: 820 }}><Guide title="How teams work" steps={TEAM_STEPS} /></div>
@@ -199,8 +209,8 @@ function TeamCard({ team, members, open, onOpen, onChanged, onError }: {
     const r = await window.cth.teamCreateInvite(team.id);
     if (r.ok && r.code) { setCode(r.code); setCopied(false); } else onError(r.error ?? 'Could not create an invite.');
   };
-  const remove = () => {
-    if (!window.confirm(`Delete the team "${team.name}" and forget its ${members.length} member(s)?`)) return;
+  const remove = async () => {
+    if (!(await window.cth.confirm(`Delete the team "${team.name}"?`, { detail: `Its ${members.length} member(s) are forgotten.`, ok: 'Delete' }))) return;
     void window.cth.teamRemoveTeam(team.id).then(onChanged);
   };
 
@@ -329,8 +339,8 @@ function Conversation({ peer, team, log, onChanged, onError, onClose }: {
     setBusy(false);
     if (r.ok) { setSubject(''); setBody(''); onChanged(); } else onError(r.error ?? 'Not sent.');
   };
-  const remove = () => {
-    if (!window.confirm(`Remove ${peer.name}? You will need a new invite to talk again.`)) return;
+  const remove = async () => {
+    if (!(await window.cth.confirm(`Remove ${peer.name}?`, { detail: 'You will need a new invite to talk again.', ok: 'Remove' }))) return;
     void window.cth.teamRemovePeer(peer.id).then(() => { onClose(); onChanged(); });
   };
   return (
