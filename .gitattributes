@@ -1,0 +1,3 @@
+# Run inside Linux (install script, container entrypoint, systemd unit): never CRLF.
+*.sh text eol=lf
+packaging/server/* text eol=lf
