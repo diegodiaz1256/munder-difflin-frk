@@ -184,6 +184,12 @@ export interface RegistryAgent extends AgentMeta {
   cwdValid?: boolean;
 }
 
+/** One entry of an agent's MCP config: a stdio server it runs itself, or a
+ *  keyed server it reaches through main's gateway. */
+export type McpServerEntry =
+  | { command: string; args: string[]; env?: Record<string, string> }
+  | { type: 'http'; url: string; headers: Record<string, string> };
+
 export interface Registry {
   godId: string | null;
   agents: Record<string, RegistryAgent>;
@@ -1042,7 +1048,8 @@ export class HiveManager {
     if (Object.keys(mcp.servers).length) {
       this.writeJson(mcpPath, { mcpServers: mcp.servers });
       args.push('--mcp-config', mcpPath);
-      // The credentials themselves: process env only (the file says `${ENV}`).
+      // Only the gateway capability token rides in env (the file says `${...}`);
+      // keys never reach the agent at all.
       Object.assign(env, mcp.env);
     } else if (existsSync(mcpPath)) {
       try { rmSync(mcpPath, { force: true }); } catch { /* stale, harmless */ }
@@ -1375,9 +1382,10 @@ export class HiveManager {
     grant?: string[],
     agentId?: string,
     scopes?: Record<string, string[]>
-  ): { servers: Record<string, { command: string; args: string[]; env?: Record<string, string> }>; env: Record<string, string> } {
-    const servers: Record<string, { command: string; args: string[]; env?: Record<string, string> }> = {};
+  ): { servers: Record<string, McpServerEntry>; env: Record<string, string> } {
+    const servers: Record<string, McpServerEntry> = {};
     const env: Record<string, string> = {};
+    const keyed: string[] = [];
     const granted = grant ? new Set(cleanServerList(grant)) : null;
     for (const e of MCP_CATALOG) {
       const consented = cfg?.[e.id]?.enabled;
@@ -1390,38 +1398,45 @@ export class HiveManager {
       // "Choose agents" (Connections): a scoped server reaches only its list.
       const scope = scopes?.[e.id];
       if (Array.isArray(scope) && !(agentId && scope.includes(agentId))) continue;
-      // Credentials: every required one must be stored, or the server could only
-      // fail. The config gets `${ENV}`, which Claude Code expands from the process
-      // env, so no secret is ever written into the (git-committed) hive.
-      const serverEnv: Record<string, string> = {};
-      let missing = false;
-      for (const field of e.secrets ?? []) {
-        const value = this.mcpSecret(e.id, field.env);
-        if (value) {
-          env[field.env] = value;
-          serverEnv[field.env] = '${' + field.env + '}';
-        } else if (!field.optional) {
-          missing = true;
-        }
+      // Keyed servers never run under the agent: their key would be in its
+      // environment. They go through main's MCP gateway (mcpGateway.ts), which
+      // holds the key; the agent only gets a capability token. Every required
+      // key must be stored, or the server could only fail.
+      if ((e.secrets ?? []).length > 0) {
+        if ((e.secrets ?? []).every((f) => f.optional || this.mcpKeyStored(e.id, f.env))) keyed.push(e.id);
+        continue;
       }
-      if (missing) continue;
       // Replace the `<cwd>` placeholder (filesystem/git) with the agent cwd at merge
       // time so these stay strictly workspace-scoped.
       const args = e.spec.args.map((a) => (a === '<cwd>' ? cwd : a));
-      servers[`munder-${e.id}`] = {
-        command: e.spec.command,
-        args,
-        ...(Object.keys(serverEnv).length ? { env: serverEnv } : {})
-      };
+      servers[`munder-${e.id}`] = { command: e.spec.command, args };
+    }
+    // No gateway (tests, or it failed to bind) → no keyed servers at all: the
+    // fallback is "without GitHub", never "with the key in the agent's env".
+    const gw = keyed.length && agentId ? this.mcpGateway(agentId, keyed) : null;
+    if (gw) {
+      for (const id of keyed) {
+        // `${MD_MCP_TOKEN}` is expanded by Claude Code from the process env, so
+        // not even the capability token is written into the (committed) hive.
+        servers[`munder-${id}`] = { type: 'http', url: `${gw.url}/mcp/${id}`, headers: { Authorization: 'Bearer ${MD_MCP_TOKEN}' } };
+      }
+      env.MD_MCP_TOKEN = gw.token;
     }
     return { servers, env };
   }
 
-  /** Reads a stored Connections credential. Injected by main (the encrypted store
-   *  needs electron); unset (tests, or before main wires it) means "none". */
-  private mcpSecret: (serverId: string, envName: string) => string | undefined = () => undefined;
-  setMcpSecretResolver(resolve: (serverId: string, envName: string) => string | undefined): void {
-    this.mcpSecret = resolve;
+  /** Whether a Connections key is stored (never its value: the hive does not
+   *  need it). Injected by main; unset means "none stored". */
+  private mcpKeyStored: (serverId: string, envName: string) => boolean = () => false;
+  setMcpKeyCheck(check: (serverId: string, envName: string) => boolean): void {
+    this.mcpKeyStored = check;
+  }
+
+  /** Grants an agent a gateway capability over its keyed servers. Injected by
+   *  main; unset means no gateway. */
+  private mcpGateway: (agentId: string, serverIds: string[]) => { url: string; token: string } | null = () => null;
+  setMcpGateway(grant: (agentId: string, serverIds: string[]) => { url: string; token: string } | null): void {
+    this.mcpGateway = grant;
   }
 
   /**

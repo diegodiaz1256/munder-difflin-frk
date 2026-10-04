@@ -12,7 +12,7 @@ import { join, resolve, sep, basename, dirname, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { request as httpsRequest } from 'node:https';
 import { PtyManager, type SpawnOptions } from './pty';
-import { resolveCommand as resolveCliCommand, isSafeCommandName } from './shellEnv';
+import { resolveCommand as resolveCliCommand, isSafeCommandName, userShellPath } from './shellEnv';
 import { initAutoUpdater, abortPendingRestart } from './updater';
 import { RealtimeFloorWatcher } from './realtimeFloorWatcher';
 import {
@@ -64,7 +64,9 @@ import { IntegrationBroker } from './integrationBroker';
 import * as integrations from './integrations';
 import { applyMissionRequest, type MissionLike } from '../shared/missionRequests';
 import { cleanCustomBundles } from '../shared/roleBundles';
-import { connectionSecret, listConnections, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
+import { connectionKeyStored, connectionLaunchEnv, listConnections, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
+import { McpGateway } from './mcpGateway';
+import { mcpCatalogEntry } from '../shared/mcpCatalog';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
 import { buildWorkerLaunch } from './workerLaunch';
@@ -396,6 +398,17 @@ const liveWorkers = new Map<string, WorkerRec>();
  *  it without ever seeing a credential. getRecord/getSecret are injected so the broker
  *  stays electron-free + unit-testable. Started in bootstrapHiveServices; each worker is
  *  granted a per-worker capability token at spawn (revoked in teardownPty). */
+const mcpGateway = new McpGateway({
+  resolveSpec: (serverId) => {
+    const entry = mcpCatalogEntry(serverId);
+    const keys = connectionLaunchEnv(serverId);
+    if (!entry || !keys) return null;
+    // npx/uvx need the user's PATH; a Finder-launched app has launchd's bare one.
+    const path = process.platform === 'win32' ? (process.env.PATH ?? '') : userShellPath();
+    return { command: entry.spec.command, args: entry.spec.args, env: { ...keys, PATH: path } };
+  }
+});
+
 const integrationBroker = new IntegrationBroker({
   getRecord: integrations.getRecord,
   getSecret: integrations.getSecret
@@ -459,6 +472,8 @@ function teardownPty(id: string): void {
   // 0) Revoke this id's broker capability (if any). Idempotent + harmless for a
   //    non-worker PTY; ensures a dead worker's token can never reach an integration.
   try { integrationBroker.revoke(id); } catch { /* best-effort */ }
+  // …and its MCP gateway capability, which also stops its keyed servers.
+  { const aid = ptyToAgent.get(id); if (aid) { try { mcpGateway.revoke(aid); } catch { /* best-effort */ } } }
   // 1) Archive the agent — retained + flagged; only live-PTY agents are active.
   const agentId = ptyToAgent.get(id);
   if (agentId) {
@@ -3356,7 +3371,11 @@ ipcMain.handle('config:setAgentMcpGrant', (_evt, agentId: unknown, servers: unkn
 );
 // Pro → Connections: keyed MCP servers. Values go one way into the encrypted
 // store; nothing here ever returns one (see connections.ts).
-hive.setMcpSecretResolver(connectionSecret);
+// Keyed MCP servers run under MAIN, never under an agent: the gateway holds
+// the key and an agent gets a capability token (mcpGateway.ts).
+hive.setMcpKeyCheck(connectionKeyStored);
+hive.setMcpGateway((agentId, serverIds) =>
+  mcpGateway.running() ? { url: mcpGateway.url(), token: mcpGateway.grant(agentId, serverIds) } : null);
 ipcMain.handle('connections:list', () => listConnections());
 // Pro Capabilities: the user's own role bundles, validated (shared/roleBundles).
 ipcMain.handle('config:saveRoleBundles', (_evt, bundles: unknown) => {
@@ -3915,6 +3934,7 @@ function teardownAndQuit(): void {
   try { stopWebhookDoneObserver(); } catch (e) { console.error('[quit] stopWebhookDoneObserver:', e); }
   try { stopEphemeralWorkerWatcher(); } catch (e) { console.error('[quit] stopWorkerWatcher:', e); }
   try { integrationBroker.stop(); } catch (e) { console.error('[quit] broker.stop:', e); }
+  try { mcpGateway.stop(); } catch (e) { console.error('[quit] mcpGateway.stop:', e); }
   try { hive.stopRouter(); } catch (e) { console.error('[quit] stopRouter:', e); }
   try { hookServer.stop(); } catch (e) { console.error('[quit] hookServer.stop:', e); }
   try { telemetry.stop(); } catch (e) { console.error('[quit] telemetry.stop:', e); }
@@ -5317,6 +5337,9 @@ function bootstrapHiveServices(): void {
   startEphemeralWorkerWatcher(); // poll HIVE_ROOT/spawn-requests → ephemeral workers
   // Phase 2: the loopback secret broker. Bind it BEFORE workers spawn so each spawn can
   // be granted a capability token + the broker URL in its env. Loopback-only, idempotent.
+  void mcpGateway.start().then((r) => {
+    if (!r.ok) console.error('[mcp-gateway] failed to start (keyed MCP servers disabled):', r.error);
+  });
   void integrationBroker.start().then((r) => {
     if (r.ok) console.log('[broker] integration broker listening on', integrationBroker.url());
     else console.error('[broker] failed to start:', r.error);
