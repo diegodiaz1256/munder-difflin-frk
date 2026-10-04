@@ -1,8 +1,12 @@
 name: Release
 
 # Build installers for every platform on every push to main (downloadable from
-# the run's artifacts), and publish them to a GitHub Release whenever a v* tag is
-# pushed. Run manually (workflow_dispatch) to dry-build without publishing.
+# the run's artifacts) and publish a GitHub Release when there is a new version:
+#   - push to main whose package.json version has no release yet → tag vX.Y.Z on
+#     that commit and publish it. Releasing = bumping "version" and merging.
+#   - push of a v* tag → publish that tag (the manual path still works).
+# The in-app updater reads these releases (REPO in src/shared/updateState.ts).
+# Run manually (workflow_dispatch) to dry-build without publishing.
 on:
   push:
     branches:
@@ -29,6 +33,42 @@ permissions:
   contents: write
 
 jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags, to tell a new version from a released one
+      - id: v
+        name: Decide whether this run publishes
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          tag="v$(node -p "require('./package.json').version")"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          release=false
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              release=true
+            elif [[ "$(git rev-list -n 1 "$tag")" == "$GITHUB_SHA" ]]; then
+              release=true # a re-run of the commit that version was tagged on
+            else
+              # This fork carries the upstream tags (v0.5.2, v0.5.3, …). Publishing
+              # onto one would ship another commit's tag, so say so and skip.
+              echo "::notice::$tag already exists on another commit; bump \"version\" in package.json to publish a release."
+            fi
+          fi
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "$tag → release=$release"
+
   build:
     name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -126,8 +166,8 @@ jobs:
 
   publish:
     name: Publish release
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    needs: [version, build]
+    if: needs.version.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -156,7 +196,11 @@ jobs:
           # exactly what you want for a build that needs testing on a platform the
           # authors cannot run. A clean `vX.Y.Z` tag is unaffected and still ships
           # as the latest release to everyone.
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          tag_name: ${{ needs.version.outputs.tag }}
+          # Creates the tag on this commit when a main push is releasing a new
+          # version; ignored when the tag already exists (a tag push).
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ contains(needs.version.outputs.tag, '-') }}
           fail_on_unmatched_files: false
           files: |
             release/*.dmg
