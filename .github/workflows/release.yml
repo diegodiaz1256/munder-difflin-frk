@@ -35,12 +35,12 @@ permissions:
 jobs:
   version:
     name: Version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       tag: ${{ steps.v.outputs.tag }}
       release: ${{ steps.v.outputs.release }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # tags, to tell a new version from a released one
       - id: v
@@ -80,12 +80,12 @@ jobs:
             args: --mac
           - os: windows-2022
             args: --win
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             args: --linux
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -93,7 +93,7 @@ jobs:
       # node-gyp (used to rebuild native node-pty) imports distutils, which was
       # removed in Python 3.12. Pin 3.11 and install setuptools so the distutils
       # shim is available across all runners.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -172,7 +172,7 @@ jobs:
           cat "SHA256SUMS-${{ matrix.os }}.txt"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.os }}-dist
           # zip + latest*.yml + blockmaps feed electron-updater (auto-update):
@@ -206,8 +206,8 @@ jobs:
             arch: arm64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -233,7 +233,7 @@ jobs:
           tar -C out -czf "dist/$name.tar.gz" --transform "s|^server|$name|" server
           (cd dist && sha256sum "$name.tar.gz" > "SHA256SUMS-server-${{ matrix.arch }}.txt")
           ls -la dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: server-${{ matrix.arch }}
           path: |
@@ -244,11 +244,11 @@ jobs:
     name: Publish release
     needs: [version, build, server]
     if: needs.version.outputs.release == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -260,7 +260,7 @@ jobs:
           ls -la release
 
       - name: Publish to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           # FORK-RELEASE.md is the human-facing notes; GitHub shows it as the body.
           body_path: FORK-RELEASE.md

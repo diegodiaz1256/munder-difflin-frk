@@ -31,7 +31,7 @@ jobs:
   grant:
     # Upstream only: it grants a role on upstream's Discord with upstream's bot.
     if: github.repository == 'HarnessMD/munder-difflin' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: grant "employee of the month"
         env:
