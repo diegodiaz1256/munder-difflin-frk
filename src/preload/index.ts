@@ -26,6 +26,10 @@ export type {
 /** Renderer-visible integration record: the secretRef handle is redacted to a
  *  presence boolean. Matches main `integrations.listRecordsRedacted()` — the
  *  write-only secret contract (spec §2): a secret value is NEVER returned over IPC. */
+/** Environment as the renderer sees it: a secret shows only whether one is stored. */
+export interface EnvVarView { name: string; kind: 'plain' | 'secret' | 'op'; value?: string; agents?: string[] | null; note?: string; stored?: boolean }
+export interface RunnerView { id: string; name: string; command: string; description?: string; secrets: string[]; approval: 'always' | 'on-change' | 'never'; timeoutSec?: number }
+
 /** Factories as the renderer sees them (main/factories.ts; FACTORY-MCP.md). */
 export interface FactoryInfoView {
   name: string; version?: string; profile: string | null; projectsRequired: boolean;
@@ -1377,6 +1381,14 @@ const api = {
     ipcRenderer.invoke('config:saveRoleBundles', bundles),
   connectionsList: (): Promise<ConnectionStatusView[]> =>
     ipcRenderer.invoke('connections:list'),
+  // Environment & secrets (main/envVault.ts). Secret values are write-only.
+  envList: (): Promise<{ vars: EnvVarView[]; runners: RunnerView[] }> => ipcRenderer.invoke('env:list'),
+  envSetVar: (v: { name: string; kind: 'plain' | 'secret' | 'op'; value?: string; agents?: string[] | null; note?: string }, secret?: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('env:setVar', v, secret),
+  envRemoveVar: (name: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('env:removeVar', name),
+  envSetRunner: (r: Partial<RunnerView>): Promise<{ ok: boolean; id?: string; error?: string }> => ipcRenderer.invoke('env:setRunner', r),
+  envRemoveRunner: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('env:removeRunner', id),
+  envOpStatus: (): Promise<{ installed: boolean; version?: string }> => ipcRenderer.invoke('env:opStatus'),
   // Factories (FACTORY-MCP.md). The token goes in once, write-only.
   factoriesList: (): Promise<FactoryView[]> => ipcRenderer.invoke('factories:list'),
   factoriesAdd: (arg: { name?: string; url: string; token: string }): Promise<{ ok: boolean; id?: string; info?: FactoryInfoView; error?: string }> =>
