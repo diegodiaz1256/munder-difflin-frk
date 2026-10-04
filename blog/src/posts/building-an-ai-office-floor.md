@@ -157,6 +157,6 @@ techniques — the hard part is wiring them to *real* agent events, not the rend
 
 ---
 
-Munder Difflin's [office floor](https://scranton-branch.example/#how) turns a hive of Claude Code agents into a little workplace you can watch
+Munder Difflin's [office floor](https://scranton-branch.zerogeworkshop.com/#how) turns a hive of Claude Code agents into a little workplace you can watch
 — Tiled maps, pathing avatars, and flying envelopes, all driven by real activity.
-[Download Munder Difflin](https://scranton-branch.example/#install) to see it run; it's free and open source.
+[Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) to see it run; it's free and open source.

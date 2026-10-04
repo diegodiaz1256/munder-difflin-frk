@@ -1,7 +1,7 @@
 # Munder Difflin Blog
 
 The Munder Difflin blog — a static [Eleventy](https://www.11ty.dev/) site that builds into
-`docs/blog/` and is served at **https://scranton-branch.example/blog** by the same GitHub Pages deploy as
+`docs/blog/` and is served at **https://scranton-branch.zerogeworkshop.com/blog** by the same GitHub Pages deploy as
 the marketing site.
 
 The blog has **its own design identity**, deliberately separate from the marketing site
@@ -149,13 +149,13 @@ They map onto this blog as follows:
 
 ## SEO that's already wired
 
-- Per-page `<title>`, meta description, **canonical** (`https://scranton-branch.example/blog/...`).
+- Per-page `<title>`, meta description, **canonical** (`https://scranton-branch.zerogeworkshop.com/blog/...`).
 - **OpenGraph** + **Twitter** card tags, with a default OG image and per-post override.
 - **JSON-LD**: `Blog` (index), `BlogPosting` + `BreadcrumbList` (every post), `FAQPage` (when a post
   declares `faq`).
 - Auto-generated **root `sitemap.xml`** and an Atom **`feed.xml`**.
 - **`robots.txt`** is owned by the marketing site (`docs/robots.txt`, maintained alongside
-  `docs/index.html`) and points at `https://scranton-branch.example/sitemap.xml`.
+  `docs/index.html`) and points at `https://scranton-branch.zerogeworkshop.com/sitemap.xml`.
 - Semantic HTML, single `<h1>`, skip-link, `:focus-visible` outlines, WCAG-AA contrast,
   `prefers-reduced-motion` support, lazy-loaded images.
 
@@ -164,7 +164,7 @@ They map onto this blog as follows:
 ## Deploy
 
 The blog ships as static files under `docs/blog/`, served by the **existing** Pages deploy
-(branch → `/docs`, custom domain `scranton-branch.example`). Two ways to publish:
+(branch → `/docs`, custom domain `scranton-branch.zerogeworkshop.com`). Two ways to publish:
 
 1. **Manual:** `cd blog && npm run build`, then commit `docs/blog/` and push. Pages redeploys.
 2. **Automated (recommended):** the **Build blog** GitHub Action

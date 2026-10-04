@@ -88,8 +88,8 @@ const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 const faqHtml = faq.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join('\n      ');
 
 const ld = [
-  { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'Munder Difflin', applicationCategory: 'DeveloperApplication', operatingSystem: 'macOS, Windows, Linux', softwareVersion: '0.5.5', url: 'https://scranton-branch.example/', downloadUrl: 'https://harnessmd.com/download', license: 'https://github.com/chaitanyagiri/munder-difflin/blob/main/LICENSE', description: 'Free and open source multi agent harness that runs Claude Code, Codex, Gemini CLI and nine more coding agents as an office of clones on your own machine.', offers: [{ '@type': 'Offer', name: 'Free', price: '0', priceCurrency: 'USD' }, { '@type': 'Offer', name: 'Pro, annual', price: '150', priceCurrency: 'USD' }] },
-  { '@context': 'https://schema.org', '@type': 'VideoObject', name: 'Munder Difflin 0.5.3 launch video', description: 'An office of coding agents that coordinate on their own, a memory layer, local first, and the Stapler for dictation and meetings.', thumbnailUrl: 'https://scranton-branch.example/media/munder-difflin-053-poster.jpg', contentUrl: 'https://scranton-branch.example/media/munder-difflin-053.mp4', uploadDate: '2026-09-25', duration: 'PT54S' },
+  { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'Munder Difflin', applicationCategory: 'DeveloperApplication', operatingSystem: 'macOS, Windows, Linux', softwareVersion: '0.5.5', url: 'https://scranton-branch.zerogeworkshop.com/', downloadUrl: 'https://harnessmd.com/download', license: 'https://github.com/chaitanyagiri/munder-difflin/blob/main/LICENSE', description: 'Free and open source multi agent harness that runs Claude Code, Codex, Gemini CLI and nine more coding agents as an office of clones on your own machine.', offers: [{ '@type': 'Offer', name: 'Free', price: '0', priceCurrency: 'USD' }, { '@type': 'Offer', name: 'Pro, annual', price: '150', priceCurrency: 'USD' }] },
+  { '@context': 'https://schema.org', '@type': 'VideoObject', name: 'Munder Difflin 0.5.3 launch video', description: 'An office of coding agents that coordinate on their own, a memory layer, local first, and the Stapler for dictation and meetings.', thumbnailUrl: 'https://scranton-branch.zerogeworkshop.com/media/munder-difflin-053-poster.jpg', contentUrl: 'https://scranton-branch.zerogeworkshop.com/media/munder-difflin-053.mp4', uploadDate: '2026-09-25', duration: 'PT54S' },
   { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) },
 ];
 
@@ -99,13 +99,13 @@ const head = `<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${TITLE}</title>
 <meta name="description" content="${DESC}">
-<link rel="canonical" href="https://scranton-branch.example/">
+<link rel="canonical" href="https://scranton-branch.zerogeworkshop.com/">
 <meta property="og:type" content="website">
 <meta property="og:title" content="${TITLE}">
 <meta property="og:description" content="${DESC}">
-<meta property="og:image" content="https://scranton-branch.example/media/og.png">
-<meta property="og:url" content="https://scranton-branch.example/">
-<meta property="og:video" content="https://scranton-branch.example/media/munder-difflin-053.mp4">
+<meta property="og:image" content="https://scranton-branch.zerogeworkshop.com/media/og.png">
+<meta property="og:url" content="https://scranton-branch.zerogeworkshop.com/">
+<meta property="og:video" content="https://scranton-branch.zerogeworkshop.com/media/munder-difflin-053.mp4">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${TITLE}">
 <meta name="twitter:description" content="${DESC}">

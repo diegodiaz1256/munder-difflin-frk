@@ -5,8 +5,8 @@ export default {
   name: "Munder Difflin",
   blogName: "Munder Difflin Blog",
   // Origin with no trailing slash; pathPrefix (/blog/) is applied by Eleventy.
-  origin: "https://scranton-branch.example",
-  baseUrl: "https://scranton-branch.example/blog/",
+  origin: "https://scranton-branch.zerogeworkshop.com",
+  baseUrl: "https://scranton-branch.zerogeworkshop.com/blog/",
   // Blog-index description (Kevin's SEO_METADATA.md §3.9).
   description:
     "Guides, deep dives, and comparisons on running multi-agent Claude Code: orchestration, agent memory, automation, and the tooling landscape.",
@@ -16,23 +16,23 @@ export default {
   author: {
     name: "Chaitanya Giri",
     twitter: "",
-    url: "https://scranton-branch.example",
+    url: "https://scranton-branch.zerogeworkshop.com",
   },
   // Home-page pillar anchors blog posts link UP to (SEO_METADATA.md §5.7).
   pillars: {
-    what: "https://scranton-branch.example/#what",
-    how: "https://scranton-branch.example/#how",
-    why: "https://scranton-branch.example/#why",
-    install: "https://scranton-branch.example/#install",
-    claude: "https://scranton-branch.example/#claude",
-    opensource: "https://scranton-branch.example/#opensource",
+    what: "https://scranton-branch.zerogeworkshop.com/#what",
+    how: "https://scranton-branch.zerogeworkshop.com/#how",
+    why: "https://scranton-branch.zerogeworkshop.com/#why",
+    install: "https://scranton-branch.zerogeworkshop.com/#install",
+    claude: "https://scranton-branch.zerogeworkshop.com/#claude",
+    opensource: "https://scranton-branch.zerogeworkshop.com/#opensource",
   },
   social: {
     github: "https://github.com/chaitanyagiri/munder-difflin",
-    site: "https://scranton-branch.example",
+    site: "https://scranton-branch.zerogeworkshop.com",
   },
   // Default OG image (absolute). Per-post `ogImage` overrides this.
-  defaultOgImage: "https://scranton-branch.example/media/og.png",
+  defaultOgImage: "https://scranton-branch.zerogeworkshop.com/media/og.png",
   themeColor: "#F5F2E8",
   // Topic clusters (categories), aligned to Kevin's keyword taxonomy + the
   // technical/non-technical split in BLOG_IDEAS.md. A post's `category` field

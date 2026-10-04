@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://scranton-branch.example/hires/spec/hire.schema.json",
+  "$id": "https://scranton-branch.zerogeworkshop.com/hires/spec/hire.schema.json",
   "title": "Munder Difflin hire manifest (v1)",
   "description": "A portable, shareable agent role template for the Munder Difflin multi-agent harness. A manifest never auto-spawns an agent: importing it only pre-fills the Add-Agent modal for human review.",
   "type": "object",

@@ -155,7 +155,7 @@ prune pass to keep it honest.
 ---
 
 Munder Difflin gives every Claude Code agent markdown memory plus
-[a shared semantic palace the whole hive can recall from](https://scranton-branch.example/#how) — local, fast,
+[a shared semantic palace the whole hive can recall from](https://scranton-branch.zerogeworkshop.com/#how) — local, fast,
 and clean by default.
-[Download Munder Difflin](https://scranton-branch.example/#install) to give your agents memory that actually
+[Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) to give your agents memory that actually
 sticks; it's free and open source.

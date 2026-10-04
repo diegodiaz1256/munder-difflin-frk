@@ -126,5 +126,5 @@ end up spending less, answering faster, and — because you're no longer drownin
 the same undifferentiated pool — often getting *better* results where it counts.
 
 Munder Difflin is built for exactly this posture: a lean [orchestrator](/#how) that routes work across a hive and
-escalates only when a task earns it. [Download Munder Difflin](https://scranton-branch.example/#install) to run an
+escalates only when a task earns it. [Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) to run an
 agent team that does more with less — it's free and open source.

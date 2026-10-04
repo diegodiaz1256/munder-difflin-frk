@@ -9,7 +9,7 @@ type: Non-technical
 primaryKeyword: "chatgpt dots alternatives"
 secondaryKeywords: ["chatgpt dots alternative", "open source chatgpt dots alternative", "free chatgpt dots alternative", "chatgpt dots not available in uk", "apps like chatgpt dots"]
 tags: ["Comparisons", "AI Agents", "Open Source", "Local-First"]
-ogImage: "https://scranton-branch.example/blog/assets/media/chatgpt-dots-alternatives/lead-still.png"
+ogImage: "https://scranton-branch.zerogeworkshop.com/blog/assets/media/chatgpt-dots-alternatives/lead-still.png"
 faq:
   - q: "Is there a free alternative to ChatGPT dots?"
     a: "Yes. OpenClaw, Munder Difflin and Hermes Agent are free and open source and run on hardware you control. You still pay for the AI model, or use one you already subscribe to. Meta Muse has a free hosted tier, but only in the US and Canada as of 29 Sep 2026."

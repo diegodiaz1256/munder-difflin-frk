@@ -21,12 +21,12 @@ faq:
   - q: "How is a role manifest different from just sharing a prompt?"
     a: "A prompt is one ingredient. A hire manifest is the whole recipe: which provider runs it, the model, the command flags, the goal, the capability tags, and the budget — mapped 1:1 onto the fields the app's Add-Agent flow already uses. It's the difference between a sentence in a README and a job description you can hand to anyone's office."
   - q: "What is The Hiring Fair?"
-    a: "A static community gallery at scranton-branch.example/hires — no login, no trackers, MIT-licensed. It's stocked with ready-made roles from the cast: Pam writes docs, Dwight enforces QA, Jim reviews PRs, Creed audits security, Angela audits the office's own token spend, Stanley does the migrations nobody wants. Each card has a Claude Code / Antigravity / Codex toggle and function filters. Browse, hire, review, spawn."
+    a: "A static community gallery at scranton-branch.zerogeworkshop.com/hires — no login, no trackers, MIT-licensed. It's stocked with ready-made roles from the cast: Pam writes docs, Dwight enforces QA, Jim reviews PRs, Creed audits security, Angela audits the office's own token spend, Stanley does the migrations nobody wants. Each card has a Claude Code / Antigravity / Codex toggle and function filters. Browse, hire, review, spawn."
   - q: "Can I submit my own roles to The Hiring Fair today?"
     a: "Not yet. Today, curation is a maintainer commit — there is deliberately no public write or submission pipeline. A community submission queue needs its own review-and-trust design, so we scoped it out of this first release rather than ship it half-built."
 ---
 
-<div class="callout tldr"><span class="ic">TL;DR</span><p>A well-configured agent <strong>role</strong> is real work — the right provider, model, flags, goal prompt, capabilities, and budget — and today that knowledge is trapped in one person's setup. Munder Difflin v0.2.8 makes a role a <strong>portable artifact</strong>: a small JSON manifest we call a <strong>hire</strong> (a job description as a file). You hire from a <strong>link</strong> or a <strong>file</strong>, and the Add-Agent modal opens <em>pre-filled</em> — but <strong>import never spawns anything</strong>; you review every field and you press spawn. Browse ready-made roles at <strong>The Hiring Fair</strong> (<a href="https://scranton-branch.example/hires/">scranton-branch.example/hires</a>). The thesis: portable roles create a community growth loop, the way package registries did for libraries.</p></div>
+<div class="callout tldr"><span class="ic">TL;DR</span><p>A well-configured agent <strong>role</strong> is real work — the right provider, model, flags, goal prompt, capabilities, and budget — and today that knowledge is trapped in one person's setup. Munder Difflin v0.2.8 makes a role a <strong>portable artifact</strong>: a small JSON manifest we call a <strong>hire</strong> (a job description as a file). You hire from a <strong>link</strong> or a <strong>file</strong>, and the Add-Agent modal opens <em>pre-filled</em> — but <strong>import never spawns anything</strong>; you review every field and you press spawn. Browse ready-made roles at <strong>The Hiring Fair</strong> (<a href="https://scranton-branch.zerogeworkshop.com/hires/">scranton-branch.zerogeworkshop.com/hires</a>). The thesis: portable roles create a community growth loop, the way package registries did for libraries.</p></div>
 
 There's a moment, the first time you open a fresh agent floor, where the hard part isn't running an agent — it's *configuring* one. Which provider? Which model? What flags? And the question that actually stalls people: what is this thing's *job*? Writing a role from a blank box is a steep first step, and it's the step that stands between a curious newcomer and watching a single agent do a single useful thing.
 
@@ -94,7 +94,7 @@ A few properties make that guarantee real rather than aspirational: there's **no
 
 ## The Hiring Fair: a gallery of ready-made roles
 
-Portable roles are more fun when there's somewhere to get them. **The Hiring Fair** is a static community gallery at [scranton-branch.example/hires](https://scranton-branch.example/hires/) — no login, no trackers, MIT-licensed — stocked with roles from the cast:
+Portable roles are more fun when there's somewhere to get them. **The Hiring Fair** is a static community gallery at [scranton-branch.zerogeworkshop.com/hires](https://scranton-branch.zerogeworkshop.com/hires/) — no login, no trackers, MIT-licensed — stocked with roles from the cast:
 
 - **Pam** writes docs.
 - **Dwight** enforces QA (relentlessly).
@@ -117,7 +117,7 @@ It also fits the broader bet behind Munder Difflin: **local-first, open-source, 
 
 ## Go browse The Hiring Fair
 
-The fastest way to feel the idea is to use it. Open [The Hiring Fair](https://scranton-branch.example/hires/), pick a role that matches something on your plate, flip it to your provider, and hire it — then read every field in the modal before you spawn, because that review step is the whole point.
+The fastest way to feel the idea is to use it. Open [The Hiring Fair](https://scranton-branch.zerogeworkshop.com/hires/), pick a role that matches something on your plate, flip it to your provider, and hire it — then read every field in the modal before you spawn, because that review step is the whole point.
 
 - [Launching Munder Difflin v0.2.8: Shareable Hires](/blog/launching-munder-difflin-v0-2-8/) — the release.
 - [The hire manifest as untrusted input](/blog/hire-manifest-untrusted-input/) — the security deep-dive on the trust model.

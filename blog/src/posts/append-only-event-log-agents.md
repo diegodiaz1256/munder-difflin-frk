@@ -145,7 +145,7 @@ reconstruct exactly what the hive did.
 ---
 
 Munder Difflin records every coordination step to an append-only event log that drives
-[the live activity feed](https://scranton-branch.example/#how) and makes a hive replayable — committed
+[the live activity feed](https://scranton-branch.zerogeworkshop.com/#how) and makes a hive replayable — committed
 alongside the rest of its state.
-[Download Munder Difflin](https://scranton-branch.example/#install) to watch a hive you can actually audit;
+[Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) to watch a hive you can actually audit;
 it's free and open source.

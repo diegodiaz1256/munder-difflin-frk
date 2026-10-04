@@ -125,7 +125,7 @@ fewer tokens billed — compression is one of the cheapest levers on an agent's 
 ---
 
 Munder Difflin gives every Claude Code agent markdown memory plus
-[a shared semantic palace that keeps the lossless original and a compact, recall-fast copy](https://scranton-branch.example/#how)
+[a shared semantic palace that keeps the lossless original and a compact, recall-fast copy](https://scranton-branch.zerogeworkshop.com/#how)
 — so months of context load in a few thousand tokens, locally.
-[Download Munder Difflin](https://scranton-branch.example/#install) to give your agents memory that compresses
+[Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) to give your agents memory that compresses
 without forgetting; it's free and open source.

@@ -151,7 +151,7 @@ you stop being the router yourself, which is almost always the bigger time sink.
 
 ---
 
-Munder Difflin ships this [orchestration model](https://scranton-branch.example/#how) out of the box: a GOD agent you talk to, a reliable
+Munder Difflin ships this [orchestration model](https://scranton-branch.zerogeworkshop.com/#how) out of the box: a GOD agent you talk to, a reliable
 message router, and a human-approval queue for the critical few — all running locally.
-[Download Munder Difflin](https://scranton-branch.example/#install) to orchestrate your own team of Claude Code
+[Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) to orchestrate your own team of Claude Code
 agents; it's free and open source.

@@ -51,7 +51,7 @@ does. Your tools are present because nothing took them away.
 
 This is the whole reason a harness is lighter than a framework. A framework asks you to rebuild your
 agent inside it. A harness wraps the agent you already run — which is the core idea behind a
-[multi-agent harness](https://scranton-branch.example/#what), and why your investment carries straight over.
+[multi-agent harness](https://scranton-branch.zerogeworkshop.com/#what), and why your investment carries straight over.
 
 ### MCP servers
 
@@ -150,5 +150,5 @@ constrain what each agent can do *within* its own session.
 ---
 
 Munder Difflin runs your real Claude Code — your MCP servers, your skills, your tools — just
-orchestrated into a hive. [Download Munder Difflin](https://scranton-branch.example/#install) to bring your
+orchestrated into a hive. [Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) to bring your
 existing setup into a coordinated team of agents; it's free and open source.

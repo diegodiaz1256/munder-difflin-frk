@@ -66,7 +66,7 @@ Design docs: `HIVE.md` (multi-agent design target), `SPEC.md` (terminal/event pl
 ## Other directories
 
 - `blog/`: separate Eleventy site that builds into `docs/blog/` (own `package.json`, see `blog/BLOG_README.md`).
-- `docs/`: GitHub Pages marketing site (scranton-branch.example), plus `model-catalog.json` (remote model catalog).
+- `docs/`: GitHub Pages marketing site (scranton-branch.zerogeworkshop.com), plus `model-catalog.json` (remote model catalog).
 - `landing-remotion/`: Remotion clips for the landing page.
 - `seo/`: SEO content notes.
 - `tools/`: build helpers (`copy-main-assets.cjs`, node-pty patches), `agent-env.cjs` (per-agent env query, see `tools/AGENT-ENV.md`), `mapgen/` (Python helpers for the Tiled office map).

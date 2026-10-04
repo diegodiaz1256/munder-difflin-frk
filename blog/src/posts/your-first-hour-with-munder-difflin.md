@@ -37,7 +37,7 @@ The app screenshots below are the real 0.5.2 Pro app, with personal details blur
 
 ## Where do you download Munder Difflin?
 
-Download it from [harnessmd.com/download](https://harnessmd.com/download). You get there from **Download free** on [scranton-branch.example](https://scranton-branch.example/), or from **Download** in its top bar.
+Download it from [harnessmd.com/download](https://harnessmd.com/download). You get there from **Download free** on [scranton-branch.zerogeworkshop.com](https://scranton-branch.zerogeworkshop.com/), or from **Download** in its top bar.
 
 {% img "a1-landing" %}
 
@@ -128,7 +128,7 @@ We call the orchestrator Michael in this guide. Call yours whatever you like.
 When you open the workspace without a licence, the app shows **Go PRO on this machine**. You have three choices:
 
 * **Continue with the free version** takes you to the classic office, free, with everything local.
-* **Get PRO** opens checkout in your browser. Pro runs on one machine at a time. Plans and prices are on the [pricing page](https://scranton-branch.example/#pricing).
+* **Get PRO** opens checkout in your browser. Pro runs on one machine at a time. Plans and prices are on the [pricing page](https://scranton-branch.zerogeworkshop.com/#pricing).
 * **I have a licence key** opens **Enter your license key**. Paste the key from your console at app.harnessmd.com, press **Activate**, and it is bound to this machine.
 
 {% img "c7-paywall" %}

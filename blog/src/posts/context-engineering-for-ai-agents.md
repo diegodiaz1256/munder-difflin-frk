@@ -76,7 +76,7 @@ every agent sees — fails on all three axes at once: it's expensive (you pay fo
 agent's token bill), it's slow (bigger windows cost latency), and it's confusing (each agent wades
 through five other agents' chatter to find its own task).
 
-The whole architecture of [a multi-agent harness](https://scranton-branch.example/#what) is, viewed one way, an
+The whole architecture of [a multi-agent harness](https://scranton-branch.zerogeworkshop.com/#what) is, viewed one way, an
 answer to a context-engineering question: *how do we let many agents share state without sharing
 windows?* The answer is to keep the shared state **out** of the window and let each agent pull in only
 the slice it needs.
@@ -167,8 +167,8 @@ window raises the ceiling on what you *can* hold; it does nothing to change the 
 volume. The teams that get the most out of agents — single or swarm — are the ones who treat the context
 window as the scarce, high-value resource it is and engineer what goes into it deliberately.
 
-Munder Difflin is built around exactly these moves: [isolated per-agent windows](https://scranton-branch.example/#what),
-[semantic memory](https://scranton-branch.example/#how) that recalls the relevant few, file-based mailboxes and an
+Munder Difflin is built around exactly these moves: [isolated per-agent windows](https://scranton-branch.zerogeworkshop.com/#what),
+[semantic memory](https://scranton-branch.zerogeworkshop.com/#how) that recalls the relevant few, file-based mailboxes and an
 event log that keep shared state out of context, and standups that compact the long tail.
-[Download Munder Difflin](https://scranton-branch.example/#install) to run a hive that stays sharp for hours —
+[Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) to run a hive that stays sharp for hours —
 it's free and open source.

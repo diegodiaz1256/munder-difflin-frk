@@ -28,7 +28,7 @@ memory, and git so the agents act like a team instead of a pile of terminal tabs
 
 You can run several Claude Code sessions by hand, but the coordination — who does what, who knows
 what, who's allowed to commit — is the part that eats your afternoon. This guide gets you from zero
-to a coordinated team in about ten minutes, using [Munder Difflin](https://scranton-branch.example/#install)
+to a coordinated team in about ten minutes, using [Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install)
 as the harness that does the wiring.
 
 ## Before you start (2 minutes)
@@ -38,7 +38,7 @@ You need two things:
 1. **Claude Code**, installed and runnable as `claude` in your terminal. Munder Difflin resolves the
    binary against your interactive shell's `PATH` (and common install spots like
    `~/.claude/local/`), so if `claude` works in a normal terminal, the harness will find it.
-2. **The Munder Difflin app** — [download it](https://scranton-branch.example/#install) for macOS, Windows,
+2. **The Munder Difflin app** — [download it](https://scranton-branch.zerogeworkshop.com/#install) for macOS, Windows,
    or Linux. It's free and open source.
 
 That's the whole prerequisite list. You don't install a framework, a database, or a server. Every
@@ -139,5 +139,5 @@ gracefully to plain markdown files; the semantic recall layer is an optional upg
 
 ---
 
-Ready to try it? [Download Munder Difflin](https://scranton-branch.example/#install) and run your first
+Ready to try it? [Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) and run your first
 coordinated team of Claude Code agents — it's free, local, and open source.

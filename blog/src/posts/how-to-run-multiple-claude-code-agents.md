@@ -74,7 +74,7 @@ directly. For the coordination model, see
 
 ### Route work through an orchestrator
 Instead of hand-assigning every task, you describe intent once and a coordinator decomposes and
-routes it. In Munder Difflin that's the [GOD orchestrator](https://scranton-branch.example/#how) — you talk to
+routes it. In Munder Difflin that's the [GOD orchestrator](https://scranton-branch.zerogeworkshop.com/#how) — you talk to
 it in plain language and it assigns the agents.
 
 ### Watch the floor
@@ -101,5 +101,5 @@ message bus.
 
 Munder Difflin runs all of this for you: roles, mailboxes, shared memory, a GOD orchestrator, and a
 live office floor — locally, on your own Claude plan.
-[Download Munder Difflin](https://scranton-branch.example/#install) to run your first coordinated team; it's
+[Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) to run your first coordinated team; it's
 free and open source.

@@ -1,7 +1,7 @@
 // Postbuild: move the generated sitemap to the site ROOT (docs/sitemap.xml).
 //
 // Eleventy can only write inside its output dir (docs/blog), but robots.txt
-// points crawlers at https://scranton-branch.example/sitemap.xml — the repo root. So we
+// points crawlers at https://scranton-branch.zerogeworkshop.com/sitemap.xml — the repo root. So we
 // move docs/blog/sitemap.xml up to docs/sitemap.xml after the build. The sitemap
 // uses absolute URLs, so its location on disk doesn't affect its contents.
 //

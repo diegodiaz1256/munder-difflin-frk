@@ -9,7 +9,7 @@ type: Non-technical
 primaryKeyword: "grok bot pricing"
 secondaryKeywords: ["grok bot price", "grok bot cost", "is grok bot free", "grok bot free trial", "grok bot supergrok", "grok bot cursor pro", "cheapest way to get grok bot"]
 tags: ["Comparisons", "AI Agents", "Pricing", "Open Source"]
-ogImage: "https://scranton-branch.example/blog/assets/media/grok-bot-pricing/lead-still.png"
+ogImage: "https://scranton-branch.zerogeworkshop.com/blog/assets/media/grok-bot-pricing/lead-still.png"
 author:
   name: Chaitanya Giri
   initials: CG

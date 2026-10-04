@@ -194,7 +194,7 @@ A real app runs more than one terminal, so wrap all of this in a manager keyed b
 Everything above is in service of a simple idea: if your "agents" are real `claude` CLI sessions, they
 deserve real terminals. A PTY makes each agent byte-for-byte authentic — same colors, same prompts,
 same behavior as if you'd typed `claude` yourself. That authenticity is the whole premise of a
-[multi-agent harness](https://scranton-branch.example/#what): you're not reimplementing the agent, you're
+[multi-agent harness](https://scranton-branch.zerogeworkshop.com/#what): you're not reimplementing the agent, you're
 running the genuine article and coordinating many of them. And because every session is a real process,
 the same single-writer discipline that keeps their shared state safe — see
 [the single-committer git pattern](/blog/single-committer-git-pattern/) — applies cleanly on top.
@@ -212,5 +212,5 @@ pseudo-terminal needs a kernel-level allocation.
 ---
 
 Munder Difflin runs every Claude Code agent in a real node-pty terminal — authentic shells, streamed
-to a live UI, coordinated as a hive. [Download Munder Difflin](https://scranton-branch.example/#install) to see
+to a live UI, coordinated as a hive. [Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) to see
 real terminals driving real agents; it's free and open source.

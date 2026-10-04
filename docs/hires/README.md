@@ -1,12 +1,12 @@
 # Agent Gallery
 
 A community gallery of **shareable hires** — portable agent role templates for the
-[Munder Difflin](https://scranton-branch.example) multi-agent harness. Browse a role, download
+[Munder Difflin](https://scranton-branch.zerogeworkshop.com) multi-agent harness. Browse a role, download
 its manifest, and import it in the app — its goal, model, flags, and token budget land
 pre-filled (you always review before it spawns).
 
 Static site: no build step, no framework, no trackers. `index.html` + `style.css` +
-`app.js` + `manifests/`. The design mirrors scranton-branch.example's neo-brutalist landing page.
+`app.js` + `manifests/`. The design mirrors scranton-branch.zerogeworkshop.com's neo-brutalist landing page.
 
 ## Run it locally
 

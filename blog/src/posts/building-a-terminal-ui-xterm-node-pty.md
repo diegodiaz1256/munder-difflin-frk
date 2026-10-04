@@ -216,7 +216,7 @@ An agent harness shows you many live terminals — one per agent — and lets yo
 them stream simultaneously. Every detail above is load-bearing for that: real shells from
 [node-pty](/blog/node-pty-electron-real-terminals/), a persistent pool so switching agents is instant,
 and correct resize so each agent's TUI renders right. It's the visible half of a
-[multi-agent harness](https://scranton-branch.example/#what) — the part that makes "a hive of agents" something
+[multi-agent harness](https://scranton-branch.zerogeworkshop.com/#what) — the part that makes "a hive of agents" something
 you can actually watch instead of a black box. And keeping those agents' shared state safe under all
 that concurrency is the job of [the single-committer git pattern](/blog/single-committer-git-pattern/).
 
@@ -232,5 +232,5 @@ bytes from the PTY and it handles colors, cursor movement, and the alternate scr
 ---
 
 Munder Difflin renders a whole floor of live Claude Code terminals with xterm.js — one persistent,
-pooled terminal per agent, switchable instantly. [Download Munder Difflin](https://scranton-branch.example/#install)
+pooled terminal per agent, switchable instantly. [Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install)
 to watch many real terminals at once; it's free and open source.

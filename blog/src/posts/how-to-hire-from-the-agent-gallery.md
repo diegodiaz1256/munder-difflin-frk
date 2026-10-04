@@ -14,7 +14,7 @@ author:
   initials: CG
 faq:
   - q: "What is the Agent Gallery?"
-    a: "A free gallery of ready made agent roles for Munder Difflin at scranton-branch.example/hires. Each role, called a hire, is one JSON file describing a configured agent: its name and avatar, engine and model, flags, goal, skills and token budget. As of September 2026 it lists 80 roles."
+    a: "A free gallery of ready made agent roles for Munder Difflin at scranton-branch.zerogeworkshop.com/hires. Each role, called a hire, is one JSON file describing a configured agent: its name and avatar, engine and model, flags, goal, skills and token budget. As of September 2026 it lists 80 roles."
   - q: "How do I import a hire?"
     a: "Download the role's .json from its card, open Munder Difflin, click Add agent, then import hire, and pick the file. The form fills in with every field from the manifest."
   - q: "Does importing a hire start an agent?"
@@ -28,7 +28,7 @@ faq:
 ---
 
 <div class="callout tldr"><span class="ic">TL;DR</span><p>The <strong>Agent Gallery</strong> at
-<a href="https://scranton-branch.example/hires/">scranton-branch.example/hires</a> holds <strong>80 ready made roles</strong> for Munder Difflin.
+<a href="https://scranton-branch.zerogeworkshop.com/hires/">scranton-branch.zerogeworkshop.com/hires</a> holds <strong>80 ready made roles</strong> for Munder Difflin.
 Download a role's <code>.json</code>, click <strong>Add agent</strong>, then <strong>import hire</strong>, and the form fills in
 for you. <strong>Nothing runs on import.</strong> You review every field, customise the <strong>identity, workspace, engine and
 briefing</strong>, and you click spawn. About five minutes from browsing to a working agent on your floor.</p></div>
@@ -42,7 +42,7 @@ This is the walkthrough as of Munder Difflin 0.5.2: browse, import, review, cust
 
 ## Where is the Agent Gallery, and what is in it?
 
-At [scranton-branch.example/hires](https://scranton-branch.example/hires/), a static page with no login. It lists 80 roles, and they are not all
+At [scranton-branch.zerogeworkshop.com/hires](https://scranton-branch.zerogeworkshop.com/hires/), a static page with no login. It lists 80 roles, and they are not all
 engineers. Next to a PR reviewer, a QA enforcer and a security auditor you will find roles for research, data analysis, docs, design,
 customer support, sales outreach and marketing. Each card shows what the role is for, and you can search the page.
 
@@ -107,5 +107,5 @@ gallery page, then import it with Add agent and import hire. Manifests are plain
 
 ---
 
-Grab the latest build from [scranton-branch.example](https://scranton-branch.example/), and if the gallery saves you an afternoon of blank forms,
+Grab the latest build from [scranton-branch.zerogeworkshop.com](https://scranton-branch.zerogeworkshop.com/), and if the gallery saves you an afternoon of blank forms,
 [a GitHub star](https://github.com/chaitanyagiri/munder-difflin) is appreciated.

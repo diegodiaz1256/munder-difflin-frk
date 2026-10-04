@@ -103,4 +103,4 @@ It puts everything on your own machine, where you can watch and touch it:
 Facts about qm above come from its public README as of 10 September 2026. Check
 [the repo](https://github.com/yc-software/qm) for the current state, because both projects ship often.
 
-**[Download Munder Difflin free](https://scranton-branch.example/)** for macOS, Windows or Linux. MIT licensed.
+**[Download Munder Difflin free](https://scranton-branch.zerogeworkshop.com/)** for macOS, Windows or Linux. MIT licensed.

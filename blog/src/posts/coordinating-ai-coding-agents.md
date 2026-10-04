@@ -137,5 +137,5 @@ running multiple agents.
 
 Munder Difflin implements all five rules so you don't have to: single-writer workspaces, an atomic
 message router, a single-committer git layer, a single-scribe shared board, and a
-[GOD orchestrator](https://scranton-branch.example/#how) — all local and open source. [Download Munder Difflin](https://scranton-branch.example/#install) to coordinate
+[GOD orchestrator](https://scranton-branch.zerogeworkshop.com/#how) — all local and open source. [Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) to coordinate
 your own team of Claude Code agents.

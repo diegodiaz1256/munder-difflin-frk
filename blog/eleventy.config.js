@@ -4,7 +4,7 @@ import markdownIt from "markdown-it";
 import markdownItAnchor from "markdown-it-anchor";
 import { readFileSync } from "node:fs";
 
-// The blog is always served under this path on scranton-branch.example. We prefix links
+// The blog is always served under this path on scranton-branch.zerogeworkshop.com. We prefix links
 // explicitly (via the `u` filter) instead of Eleventy's pathPrefix, whose HTML
 // auto-transform double-applies the prefix when combined with the `url` filter.
 // Theme previews override both via env (see package.json preview:* scripts).

@@ -138,6 +138,6 @@ and the next mining pass picks up the change. Try that with a vector store.
 ---
 
 Munder Difflin gives every agent a plain `memory.md` plus
-[a shared semantic palace mined from it](https://scranton-branch.example/#how) — readable, diffable, and
-graceful when the index is gone. [Download Munder Difflin](https://scranton-branch.example/#install)
+[a shared semantic palace mined from it](https://scranton-branch.zerogeworkshop.com/#how) — readable, diffable, and
+graceful when the index is gone. [Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install)
 to give your agents memory you can actually read; it's free and open source.
