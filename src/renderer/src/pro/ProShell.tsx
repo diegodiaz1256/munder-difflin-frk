@@ -3,6 +3,7 @@ import type { HarnessConfig } from '@/store/config';
 import { useStore } from '@/store/store';
 import { Icon, type IconName } from '@/components/Icon';
 import { waitsOnHuman } from '@/components/TasksKanban';
+import { useRestoreTeam } from '@/hooks/useRestoreTeam';
 import { useProStore, type ProSection } from './proStore';
 import { Avatar, TONE_COLOR, agentState, askingAgents, useDirectory, useRoster, useTasks } from './data';
 import { TasksView } from './TasksView';
@@ -38,6 +39,10 @@ export function ProShell({ config }: { config: HarnessConfig }) {
   const asking = useMemo(() => askingAgents(tasks), [tasks]);
   const openAsks = tasks.filter(waitsOnHuman).length;
   const god = roster.find((a) => a.isGod);
+  // The boot-time "restore your team" lives in this hook, and Classic mounts it
+  // from the agent strip — which PRO replaces. Without it here, opening the app
+  // in PRO left every worker from the last session unrestored.
+  useRestoreTeam(config);
 
   // An agent view whose agent left the floor falls back to the roster.
   const agentInView = view.kind === 'agent' ? roster.find((a) => a.id === view.agentId) : undefined;
