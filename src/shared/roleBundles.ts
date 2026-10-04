@@ -20,7 +20,7 @@ export interface RoleBundle {
 export const ROLE_BUNDLES: RoleBundle[] = [
   { id: 'designer', label: 'Designer', icon: 'sparkle', servers: ['context7', 'filesystem'] },
   { id: 'software-engineer', label: 'Software Engineer', icon: 'code', servers: ['git', 'github-token', 'db'] },
-  { id: 'product-manager', label: 'Product Manager', icon: 'ledger', servers: ['github-token', 'email-calendar', 'search-with-key'] },
+  { id: 'product-manager', label: 'Product Manager', icon: 'ledger', servers: ['github-token', 'search-with-key'] },
   { id: 'frontend-developer', label: 'Frontend Developer', icon: 'sidebar', servers: ['git', 'github-token'] }
 ];
 
