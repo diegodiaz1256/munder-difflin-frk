@@ -47,7 +47,14 @@ export interface FactoryFloorView {
   agents: FactoryAgentView[];
   org?: Array<{ name: string; role: string; reports_to?: string }>;
   board: Array<{ id: string; title: string; project: string; state: string; stage?: string; assignee?: string; depends_on?: string[] }>;
-  pacing?: { mode: string; window_5h_pct?: number; window_7d_pct?: number; reason?: string };
+  /** window_*: the whole account; own_*: what the factory itself used (its
+   *  ceilings apply to these); ceiling_*: where it stops. */
+  pacing?: {
+    mode: string; reason?: string; running?: number; capacity?: number;
+    window_5h_pct?: number; window_7d_pct?: number;
+    own_5h_pct?: number; own_7d_pct?: number;
+    ceiling_5h_pct?: number; ceiling_7d_pct?: number;
+  };
 }
 export interface FactoryEventView { id: string; at: string; type: string; from?: string; to?: string; task?: string; text?: string; ok?: boolean }
 export interface FactoryEventsView { events: FactoryEventView[]; cursor: string; gap: boolean }

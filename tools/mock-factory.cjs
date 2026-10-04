@@ -39,10 +39,20 @@ function createFactory({ readOnly = false } = {}) {
 
   function addTask({ project, title, detail, client_ref }) {
     if (client_ref) { const hit = tasks.find((t) => t.client_ref === client_ref); if (hit) return hit; }
-    const t = { task_id: `T-${++tseq}`, project, title, detail, client_ref, state: 'queued', stage: null, agent: null, attempts: 0, output: {}, updated_at: now() };
+    const t = { task_id: `T-${++tseq}`, project, project_name: projects.find((p) => p.id === project)?.name, title, detail, client_ref, state: 'queued', stage: null, agent: null, attempts: 0, output: {}, created_at: now(), state_since: now(), stage_since: now(), updated_at: now() };
     tasks.push(t);
     emit({ type: 'task.created', task: t.task_id, text: title });
     return t;
+  }
+  {
+    // A big task the factory split into parts; the parent follows them.
+    const parent = addTask({ project: 'shop', title: 'Customer accounts', detail: 'Accounts end to end.' });
+    parent.parts = [];
+    for (const title of ['Sign-up form', 'Password reset', 'Account settings page']) {
+      const part = addTask({ project: 'shop', title, detail: `${title}, part of Customer accounts.` });
+      part.parent_id = parent.task_id;
+      parent.parts.push(part.task_id);
+    }
   }
   for (const [p, title] of [['shop', 'Checkout with saved cards'], ['shop', 'Order history page'], ['blog', 'RSS feed'], ['blog', 'Dark mode'], ['docs', 'API reference'], ['docs', 'Search box']]) {
     addTask({ project: p, title, detail: `${title}, end to end.` });
@@ -58,6 +68,12 @@ function createFactory({ readOnly = false } = {}) {
   function tick() {
     for (const t of tasks) {
       if (t.state === 'done' || t.state === 'failed' || t.state === 'cancelled') continue;
+      if (t.parts) {
+        const ps = t.parts.map((id) => tasks.find((x) => x.task_id === id));
+        const st = ps.every((x) => x.state === 'done') ? 'done' : ps.some((x) => x.state !== 'queued') ? 'working' : 'queued';
+        if (st !== t.state) { t.state = st; t.state_since = now(); t.updated_at = now(); if (st === 'done') emit({ type: 'task.done', task: t.task_id, ok: true }); }
+        continue;
+      }
       // Someone answers in the factory's own channel after a while.
       if (t.state === 'waiting') {
         t.waited = (t.waited ?? 0) + 1;
@@ -80,7 +96,7 @@ function createFactory({ readOnly = false } = {}) {
         } else next = STAGES[i + 1];
       }
       if (!next) {
-        t.state = 'done'; t.stage = null; t.agent = null;
+        t.state = 'done'; t.stage = null; t.state_since = now(); t.updated_at = now();
         t.output = { summary: `${t.title} shipped`, pr_url: `https://example.invalid/pr/${t.task_id}`, deploy_url: `https://example.invalid/${t.project}` };
         if (from) setAgent(from, 'idle');
         emit({ type: 'task.done', task: t.task_id, ok: true });
@@ -88,7 +104,7 @@ function createFactory({ readOnly = false } = {}) {
       }
       // An approval gate before merging, now and then.
       if (next === 'merging' && !t.approved && Math.random() < 0.25) {
-        t.state = 'waiting';
+        t.state = 'waiting'; t.state_since = now(); t.updated_at = now();
         t.ask = { id: `A-${t.task_id}`, kind: 'approval', question: `Merge "${t.title}" into main?`, options: ['approve', 'reject'] };
         emit({ type: 'ask.opened', task: t.task_id, text: t.ask.question });
         if (from) setAgent(from, 'waiting'), (from.waiting_for = 'waiting for a human approval');
@@ -115,7 +131,8 @@ function createFactory({ readOnly = false } = {}) {
         from.history = [...from.history, { task: t.task_id, step: t.stage, result: 'ok', at: now() }].slice(-5);
         if (!(t.stage === 'review' && next === 'dev')) emit({ type: 'task.handoff', task: t.task_id, from: from.name, to: worker.name, ok: true });
       } else if (!from) emit({ type: 'task.assigned', task: t.task_id, to: worker.name });
-      t.state = 'working'; t.stage = next; t.agent = worker.name; t.updated_at = now();
+      if (t.state !== 'working') t.state_since = now();
+      t.state = 'working'; t.stage = next; t.stage_since = now(); t.agent = worker.name; t.updated_at = now();
       setAgent(worker, 'working', t);
       // QA runs the suites at the test rack, away from its desk.
       if (next === 'verify') { worker.state = 'away'; worker.at = 'test_rack'; } else worker.at = undefined;
@@ -140,7 +157,7 @@ function createFactory({ readOnly = false } = {}) {
       agents: agents.map((a) => ({ ...a, history: a.history.slice(-3) })),
       org: [{ name: 'Architect', role: 'Architect' }, ...agents.filter((a) => a.name !== 'Architect').map((a) => ({ name: a.name, role: a.role, reports_to: 'Architect' }))],
       board: tasks.filter((t) => t.state !== 'cancelled').slice(-20).map((t) => ({ id: t.task_id, title: t.title, project: t.project, state: t.state, stage: t.stage ?? undefined, assignee: t.agent ?? undefined, depends_on: [] })),
-      pacing: { mode: 'normal', window_5h_pct: 41, window_7d_pct: 23 }
+      pacing: { mode: 'normal', running: tasks.filter((t) => t.state === 'working').length, capacity: 4, window_5h_pct: 59, window_7d_pct: 37, own_5h_pct: 34, own_7d_pct: 21, ceiling_5h_pct: 55, ceiling_7d_pct: 60 }
     };
   }
 
@@ -163,8 +180,10 @@ function buildServer(f) {
     if (!t) return { isError: true, content: [{ type: 'text', text: `no task ${task_id}` }] };
     return json(f.pub(t));
   });
-  server.registerTool('task_list', { description: 'Tasks', inputSchema: { project: z.string().optional(), state: z.string().optional(), limit: z.number().optional() } }, ({ project, state, limit }) =>
-    json({ tasks: f.tasks.filter((t) => (!project || t.project === project) && (!state || t.state === state)).slice(-(limit ?? 50)).map(f.pub) }));
+  server.registerTool('task_list', { description: 'Tasks', inputSchema: { project: z.string().optional(), state: z.string().optional(), limit: z.number().optional(), include_parts: z.boolean().optional(), agent: z.string().optional() } }, ({ project, state, limit, include_parts, agent }) => {
+    const hits = f.tasks.filter((t) => (!project || t.project === project) && (!state || t.state === state) && (include_parts || !t.parent_id) && (!agent || t.agent === agent));
+    return json({ tasks: hits.slice(-(limit ?? 1000)).map(f.pub), total: hits.length });
+  });
   server.registerTool('team_status', { description: 'The team', inputSchema: {} }, () => json({
     agents: f.agents.map((a) => ({ name: a.name, role: a.role, kind: a.kind, state: a.state, task_id: a.task?.id })),
     running: f.tasks.filter((t) => t.state === 'working').length, capacity: 4, usage: { window_5h_pct: 41, window_7d_pct: 23 }, spent_usd_today: 1.2
