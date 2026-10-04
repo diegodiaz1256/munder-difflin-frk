@@ -20,6 +20,7 @@ import { Icon } from './Icon';
 import { OfficeThemePicker } from './OfficeThemePicker';
 import { McpDefaultsSettings } from './McpDefaultsSettings';
 import { IntegrationsRegistry } from './IntegrationsRegistry';
+import { PRODUCT_ANALYTICS } from '@shared/fork';
 import { AiEnginesSettings } from './AiEnginesSettings';
 import { REALTIME_MODEL } from '@shared/realtimePricing';
 import { RealtimeDevicePicker } from '@/realtime/DevicePicker';
@@ -1162,6 +1163,8 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                             {autoUpdateOn ? t('common.on') : t('common.off')}
                           </PixelButton>
                         </div>
+                        {/* No usage-stats switch: this fork ships no analytics (shared/fork.ts). */}
+                        {PRODUCT_ANALYTICS && (<>
                         <div style={{ height: 10 }} />
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -1180,6 +1183,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                             {telemetryOn ? t('common.on') : t('common.off')}
                           </PixelButton>
                         </div>
+                        </>)}
                       </div>
 
                       {/* Office Theme — TV-show office maps (experimental; flag tvShowOffices, default off) */}
