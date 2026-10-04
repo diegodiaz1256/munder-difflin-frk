@@ -35,7 +35,8 @@ export interface TeamStatusView {
   /** relayAuth: an access token is stored for the team's relay (never the token). */
   teams: Array<{ id: string; name: string; relay: string; level: TeamLevelView; mode: TeamModeView; relayAuth?: boolean }>;
   /** level/mode are one-to-one overrides; absent = the team default. */
-  peers: Array<{ id: string; name: string; confirmed: boolean; addedAt: number; teamId: string; level?: TeamLevelView; mode?: TeamModeView }>;
+  /** pq: post-quantum status of the pair ('on' once both sides use it). */
+  peers: Array<{ id: string; name: string; confirmed: boolean; addedAt: number; teamId: string; level?: TeamLevelView; mode?: TeamModeView; pq?: 'sent' | 'ready' | 'on' }>;
 }
 export interface TeamLogView {
   id: string; peerId: string; peerName: string; direction: 'in' | 'out'; by?: 'you' | 'agent';
