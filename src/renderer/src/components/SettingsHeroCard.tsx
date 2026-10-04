@@ -27,9 +27,9 @@ import { useTranslation } from 'react-i18next';
 import { PixelButton } from './PixelButton';
 import { Icon } from './Icon';
 import { DEFAULT_HERO, type HeroPayload } from '@shared/heroPayload';
-import { manualDownloadUrl, pendingVersion, reduceStatus, type UpdateStatus } from '@shared/updateState';
+import { manualDownloadUrl, pendingVersion, reduceStatus, REPO_URL, type UpdateStatus } from '@shared/updateState';
 
-const GITHUB_REPO_URL = 'https://github.com/chaitanyagiri/munder-difflin';
+const GITHUB_REPO_URL = REPO_URL;
 const FOUNDERS_WALL_URL = 'https://munderdiffl.in/wall.html';
 const DISCORD_URL = 'https://discord.gg/SEDzP5ZPk5';
 

@@ -108,7 +108,7 @@ async function head(url, label) {
 }
 
 async function checkLive() {
-  const base = 'https://github.com/chaitanyagiri/munder-difflin/releases/latest/download/';
+  const base = 'https://github.com/diegodiaz1256/munder-difflin-frk/releases/latest/download/';
   for (const name of [...assets, 'SHA256SUMS.txt']) await head(base + name, name);
   for (const url of siteAssets) await head(url, url);
 }

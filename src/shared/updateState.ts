@@ -33,7 +33,15 @@ export type UpdateStatus =
 
 export type UpdateAction = 'none' | 'check' | 'download' | 'restart' | 'open-release' | 'manual';
 
-export const REPO = 'chaitanyagiri/munder-difflin';
+/** The GitHub repo this build updates from, and reads its live catalogs from.
+ *  The ONE place it is named: the updater, the release links in the UI, and the
+ *  remote model catalog / hero payload all derive from it. A fork must point
+ *  here at itself, or its builds "update" into upstream releases and lose the
+ *  fork's changes (electron-builder.yml `publish` must match). */
+export const REPO = 'diegodiaz1256/munder-difflin-frk';
+export const REPO_URL = `https://github.com/${REPO}`;
+/** Raw files on the repo's main branch (docs/model-catalog.json, docs/hero.json). */
+export const REPO_RAW_MAIN = `https://raw.githubusercontent.com/${REPO}/main`;
 
 /** The installer for THIS machine in the release tagged v{version}, by the
  *  names electron-builder.yml produces. Used when a status carries no
