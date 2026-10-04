@@ -28,6 +28,9 @@ export type {
  *  write-only secret contract (spec §2): a secret value is NEVER returned over IPC. */
 /** Environment as the renderer sees it: a secret shows only whether one is stored. */
 export interface EnvVarView { name: string; kind: 'plain' | 'secret' | 'op'; value?: string; agents?: string[] | null; note?: string; stored?: boolean }
+export type McpTransportView = { kind: 'stdio'; command: string; args: string[] } | { kind: 'http'; url: string };
+export interface McpMineView { id: string; name: string; transport: McpTransportView; env: Record<string, string>; secretEnv: string[]; enabled: boolean; agents: string[] | null; source?: string; secretsStored: Record<string, boolean> }
+export interface McpFoundView { source: string; file: string; name: string; transport: McpTransportView; env: Array<{ name: string; secret: boolean; value?: string }>; headerNames: string[]; imported: boolean }
 export interface RunnerView { id: string; name: string; command: string; description?: string; secrets: string[]; approval: 'always' | 'on-change' | 'never'; timeoutSec?: number }
 
 /** Factories as the renderer sees them (main/factories.ts; FACTORY-MCP.md). */
@@ -1389,6 +1392,15 @@ const api = {
   envSetRunner: (r: Partial<RunnerView>): Promise<{ ok: boolean; id?: string; error?: string }> => ipcRenderer.invoke('env:setRunner', r),
   envRemoveRunner: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('env:removeRunner', id),
   envOpStatus: (): Promise<{ installed: boolean; version?: string }> => ipcRenderer.invoke('env:opStatus'),
+  // Manager → MCP (main/mcpServers.ts). Keys are write-only.
+  mcpList: (): Promise<{ mine: McpMineView[]; found: McpFoundView[] }> => ipcRenderer.invoke('mcp:list'),
+  mcpImport: (source: string, name: string, secretNames?: string[]): Promise<{ ok: boolean; id?: string; error?: string }> =>
+    ipcRenderer.invoke('mcp:import', source, name, secretNames),
+  mcpSave: (input: { id?: string; name: string; transport: McpTransportView; env: Record<string, string> }, secretNames: string[]): Promise<{ ok: boolean; id?: string; error?: string }> =>
+    ipcRenderer.invoke('mcp:save', input, secretNames),
+  mcpSetEnabled: (id: string, on: boolean): Promise<{ ok: boolean }> => ipcRenderer.invoke('mcp:setEnabled', id, on),
+  mcpSetAgents: (id: string, agents: string[] | null): Promise<{ ok: boolean }> => ipcRenderer.invoke('mcp:setAgents', id, agents),
+  mcpRemove: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('mcp:remove', id),
   // Factories (FACTORY-MCP.md). The token goes in once, write-only.
   factoriesList: (): Promise<FactoryView[]> => ipcRenderer.invoke('factories:list'),
   factoriesAdd: (arg: { name?: string; url: string; token: string }): Promise<{ ok: boolean; id?: string; info?: FactoryInfoView; error?: string }> =>

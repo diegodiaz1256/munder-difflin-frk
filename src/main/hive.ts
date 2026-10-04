@@ -1424,6 +1424,14 @@ export class HiveManager {
       const args = e.spec.args.map((a) => (a === '<cwd>' ? cwd : a));
       servers[`munder-${e.id}`] = { command: e.spec.command, args };
     }
+    // Your own servers (Manager → MCP, mcpServers.ts): keyed ones go through
+    // the gateway like the catalog's, the rest are handed over as they are.
+    // Role grants name catalog servers; these carry their own agent scope.
+    if (agentId) {
+      const mine = this.customMcp(agentId);
+      keyed.push(...mine.gateway);
+      for (const [id, entry] of Object.entries(mine.plain)) servers[`munder-${id}`] = entry;
+    }
     // No gateway (tests, or it failed to bind) → no keyed servers at all: the
     // fallback is "without GitHub", never "with the key in the agent's env".
     const gw = keyed.length && agentId ? this.mcpGateway(agentId, keyed) : null;
@@ -1450,6 +1458,13 @@ export class HiveManager {
   private mcpInstances: (serviceId: string) => string[] = (serviceId) => [serviceId];
   setMcpInstances(list: (serviceId: string) => string[]): void {
     this.mcpInstances = list;
+  }
+
+  /** Your own MCP servers for one agent (mcpServers.ts). Injected by main;
+   *  unset means none. */
+  private customMcp: (agentId: string) => { gateway: string[]; plain: Record<string, McpServerEntry> } = () => ({ gateway: [], plain: {} });
+  setCustomMcp(get: (agentId: string) => { gateway: string[]; plain: Record<string, McpServerEntry> }): void {
+    this.customMcp = get;
   }
 
   /** Grants an agent a gateway capability over its keyed servers. Injected by
