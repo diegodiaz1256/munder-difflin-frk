@@ -71,6 +71,7 @@ import * as integrations from './integrations';
 import { applyMissionRequest, type MissionLike } from '../shared/missionRequests';
 import { cleanCustomBundles } from '../shared/roleBundles';
 import { Factories } from './factories';
+import { createWslOffice, listDistros, mirroredNetworking } from './wsl';
 import { addConnection, connectionKeyStored, connectionLaunchEnv, instancesOf, listConnections, removeConnection, renameConnection, serviceOf, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
 import { McpGateway } from './mcpGateway';
 import { TeamNode, type TeamInbound } from './teamNode';
@@ -3584,6 +3585,17 @@ const factories = new Factories({
   log: (m) => console.log('[factories]', m)
 });
 const factoryError = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) });
+// ─── WSL floors (wsl.ts): a floor created inside a distro runs there ─────────
+ipcMain.handle('wsl:distros', async () => {
+  if (process.platform !== 'win32') return { ok: false, distros: [], error: 'WSL is a Windows feature' };
+  const r = await listDistros();
+  return { ...r, mirrored: mirroredNetworking() };
+});
+ipcMain.handle('wsl:createOffice', (_evt, distro: unknown, name: unknown) => {
+  if (process.platform !== 'win32' || typeof distro !== 'string' || typeof name !== 'string') return { ok: false, error: 'invalid' };
+  return createWslOffice(distro, name);
+});
+
 ipcMain.handle('factories:list', () => factories.list());
 ipcMain.handle('factories:add', (_evt, arg: unknown) => {
   const a = (arg ?? {}) as { name?: unknown; url?: unknown; token?: unknown };

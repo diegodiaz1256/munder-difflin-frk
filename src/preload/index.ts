@@ -1366,6 +1366,10 @@ const api = {
     ipcRenderer.invoke('config:saveRoleBundles', bundles),
   connectionsList: (): Promise<ConnectionStatusView[]> =>
     ipcRenderer.invoke('connections:list'),
+  // WSL floors (main/wsl.ts): Windows only.
+  wslDistros: (): Promise<{ ok: boolean; distros: string[]; mirrored?: boolean; error?: string }> => ipcRenderer.invoke('wsl:distros'),
+  wslCreateOffice: (distro: string, name: string): Promise<{ ok: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke('wsl:createOffice', distro, name),
   // Factories (FACTORY-MCP.md). The token goes in once, write-only.
   factoriesList: (): Promise<FactoryView[]> => ipcRenderer.invoke('factories:list'),
   factoriesAdd: (arg: { name?: string; url: string; token: string }): Promise<{ ok: boolean; id?: string; info?: FactoryInfoView; error?: string }> =>

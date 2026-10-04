@@ -18,6 +18,7 @@
  *
  * Everything here runs in the Electron main process.
  */
+import { gitInvocation } from './wsl';
 import {
   existsSync, mkdirSync, readFileSync, writeFileSync, renameSync,
   readdirSync, statSync, lstatSync, realpathSync, rmSync, appendFileSync,
@@ -2974,8 +2975,10 @@ export class HiveManager {
   // The gc still happens — this only stops it from outliving the command that
   // triggered it, which is what "single committer" was supposed to mean.
   private git(args: string[], cwd: string): { ok: boolean; out: string; err: string } {
-    const res = spawnSync('git', ['-c', 'commit.gpgsign=false', '-c', 'gc.autoDetach=false', '-c', 'user.name=Hive', '-c', 'user.email=hive@local', ...args], {
-      cwd, encoding: 'utf8', timeout: 8000
+    // A WSL floor's hive is committed by git inside that distro (wsl.ts).
+    const inv = gitInvocation(cwd, ['-c', 'commit.gpgsign=false', '-c', 'gc.autoDetach=false', '-c', 'user.name=Hive', '-c', 'user.email=hive@local', ...args]);
+    const res = spawnSync(inv.file, inv.args, {
+      cwd: inv.cwd, encoding: 'utf8', timeout: inv.distro ? 20000 : 8000, windowsHide: true
     });
     return { ok: res.status === 0, out: res.stdout ?? '', err: res.stderr ?? '' };
   }
