@@ -26,6 +26,32 @@ export type {
 /** Renderer-visible integration record: the secretRef handle is redacted to a
  *  presence boolean. Matches main `integrations.listRecordsRedacted()` — the
  *  write-only secret contract (spec §2): a secret value is NEVER returned over IPC. */
+/** Factories as the renderer sees them (main/factories.ts; FACTORY-MCP.md). */
+export interface FactoryInfoView {
+  name: string; version?: string; profile: string | null; projectsRequired: boolean;
+  tools: string[]; canSend: boolean; canAnswer: boolean;
+}
+export interface FactoryView { id: string; name: string; url: string; addedAt: number; hasToken: boolean; info?: FactoryInfoView }
+export interface FactoryAgentView {
+  id: string; name: string; display_name?: string; role: string;
+  role_kind?: 'planner' | 'orderer' | 'builder' | 'reviewer' | 'qa' | 'automation';
+  instance_of?: string; hired_at?: string; kind?: 'llm' | 'automation'; team?: string;
+  state: 'idle' | 'working' | 'waiting' | 'resting' | 'away' | 'offline';
+  at?: string; waiting_for?: string;
+  task?: { id: string; title: string; stage?: string };
+  queue?: Array<{ id: string; title: string }>;
+  spent_usd?: number;
+  history?: Array<{ task: string; step: string; result: 'ok' | 'failed'; at: string }>;
+}
+export interface FactoryFloorView {
+  agents: FactoryAgentView[];
+  org?: Array<{ name: string; role: string; reports_to?: string }>;
+  board: Array<{ id: string; title: string; project: string; state: string; stage?: string; assignee?: string; depends_on?: string[] }>;
+  pacing?: { mode: string; window_5h_pct?: number; window_7d_pct?: number; reason?: string };
+}
+export interface FactoryEventView { id: string; at: string; type: string; from?: string; to?: string; task?: string; text?: string; ok?: boolean }
+export interface FactoryEventsView { events: FactoryEventView[]; cursor: string; gap: boolean }
+
 /** Team status as the renderer sees it (mirrors main/team.ts teamPublicStatus). */
 export type TeamLevelView = 'message' | 'view' | 'manage';
 export type TeamModeView = 'strict' | 'communication-only' | 'allow-all';
@@ -1340,6 +1366,17 @@ const api = {
     ipcRenderer.invoke('config:saveRoleBundles', bundles),
   connectionsList: (): Promise<ConnectionStatusView[]> =>
     ipcRenderer.invoke('connections:list'),
+  // Factories (FACTORY-MCP.md). The token goes in once, write-only.
+  factoriesList: (): Promise<FactoryView[]> => ipcRenderer.invoke('factories:list'),
+  factoriesAdd: (arg: { name?: string; url: string; token: string }): Promise<{ ok: boolean; id?: string; info?: FactoryInfoView; error?: string }> =>
+    ipcRenderer.invoke('factories:add', arg),
+  factoriesRemove: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('factories:remove', id),
+  factoriesTest: (id: string): Promise<{ ok: boolean; info?: FactoryInfoView; error?: string }> => ipcRenderer.invoke('factories:test', id),
+  factoriesFloor: (id: string): Promise<{ ok: boolean; floor?: FactoryFloorView | null; error?: string }> => ipcRenderer.invoke('factories:floor', id),
+  factoriesEvents: (id: string, since: string): Promise<{ ok: boolean; feed?: FactoryEventsView | null; error?: string }> =>
+    ipcRenderer.invoke('factories:events', id, since),
+  factoriesCall: (id: string, tool: string, args: Record<string, unknown>, confirmed?: boolean): Promise<{ ok: boolean; result?: unknown; error?: string }> =>
+    ipcRenderer.invoke('factories:call', id, tool, args, confirmed === true),
   connectionsAdd: (service: string, label: string): Promise<{ ok: boolean; id?: string; error?: string }> =>
     ipcRenderer.invoke('connections:add', service, label),
   connectionsRename: (id: string, label: string): Promise<{ ok: boolean; error?: string }> =>

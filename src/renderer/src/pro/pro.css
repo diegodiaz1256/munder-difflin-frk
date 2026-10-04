@@ -149,3 +149,11 @@ button.pro-card:hover { border-color: var(--pro-line-strong); }
   .pro-board { grid-template-columns: repeat(2, minmax(160px, 1fr)); }
   .pro-side { width: 168px; }
 }
+
+/* Factories floor: a working desk's avatar bobs as it types; a newly hired
+   desk fades in. */
+.pro-typing { animation: pro-type 0.9s steps(2) infinite; }
+@keyframes pro-type { 0% { transform: translateY(0); } 50% { transform: translateY(-1px); } }
+.pro-desk-new { animation: pro-hire 0.8s ease-out; }
+@keyframes pro-hire { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .pro-typing, .pro-desk-new { animation: none; } }
