@@ -226,6 +226,9 @@ export interface HarnessConfig {
   /** Pro → Connections "Choose agents": a keyed MCP server listed here reaches
    *  only these agent ids (on their next spawn). Absent → every agent. */
   connectionScopes?: Record<string, string[]>;
+  /** The user's own role bundles (Pro Capabilities), after the built-ins.
+   *  Saved through config:saveRoleBundles, which validates them. */
+  customRoleBundles?: Array<{ id: string; label: string; icon: string; servers: string[] }>;
   /** Enable semantic memory (MemPalace CLI). No-op if mempalace isn't installed. */
   semanticMemory: boolean;
   /** Embedding model for the palace: lightweight 'minilm' or multilingual 'embeddinggemma'. */

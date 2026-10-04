@@ -63,6 +63,7 @@ import type { SpawnFailReason } from './analytics';
 import { IntegrationBroker } from './integrationBroker';
 import * as integrations from './integrations';
 import { applyMissionRequest, type MissionLike } from '../shared/missionRequests';
+import { cleanCustomBundles } from '../shared/roleBundles';
 import { connectionSecret, listConnections, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
@@ -3357,6 +3358,12 @@ ipcMain.handle('config:setAgentMcpGrant', (_evt, agentId: unknown, servers: unkn
 // store; nothing here ever returns one (see connections.ts).
 hive.setMcpSecretResolver(connectionSecret);
 ipcMain.handle('connections:list', () => listConnections());
+// Pro Capabilities: the user's own role bundles, validated (shared/roleBundles).
+ipcMain.handle('config:saveRoleBundles', (_evt, bundles: unknown) => {
+  const clean = cleanCustomBundles(bundles);
+  writeConfig({ customRoleBundles: clean.map(({ custom: _c, ...b }) => b) });
+  return clean;
+});
 ipcMain.handle('connections:setSecret', (_evt, id: unknown, env: unknown, value: unknown) => setConnectionSecret(id, env, value));
 ipcMain.handle('connections:setEnabled', (_evt, id: unknown, on: unknown) => setConnectionEnabled(id, on));
 ipcMain.handle('connections:setScope', (_evt, id: unknown, agentIds: unknown) => setConnectionScope(id, agentIds));
