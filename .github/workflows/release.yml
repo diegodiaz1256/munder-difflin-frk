@@ -103,14 +103,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # No analytics in this fork's builds: electron.vite.config.ts pins the
+      # key empty (src/shared/fork.ts), so nothing is injected here.
       - name: Compile (electron-vite → out/)
         run: npm run build
-        env:
-          # Anonymous product analytics (TELEMETRY.md). The PostHog project key
-          # is public/write-only, but only official release builds inject it —
-          # forks without the secret compile with '' and analytics no-ops.
-          POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
-          POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
 
       - name: Package installers
         # GH_TOKEN lets electron-builder skip its own publish; we upload via the
@@ -161,6 +157,7 @@ jobs:
             dist/*.AppImage
             dist/*.blockmap
             dist/latest*.yml
+            dist/fork*.yml
             dist/SHA256SUMS-*.txt
           if-no-files-found: warn
 
@@ -179,15 +176,15 @@ jobs:
       - name: Flatten + merge checksums
         run: |
           mkdir -p release
-          find artifacts -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.blockmap' -o -name 'latest*.yml' \) -exec cp {} release/ \;
+          find artifacts -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.blockmap' -o -name 'latest*.yml' -o -name 'fork*.yml' \) -exec cp {} release/ \;
           cat artifacts/*/SHA256SUMS-*.txt > release/SHA256SUMS.txt 2>/dev/null || true
           ls -la release
 
       - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # RELEASE.md is the human-facing notes; GitHub shows it as the body.
-          body_path: RELEASE.md
+          # FORK-RELEASE.md is the human-facing notes; GitHub shows it as the body.
+          body_path: FORK-RELEASE.md
           # A tag carrying a pre-release suffix (v0.4.4-rc.1, -beta.2 …) publishes
           # as a PRE-RELEASE. This is load-bearing, not cosmetic: the in-app
           # updater polls /releases/latest, and GitHub excludes pre-releases from
@@ -200,7 +197,9 @@ jobs:
           # Creates the tag on this commit when a main push is releasing a new
           # version; ignored when the tag already exists (a tag push).
           target_commitish: ${{ github.sha }}
-          prerelease: ${{ contains(needs.version.outputs.tag, '-') }}
+          # Fork patches (-fork.N) are full releases: /releases/latest must
+          # return them. Only -rc/-beta/-alpha builds are pre-releases.
+          prerelease: ${{ contains(needs.version.outputs.tag, '-rc.') || contains(needs.version.outputs.tag, '-beta.') || contains(needs.version.outputs.tag, '-alpha.') }}
           fail_on_unmatched_files: false
           files: |
             release/*.dmg
@@ -209,4 +208,5 @@ jobs:
             release/*.AppImage
             release/*.blockmap
             release/latest*.yml
+            release/fork*.yml
             release/SHA256SUMS.txt
