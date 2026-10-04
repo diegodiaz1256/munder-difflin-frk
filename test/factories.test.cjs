@@ -66,10 +66,12 @@ test('floor, events and tools read through; only profile tools are callable', as
   const f = new Factories(memoryDeps());
   t.after(async () => { await f.closeAll(); await m.close(); });
   const { id } = await f.add('', m.url, 'x');
-  for (let i = 0; i < 6; i++) m.factory.tick();
+  // The pretend line is random (rejections, approvals): step it until a task
+  // is in someone's hands.
+  for (let i = 0; i < 40 && !m.factory.agents.some((a) => a.task); i++) m.factory.tick();
 
   const floor = await f.floor(id);
-  assert.ok(floor.agents.some((a) => a.state === 'working'), 'someone is working');
+  assert.ok(floor.agents.some((a) => a.task), 'someone holds a task');
   assert.ok(Array.isArray(floor.board) && floor.board.length > 0);
 
   const ev = await f.events(id, '0');

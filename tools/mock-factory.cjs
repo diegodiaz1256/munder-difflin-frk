@@ -91,7 +91,7 @@ function createFactory({ readOnly = false } = {}) {
         t.state = 'waiting';
         t.ask = { id: `A-${t.task_id}`, kind: 'approval', question: `Merge "${t.title}" into main?`, options: ['approve', 'reject'] };
         emit({ type: 'ask.opened', task: t.task_id, text: t.ask.question });
-        if (from) setAgent(from, 'waiting'), (from.waiting_for = 'a human approval');
+        if (from) setAgent(from, 'waiting'), (from.waiting_for = 'waiting for a human approval');
         continue;
       }
       let worker = agentBy(BY_STAGE[next]);
@@ -126,7 +126,7 @@ function createFactory({ readOnly = false } = {}) {
     }
     // Now and then a scaled-out builder is held back by the usage window.
     ticks++;
-    for (const a of agents) if (a.instance_of && a.state === 'idle' && ticks % 9 === 0) { a.state = 'resting'; a.waiting_for = 'the 5 h usage window (92%)'; }
+    for (const a of agents) if (a.instance_of && a.state === 'idle' && ticks % 9 === 0) { a.state = 'resting'; a.waiting_for = 'paused: the 5 h usage window is at 92%'; }
     for (const a of agents) if (a.state === 'resting' && ticks % 9 === 4) { a.state = 'idle'; a.waiting_for = undefined; }
     // Keep the line busy.
     if (tasks.filter((t) => !['done', 'failed', 'cancelled'].includes(t.state)).length < 4) {
