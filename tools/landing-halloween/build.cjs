@@ -1,4 +1,4 @@
-// Builds the live munderdiffl.in home page in its Halloween dress (version C, "Full dress", founder's pick 1 Oct 2026).
+// Builds the live scranton-branch.zerogeworkshop.com home page in its Halloween dress (version C, "Full dress", founder's pick 1 Oct 2026).
 //   node tools/landing-halloween/build.cjs
 // In:  base.html (the plain page, also what shows with the Halloween switch off), halloween.css, halloween.js,
 //      cast-halloween.json (the app's own portraits and walk cycles in costume).

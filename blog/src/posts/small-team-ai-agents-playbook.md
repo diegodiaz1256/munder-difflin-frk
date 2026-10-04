@@ -132,7 +132,7 @@ gives them a shared picture and rails — that's the difference between several 
 ---
 
 Munder Difflin gives a small team exactly this playbook out of the box — an orchestrator, file-based
-handoffs, shared memory, and [the guardrails that keep a hive safe](https://munderdiffl.in/#how), all
+handoffs, shared memory, and [the guardrails that keep a hive safe](https://scranton-branch.zerogeworkshop.com/#how), all
 running locally on your machine.
-[Download Munder Difflin](https://munderdiffl.in/#install) to put a small team of agents to work today;
+[Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) to put a small team of agents to work today;
 it's free and open source.

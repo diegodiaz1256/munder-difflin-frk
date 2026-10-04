@@ -73,6 +73,8 @@ import { cleanCustomBundles } from '../shared/roleBundles';
 import { Factories } from './factories';
 import { createWslOffice, listDistros, mirroredNetworking, parseWslPath } from './wsl';
 import { WslBridge } from './wslBridge';
+import { McpServers } from './mcpServers';
+import { EnvVault, fingerprintOf } from './envVault';
 import { addConnection, connectionKeyStored, connectionLaunchEnv, instancesOf, listConnections, removeConnection, renameConnection, serviceOf, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
 import { McpGateway } from './mcpGateway';
 import { TeamNode, type TeamInbound } from './teamNode';
@@ -411,6 +413,12 @@ const liveWorkers = new Map<string, WorkerRec>();
  *  granted a per-worker capability token at spawn (revoked in teardownPty). */
 const mcpGateway = new McpGateway({
   resolveSpec: (serverId) => {
+    if (serverId.startsWith('custom--')) {
+      const spec = mcpServers.launchSpec(serverId);
+      if (!spec) return null;
+      const path = process.platform === 'win32' ? (process.env.PATH ?? '') : userShellPath();
+      return { command: spec.command, args: spec.args, env: { ...spec.env, PATH: path } };
+    }
     // A connection id may be an added instance (github-token--work): launch
     // its service's server with that instance's keys.
     const entry = mcpCatalogEntry(serviceOf(serverId) ?? '');
@@ -422,10 +430,73 @@ const mcpGateway = new McpGateway({
   }
 });
 
+// Your own MCP servers + the ones set up for other tools (mcpServers.ts).
+const mcpServers = new McpServers({
+  readFile: (p) => { try { return readFileSync(p, 'utf8'); } catch { return null; } },
+  home: homedir(),
+  appData: () => app.getPath('appData'),
+  readCustom: () => readConfig().customMcp ?? [],
+  writeCustom: (list) => writeConfig({ customMcp: list }),
+  getSecret: (ref) => integrations.getSecret(ref),
+  setSecret: (ref, v) => integrations.setSecret(ref, v),
+  deleteSecret: (ref) => integrations.deleteSecret(ref)
+});
+
+// Environment & secrets (envVault.ts): agents use secrets, never see them.
+const envVault = new EnvVault({
+  readVars: () => readConfig().envVars ?? [],
+  writeVars: (v) => writeConfig({ envVars: v }),
+  readRunners: () => readConfig().runners ?? [],
+  writeRunners: (r) => writeConfig({ runners: r }),
+  getSecret: (ref) => integrations.getSecret(ref),
+  setSecret: (ref, v) => integrations.setSecret(ref, v),
+  deleteSecret: (ref) => integrations.deleteSecret(ref),
+  approve: async ({ runner, agentName, cwd, changed }) => {
+    const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    const opts = {
+      type: 'question' as const,
+      buttons: ['Run once', 'Always for this runner', 'Deny'],
+      defaultId: 0, cancelId: 2, noLink: true,
+      title: 'Run with secrets?',
+      message: `${agentName} wants to run "${runner.name}"`,
+      detail: `${runner.command}\n\nIn: ${cwd}\nWith secrets: ${runner.secrets.join(', ') || 'none'}${changed ? '\n\nFiles in this worktree changed since you last allowed it: the command runs code the agent may have edited.' : ''}\n\nThe agent only gets the output, with every secret masked.`
+    };
+    const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
+    if (win && !win.isDestroyed()) win.webContents.focus();
+    return response === 0 ? 'once' : response === 1 ? 'always' : 'deny';
+  },
+  log: (m) => console.log('[env]', m)
+});
+
 const integrationBroker = new IntegrationBroker({
   getRecord: integrations.getRecord,
-  getSecret: integrations.getSecret
+  getSecret: integrations.getSecret,
+  runners: {
+    describe: () => envVault.describeRunners(),
+    run: async (workerId, runnerId) => {
+      // The worktree is the one the app started this agent in — never a path
+      // the agent names.
+      const pty = ptyManager.list().find((p) => p.id === workerId);
+      if (!pty) return { ok: false, error: 'unknown agent' };
+      const agentId = ptyToAgent.get(workerId);
+      const name = (agentId && hive.registry().agents?.[agentId]?.name) || agentId || workerId;
+      const head = await gitRun(pty.cwd, ['rev-parse', 'HEAD']);
+      const status = await gitRun(pty.cwd, ['status', '--porcelain']);
+      return envVault.run(runnerId, { agentName: name, cwd: pty.cwd, fingerprint: fingerprintOf(head, status) });
+    }
+  }
 });
+
+/** Best-effort git output for runner fingerprints ('' outside a repo). */
+function gitRun(cwd: string, args: string[]): Promise<string> {
+  return new Promise((resolve) => {
+    const p = spawn('git', args, { cwd, windowsHide: true });
+    let out = '';
+    p.stdout.on('data', (d) => { out += d; });
+    p.on('error', () => resolve(''));
+    p.on('close', () => resolve(out.trim()));
+  });
+}
 
 /** BYOK backend model-providers whose API keys the non-Claude CLI engines
  *  (OpenCode/Crush/pi/qwen) read from standard env vars. Keys are stored
@@ -3085,10 +3156,14 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     // unless the caller already granted one (the worker path does), plus the list
     // for its prompt. Before this only temps got a token, and no agent was ever
     // told how to use it.
+    // Environment: PLAIN variables only (envVault.plainEnvFor); a value the
+    // agent's own spawn already sets wins. Secrets never go in here.
+    opts.env = { ...envVault.plainEnvFor(opts.hive.id), ...(opts.env ?? {}) };
     let brokerIntegrations: Array<{ id: string; label: string }> = [];
+    const runnersForAgent = envVault.describeRunners();
     if (integrationBroker.running()) {
       const ids = integrations.enabledIds();
-      if (ids.length) {
+      if (ids.length || runnersForAgent.length) {
         if (!opts.env?.MD_BROKER_TOKEN) {
           const token = integrationBroker.grant(opts.id, ids);
           opts.env = { ...(opts.env ?? {}), MD_BROKER_URL: integrationBroker.url(), MD_BROKER_TOKEN: token };
@@ -3109,6 +3184,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           // Windows floor. Empty when the KG is off (the line isn't emitted then).
           kgCliPath: knowledge.env().KG_CLI,
           integrations: brokerIntegrations,
+          runners: runnersForAgent,
           theme: readConfig().terminalTheme ?? 'light',
           // W3 — default-MCP consent state + the bundled skills source dir.
           mcpDefaults: readConfig().mcpDefaults,
@@ -3582,6 +3658,7 @@ ipcMain.handle('config:setAgentMcpGrant', (_evt, agentId: unknown, servers: unkn
 // Keyed MCP servers run under MAIN, never under an agent: the gateway holds
 // the key and an agent gets a capability token (mcpGateway.ts).
 hive.setMcpKeyCheck(connectionKeyStored);
+hive.setCustomMcp((agentId) => mcpServers.forAgent(agentId));
 hive.setMcpInstances(instancesOf);
 hive.setMcpGateway((agentId, serverIds) =>
   mcpGateway.running() ? { url: mcpGateway.url(), token: mcpGateway.grant(agentId, serverIds) } : null);
@@ -3633,6 +3710,49 @@ ipcMain.handle('wsl:createOffice', (_evt, distro: unknown, name: unknown) => {
   if (process.platform !== 'win32' || typeof distro !== 'string' || typeof name !== 'string') return { ok: false, error: 'invalid' };
   return createWslOffice(distro, name);
 });
+// Environment & secrets: values go in, never come out (envVault.ts).
+ipcMain.handle('env:list', () => ({ vars: envVault.listVars(), runners: envVault.listRunners() }));
+ipcMain.handle('env:setVar', (_evt, v: unknown, secret: unknown) => envVault.setVar(v, secret));
+ipcMain.handle('env:removeVar', (_evt, name: unknown) => envVault.removeVar(name));
+ipcMain.handle('env:setRunner', (_evt, r: unknown) => envVault.setRunner(r));
+ipcMain.handle('env:removeRunner', (_evt, id: unknown) => envVault.removeRunner(id));
+ipcMain.handle('env:opStatus', () => new Promise((resolve) => {
+  // Is the 1Password CLI installed? (Signing in happens through the desktop app.)
+  const p = spawn('op', ['--version'], { windowsHide: true });
+  let out = '';
+  p.stdout.on('data', (d) => { out += d; });
+  p.on('error', () => resolve({ installed: false }));
+  p.on('close', (code) => resolve({ installed: code === 0, version: out.trim() || undefined }));
+}));
+
+// Manager → MCP: your own servers and the ones set up for other tools. Keys
+// go one way into the encrypted store (mcpServers.ts).
+const mcpErr = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) });
+ipcMain.handle('mcp:list', () => ({ mine: mcpServers.listCustom(), found: mcpServers.scanForUi() }));
+ipcMain.handle('mcp:import', (_evt, source: unknown, name: unknown, secretNames: unknown) => {
+  if (typeof source !== 'string' || typeof name !== 'string') return mcpErr('bad request');
+  try {
+    return mcpServers.import(source, name, Array.isArray(secretNames) ? secretNames.filter((x): x is string => typeof x === 'string') : undefined);
+  } catch (e) { return mcpErr(e); }
+});
+ipcMain.handle('mcp:save', (_evt, input: unknown, secretNames: unknown) => {
+  const i = (input ?? {}) as { id?: unknown; name?: unknown; transport?: unknown; env?: unknown };
+  const t = (i.transport ?? {}) as { kind?: unknown; command?: unknown; args?: unknown; url?: unknown };
+  const transport = t.kind === 'http'
+    ? { kind: 'http' as const, url: String(t.url ?? '').trim() }
+    : { kind: 'stdio' as const, command: String(t.command ?? '').trim(), args: Array.isArray(t.args) ? t.args.map(String) : [] };
+  const env = i.env && typeof i.env === 'object' ? Object.fromEntries(Object.entries(i.env as Record<string, unknown>).map(([k, v]) => [k, String(v ?? '')])) : {};
+  try {
+    return mcpServers.save({ id: typeof i.id === 'string' && i.id.startsWith('custom--') ? i.id : undefined, name: String(i.name ?? ''), transport, env },
+      Array.isArray(secretNames) ? secretNames.filter((x): x is string => typeof x === 'string') : []);
+  } catch (e) { return mcpErr(e); }
+});
+ipcMain.handle('mcp:setEnabled', (_evt, id: unknown, on: unknown) => { if (typeof id === 'string') mcpServers.setEnabled(id, on === true); return { ok: true }; });
+ipcMain.handle('mcp:setAgents', (_evt, id: unknown, agents: unknown) => {
+  if (typeof id === 'string') mcpServers.setAgents(id, Array.isArray(agents) ? agents.filter((x): x is string => typeof x === 'string') : null);
+  return { ok: true };
+});
+ipcMain.handle('mcp:remove', (_evt, id: unknown) => { if (typeof id === 'string') mcpServers.remove(id); return { ok: true }; });
 
 ipcMain.handle('factories:list', () => factories.list());
 ipcMain.handle('factories:add', (_evt, arg: unknown) => {

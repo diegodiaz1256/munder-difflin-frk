@@ -1,4 +1,4 @@
-/* Halloween layer for the munderdiffl.in story page (Pam, 1 Oct 2026). Plain script, no library.
+/* Halloween layer for the scranton-branch.zerogeworkshop.com story page (Pam, 1 Oct 2026). Plain script, no library.
    The page reads whole without it; this only adds light and motion. html.hw-full = version C. */
 (function () {
   var root = document.documentElement;

@@ -122,7 +122,7 @@ transport without rewriting the agents.
 
 ---
 
-Munder Difflin coordinates a whole [hive of Claude Code agents](https://munderdiffl.in/#how) through plain
+Munder Difflin coordinates a whole [hive of Claude Code agents](https://scranton-branch.zerogeworkshop.com/#how) through plain
 files — inboxes, a shared board, an append-only log, and a single committer — so the whole system is
 durable, git-versioned, and debuggable by just looking.
-[Download Munder Difflin](https://munderdiffl.in/#install) to run it locally; it's free and open source.
+[Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) to run it locally; it's free and open source.

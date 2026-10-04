@@ -4,7 +4,7 @@
 **A local hive of Claude Code, Antigravity, Codex, Gemini, Cursor, Grok & Copilot agents that run themselves.**
 Messaging, routing, and remembering, coordinated by your clone, Michael, who you talk to. Local-first and open source.
 
-### → [**munderdiffl.in**](https://munderdiffl.in/) · see it in action, then grab a build below
+### → [**scranton-branch.zerogeworkshop.com**](https://scranton-branch.zerogeworkshop.com/) · see it in action, then grab a build below
 
 ---
 
@@ -228,7 +228,7 @@ works around the clock — the app still called it a "GOD agent." Now they match
 ## Previously
 
 - **0.4.0** — *the brand grew up*: one yellow "MD" mark across the dock icon, in-app logo, site
-  favicon, and munderdiffl.in; the landing page rebuilt around real screenshots and a live
+  favicon, and scranton-branch.zerogeworkshop.com; the landing page rebuilt around real screenshots and a live
   pixel-floor sim; pricing reframed around **Private Cloud** and **Private Network**.
 - **0.3.9** — Settings → General answers "am I up to date?" directly, and removes 0.3.8's
   usage-limit guard that never released held agents.
@@ -370,10 +370,7 @@ Full notes in the [CHANGELOG](https://github.com/chaitanyagiri/munder-difflin/bl
 ---
 
 ## Links
-[Website](https://munderdiffl.in/) ·
-[Repo](https://github.com/chaitanyagiri/munder-difflin) ·
-[Issues](https://github.com/chaitanyagiri/munder-difflin/issues) ·
-[Contribute](https://github.com/chaitanyagiri/munder-difflin/blob/main/CONTRIBUTING.md) ·
-[Become a patron](https://razorpay.me/@munderdifflinfund)
+[Repo](https://github.com/diegodiaz1256/scranton-branch) ·
+[Issues](https://github.com/diegodiaz1256/scranton-branch/issues)
 
 MIT-licensed. An affectionate parody — not affiliated with NBC's *The Office* or Dunder Mifflin.

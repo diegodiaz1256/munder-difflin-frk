@@ -146,6 +146,6 @@ ownership.
 
 Munder Difflin is local-first orchestration you can watch: a hive of Claude Code agents coordinating
 through file mailboxes, local timers, and a git audit log — [all run by a GOD
-orchestrator](https://munderdiffl.in/#how) on your own machine. [Download Munder
-Difflin](https://munderdiffl.in/#install) to run a coordinated team of agents with no cloud in the
+orchestrator](https://scranton-branch.zerogeworkshop.com/#how) on your own machine. [Download Munder
+Difflin](https://scranton-branch.zerogeworkshop.com/#install) to run a coordinated team of agents with no cloud in the
 loop; it's free and open source.

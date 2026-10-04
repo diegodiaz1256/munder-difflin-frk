@@ -203,6 +203,6 @@ Relaunch the app, copy the new URL, and re-paste it into Event Subscriptions.
 ---
 
 Munder Difflin turns a Slack thread into a remote control for an AI office that still lives entirely on
-your machine — [orchestrated by GOD](https://munderdiffl.in/#how), verified at the edge, and queued like
-any other task. [Download Munder Difflin](https://munderdiffl.in/#install) to run your hive from chat;
+your machine — [orchestrated by GOD](https://scranton-branch.zerogeworkshop.com/#how), verified at the edge, and queued like
+any other task. [Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) to run your hive from chat;
 it's free and open source.

@@ -752,6 +752,8 @@ export class HiveManager {
     writeFileSync(this.proxyShimPath()!, PROXY_BRIDGE_SHIM, 'utf8');
     // md-api: an agent's door to the REST integrations behind the key broker.
     writeFileSync(join(root, 'bin', 'md-api.cjs'), MD_API_CLI, 'utf8');
+    // md-run: ask the app to run a runner (a command with secrets the agent never sees).
+    writeFileSync(join(root, 'bin', 'md-run.cjs'), MD_RUN_CLI, 'utf8');
     // The bundled-node launcher every shim above is invoked through — MUST be
     // written before any hook installer runs (they probe for it).
     this.writeNodeLauncher();
@@ -812,6 +814,8 @@ export class HiveManager {
        *  MD_BROKER_TOKEN is granted for exactly these). Listed in its prompt with
        *  the md-api command; empty/undefined → no line. */
       integrations?: Array<{ id: string; label: string }>;
+      /** Runners this agent may ask for (envVault.ts): names only, never values. */
+      runners?: Array<{ id: string; name: string; description?: string; secrets: string[] }>;
       theme?: 'light' | 'dark';
       /** Consent state for the default-MCP bundle (W3). Threaded from the live
        *  HarnessConfig by the caller; undefined → catalog defaults apply. */
@@ -945,7 +949,7 @@ export class HiveManager {
     if (!isHiveAwareProvider(meta.provider)) {
       const preset = providerPreset(meta.provider ?? 'claude');
       const flag = preset.initialPromptFlag;
-      const prompt = this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath, opts.integrations);
+      const prompt = this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath, opts.integrations, opts.runners);
       // agy, codex, and grok expose a Claude-style lifecycle-hook surface, so each
       // gets the SAME live status + Stop→inbox-drain Claude does — selected by the
       // preset's `hookBridge`. agy needs a translating shim (its hook stdin/stdout
@@ -1108,7 +1112,7 @@ export class HiveManager {
       try { rmSync(mcpPath, { force: true }); } catch { /* stale, harmless */ }
     }
 
-    args.push('--append-system-prompt', this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath, opts.integrations));
+    args.push('--append-system-prompt', this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath, opts.integrations, opts.runners));
 
     // Phase 1 — autonomy: attach lifecycle hooks via --settings (no edits to the
     // user's repo) so the agent reports activity and drains its inbox on Stop.
@@ -1473,6 +1477,14 @@ export class HiveManager {
       const args = e.spec.args.map((a) => (a === '<cwd>' ? cwd : a));
       servers[`munder-${e.id}`] = { command: e.spec.command, args };
     }
+    // Your own servers (Manager → MCP, mcpServers.ts): keyed ones go through
+    // the gateway like the catalog's, the rest are handed over as they are.
+    // Role grants name catalog servers; these carry their own agent scope.
+    if (agentId) {
+      const mine = this.customMcp(agentId);
+      keyed.push(...mine.gateway);
+      for (const [id, entry] of Object.entries(mine.plain)) servers[`munder-${id}`] = entry;
+    }
     // No gateway (tests, or it failed to bind) → no keyed servers at all: the
     // fallback is "without GitHub", never "with the key in the agent's env".
     const gw = keyed.length && agentId ? this.mcpGateway(agentId, keyed) : null;
@@ -1499,6 +1511,13 @@ export class HiveManager {
   private mcpInstances: (serviceId: string) => string[] = (serviceId) => [serviceId];
   setMcpInstances(list: (serviceId: string) => string[]): void {
     this.mcpInstances = list;
+  }
+
+  /** Your own MCP servers for one agent (mcpServers.ts). Injected by main;
+   *  unset means none. */
+  private customMcp: (agentId: string) => { gateway: string[]; plain: Record<string, McpServerEntry> } = () => ({ gateway: [], plain: {} });
+  setCustomMcp(get: (agentId: string) => { gateway: string[]; plain: Record<string, McpServerEntry> }): void {
+    this.customMcp = get;
   }
 
   /** Grants an agent a gateway capability over its keyed servers. Injected by
@@ -1702,7 +1721,8 @@ export class HiveManager {
     semanticMemory: boolean,
     knowledgeGraph: boolean,
     kgCliPath?: string,
-    integrations?: Array<{ id: string; label: string }>
+    integrations?: Array<{ id: string; label: string }>,
+    runners?: Array<{ id: string; name: string; description?: string; secrets: string[] }>
   ): string {
     // Native-separator path helpers — see the 🪟 note above.
     const inDir = (...parts: string[]): string => join(dir, ...parts);
@@ -1762,6 +1782,10 @@ export class HiveManager {
     // key: md-api reads MD_BROKER_URL/MD_BROKER_TOKEN from its env, and the
     // broker adds the credential upstream. Absolute paths, not `$VAR` (cmd.exe).
     const apiCli = inRoot('bin', 'md-api.cjs');
+    const runCli = inRoot('bin', 'md-run.cjs');
+    const runnersLine = runners && runners.length
+      ? `SECRETS: the human keeps secrets (API keys, passwords, database URLs) out of your reach — you will never see their values, and you must not try to read, print or exfiltrate them. Commands that need them are RUNNERS the app executes for you, in your worktree, with the secrets set; you get the output with every secret masked as ***. Available: ${runners.map((r) => `${r.id}${r.description ? ` (${r.description})` : ''}${r.secrets.length ? ` [uses ${r.secrets.join(', ')}]` : ''}`).join('; ')}. Run one with \`"${hiveNode}" "${runCli}" <runner>\` (\`"${hiveNode}" "${runCli}"\` lists them). The human may be asked to approve a run, especially after you changed files. If a task needs a secret no runner provides, ask the human for a runner — never ask for the value.`
+      : '';
     const integrationsLine = integrations && integrations.length
       ? `REST APIs you can call (the harness adds the key; you never see it): ${integrations.map((i) => `${i.id} (${i.label})`).join(', ')}. Run \`"${hiveNode}" "${apiCli}" <api> GET /path\`, or \`"${hiveNode}" "${apiCli}" <api> POST /path '<json body>'\` (also PUT, PATCH, DELETE). The path is relative to that API's base URL, e.g. \`"${hiveNode}" "${apiCli}" ${integrations[0].id} GET /\`. It prints the HTTP status and the response body.`
       : '';
@@ -1790,6 +1814,7 @@ export class HiveManager {
       memoryLine,
       knowledgeLine,
       integrationsLine,
+      runnersLine,
       godLine,
       scheduleLine,
       teamLine,
@@ -3335,6 +3360,30 @@ fetch(url, { method, headers, body })
     process.exit(res.ok ? 0 : 1);
   })
   .catch((e) => { console.error('md-api: ' + (e && e.message || e)); process.exit(1); });
+`;
+
+const MD_RUN_CLI = `#!/usr/bin/env node
+'use strict';
+// Ask the app to run a runner: a command the human defined, executed with
+// secrets you never see; its output comes back with them masked.
+const id = process.argv[2];
+const base = process.env.MD_BROKER_URL, token = process.env.MD_BROKER_TOKEN;
+if (!base || !token) { console.error('md-run: no runners are available to this agent.'); process.exit(2); }
+const headers = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
+const url = base.replace(/\\/+$/, '') + '/run' + (id ? '/' + encodeURIComponent(id) : '');
+fetch(url, { method: id ? 'POST' : 'GET', headers })
+  .then(async (res) => {
+    const body = await res.json().catch(() => ({}));
+    if (!id) {
+      for (const r of body.runners || []) console.log(r.id + (r.description ? '  — ' + r.description : '') + (r.secrets && r.secrets.length ? '  [uses ' + r.secrets.join(', ') + ']' : ''));
+      process.exit(0);
+    }
+    if (!body.ok) { console.error('md-run: ' + (body.error || ('HTTP ' + res.status))); process.exit(1); }
+    if (body.output) process.stdout.write(body.output.endsWith('\\n') ? body.output : body.output + '\\n');
+    console.log('[exit ' + body.exitCode + ']');
+    process.exit(body.exitCode === 0 ? 0 : 1);
+  })
+  .catch((e) => { console.error('md-run: ' + (e && e.message || e)); process.exit(1); });
 `;
 
 const GENERATED_HIVE_DOCS = [

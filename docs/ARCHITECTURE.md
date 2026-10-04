@@ -71,7 +71,7 @@ src/
     scene/office/            Pixi office floor: OfficeFloor, Character, Camera, cast, pathfinding, …
     store/ · hooks/          zustand store, event loop, PTY parser, typewriter
     assets/                  tilesets, maps, character sheets (see ATTRIBUTION.md)
-docs/                        `logo.png`, `banner.png`, landing page (GitHub Pages → munderdiffl.in)
+docs/                        `logo.png`, `banner.png`, landing page (GitHub Pages → scranton-branch.zerogeworkshop.com)
 docs/media/                  `og.png` (social previews) + rendered Remotion clips
 landing-remotion/            Remotion project that renders the landing page's "how it works" clips
 HIVE.md · SPEC.md · DESIGN.md   multi-agent · terminal/event · visual design

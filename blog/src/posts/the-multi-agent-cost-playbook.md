@@ -130,7 +130,7 @@ mechanical, documented, and compounding: caching, batching, tiering, context dis
 Pull them together and you spend less, run faster, and stop paying frontier prices for routine work.
 
 Munder Difflin is built for this: [per-agent model selection, local-first execution, and a usage view
-you can actually watch](https://munderdiffl.in/#how). [Download Munder Difflin](https://munderdiffl.in/#install)
+you can actually watch](https://scranton-branch.zerogeworkshop.com/#how). [Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install)
 to run a fleet that doesn't bankrupt you — it's free and open source.
 
 Sources: [Anthropic — Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching);

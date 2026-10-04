@@ -30,7 +30,7 @@ verification.</p></div>
 
 There's a lot of AI agent tooling being built right now, and a striking amount of it is closed: a cloud
 service you send your code to, a black box that acts on your repo, a "core" that's open while the parts
-that matter sit behind a subscription. [Munder Difflin](https://munderdiffl.in/#opensource) went the
+that matter sit behind a subscription. [Munder Difflin](https://scranton-branch.zerogeworkshop.com/#opensource) went the
 other way — MIT-licensed, source-available, local-first — and not as an afterthought. It's a deliberate
 choice about what a tool like this *should* be. Here's the case for building agent tooling in the open,
 on purpose.
@@ -53,7 +53,7 @@ Open source is what makes that possible. It turns "trust us" into "check for you
 
 ## What "open, on purpose" actually buys you
 
-Being [MIT-licensed](https://munderdiffl.in/#opensource) and built in the open isn't a badge; it changes
+Being [MIT-licensed](https://scranton-branch.zerogeworkshop.com/#opensource) and built in the open isn't a badge; it changes
 what you can do as a user:
 
 - **Auditability.** You can read exactly how work gets routed, what an agent is allowed to touch, and
@@ -126,6 +126,6 @@ thing runs on your machine, your data stays local, and the orchestration code is
 The more an agent can do on your behalf, the more it matters that you can see what it's doing. Open
 source plus local-first is how a tool earns that trust — not by asking for it, but by making itself
 checkable. Munder Difflin is MIT and built in the open [on
-purpose](https://munderdiffl.in/#opensource), because that's the only honest way to ship software this
-autonomous. [Download Munder Difflin](https://munderdiffl.in/#install) and read every line you're running
+purpose](https://scranton-branch.zerogeworkshop.com/#opensource), because that's the only honest way to ship software this
+autonomous. [Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) and read every line you're running
 — it's free and open source.

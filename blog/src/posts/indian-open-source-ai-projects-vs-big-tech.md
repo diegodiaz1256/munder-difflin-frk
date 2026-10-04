@@ -10,7 +10,7 @@ type: Non-technical
 primaryKeyword: "indian open source ai projects"
 secondaryKeywords: ["open source ai india", "indian github projects", "laya vs jev", "munder difflin", "open source alternatives to big tech ai"]
 tags: ["Comparisons", "Open Source", "India", "AI Agents"]
-ogImage: "https://munderdiffl.in/blog/assets/media/indian-open-source-ai-projects-vs-big-tech/hero.png"
+ogImage: "https://scranton-branch.zerogeworkshop.com/blog/assets/media/indian-open-source-ai-projects-vs-big-tech/hero.png"
 author:
   name: Chaitanya Giri
   initials: CG

@@ -145,11 +145,11 @@ The minutes-to-hours shift is real and measurable, and it rewrites the priority 
 answered in seconds, you could get away with thin memory and no recovery story. When they run for hours,
 durable memory, context discipline, reliability, and observability stop being optional. The teams that
 will get the most out of long-running agents are the ones who [built for the long
-run](https://munderdiffl.in/#how) before the runs got long.
+run](https://scranton-branch.zerogeworkshop.com/#how) before the runs got long.
 
 Munder Difflin is designed for exactly that — persistent memory, reliable-by-design agents, and a
 coordinated hive that splits long work across a team. [Download Munder
-Difflin](https://munderdiffl.in/#install) to run agents built for the hours-long era; it's free and open
+Difflin](https://scranton-branch.zerogeworkshop.com/#install) to run agents built for the hours-long era; it's free and open
 source.
 
 Sources: [METR — Measuring AI Ability to Complete Long Tasks](https://metr.org/blog/2025-03-19-measuring-ai-ability-to-complete-long-tasks/);

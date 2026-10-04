@@ -63,6 +63,11 @@ export interface IntegrationBrokerDeps {
   getRecord: (id: string) => IntegrationRecord | undefined;
   /** Decrypt a secret by ref (injected — the secret store). Main-internal. */
   getSecret: (secretRef: string | undefined) => string | undefined;
+  /** Runners (envVault.ts): what an agent may run with secrets it never sees. */
+  runners?: {
+    describe: (workerId: string) => Array<{ id: string; name: string; description?: string; secrets: string[] }>;
+    run: (workerId: string, runnerId: string) => Promise<{ ok: boolean; exitCode?: number | null; output?: string; error?: string }>;
+  };
 }
 
 /** True for IPv4 loopback (127.0.0.0/8) and IPv6 ::1 (incl. v4-mapped). Mirrors slack.ts. */
@@ -178,8 +183,28 @@ export class IntegrationBroker {
     const cap = this.resolveCapability(IntegrationBroker.tokenFrom(req));
     if (!cap) return IntegrationBroker.sendError(res, 401, 'unauthorized', 'missing or invalid capability token');
 
-    // 3) Parse /i/<integrationId>/<path...>.
+    // 3a) Runners: GET /run lists them, POST /run/<id> runs one. The output
+    //     comes back with every secret value masked (envVault.ts).
     const rawUrl = req.url ?? '';
+    const run = /^\/run(?:\/([^/?#]+))?\/?$/.exec(rawUrl);
+    if (run && this.deps.runners) {
+      const runners = this.deps.runners;
+      if (!run[1] && req.method === 'GET') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ runners: runners.describe(cap.workerId) }));
+        return;
+      }
+      if (run[1] && req.method === 'POST') {
+        void runners.run(cap.workerId, decodeURIComponent(run[1])).then((r) => {
+          res.writeHead(r.ok ? 200 : 409, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(r));
+        }, (e) => IntegrationBroker.sendError(res, 500, 'runner_failed', e instanceof Error ? e.message : String(e)));
+        return;
+      }
+      return IntegrationBroker.sendError(res, 405, 'method_not_allowed', 'GET /run or POST /run/<id>');
+    }
+
+    // 3) Parse /i/<integrationId>/<path...>.
     const m = /^\/i\/([^/?#]+)(?:\/([^?#]*))?(\?[^#]*)?$/.exec(rawUrl);
     if (!m) return IntegrationBroker.sendError(res, 404, 'not_found', 'expected /i/<integrationId>/<path>');
     const integrationId = decodeURIComponent(m[1]);
