@@ -108,10 +108,12 @@
           "git",
           "github-token",
           "db",
-          "search-with-key"
+          "search-with-key",
+          "notion",
+          "sentry"
         ]
       },
-      "description": "Default MCP catalog ids to enable for this agent. References into the MCP_CATALOG allowlist only — never raw specs. Safe-readonly entries (sequential-thinking, time, fetch, context7, filesystem, git) are pre-filled; write/secret entries (github-token, db, search-with-key) are surfaced for human consent at import and never auto-enabled."
+      "description": "Default MCP catalog ids to enable for this agent. References into the MCP_CATALOG allowlist only — never raw specs. Safe-readonly entries (sequential-thinking, time, fetch, context7, filesystem, git) are pre-filled; write/secret entries (github-token, db, search-with-key, notion, sentry) are surfaced for human consent at import and never auto-enabled."
     }
   }
 }

@@ -27,6 +27,18 @@ export type {
  *  presence boolean. Matches main `integrations.listRecordsRedacted()` — the
  *  write-only secret contract (spec §2): a secret value is NEVER returned over IPC. */
 export type IntegrationRecordView = Omit<IntegrationRecord, 'secretRef'> & { hasSecret: boolean };
+/** One keyed MCP server as Pro → Connections shows it (mirrors main/connections.ts). */
+export interface ConnectionStatusView {
+  id: string;
+  label: string;
+  description: string;
+  docsUrl?: string;
+  fields: Array<{ env: string; label: string; help: string; placeholder?: string; optional?: boolean; stored: boolean }>;
+  enabled: boolean;
+  ready: boolean;
+  scope: string[] | null;
+  testable: boolean;
+}
 
 // Injected at build time from package.json (see electron.vite.config.ts).
 declare const __APP_VERSION__: string;
@@ -1291,6 +1303,18 @@ const api = {
   // feature-detection (camelCase ↔ colon-channel), so its real path activates as-is.
   integrationsList: (): Promise<IntegrationRecordView[]> =>
     ipcRenderer.invoke('integrations:list'),
+  // Pro → Connections (keyed MCP servers). WRITE-ONLY like the integrations:
+  // `connectionsList` reports only whether each field is stored.
+  connectionsList: (): Promise<ConnectionStatusView[]> =>
+    ipcRenderer.invoke('connections:list'),
+  connectionsSetSecret: (id: string, env: string, value: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('connections:setSecret', id, env, value),
+  connectionsSetEnabled: (id: string, on: boolean): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('connections:setEnabled', id, on),
+  connectionsSetScope: (id: string, agentIds: string[] | null): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('connections:setScope', id, agentIds),
+  connectionsTest: (id: string): Promise<{ ok: boolean; message: string }> =>
+    ipcRenderer.invoke('connections:test', id),
   integrationsTemplates: (): Promise<IntegrationTemplate[]> =>
     ipcRenderer.invoke('integrations:templates'),
   integrationsUpsert: (record: IntegrationRecord): Promise<{ ok: true; record: IntegrationRecord } | { ok: false; error: string }> =>

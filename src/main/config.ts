@@ -223,6 +223,9 @@ export interface HarnessConfig {
    *  A grant replaces the default set for that agent on its next (re)spawn;
    *  write/secret servers in it still need consent in `mcpDefaults`. */
   agentMcpGrants?: Record<string, string[]>;
+  /** Pro → Connections "Choose agents": a keyed MCP server listed here reaches
+   *  only these agent ids (on their next spawn). Absent → every agent. */
+  connectionScopes?: Record<string, string[]>;
   /** Enable semantic memory (MemPalace CLI). No-op if mempalace isn't installed. */
   semanticMemory: boolean;
   /** Embedding model for the palace: lightweight 'minilm' or multilingual 'embeddinggemma'. */

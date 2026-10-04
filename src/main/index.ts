@@ -62,6 +62,7 @@ import { analytics, isRendererMessageSurface } from './analytics';
 import type { SpawnFailReason } from './analytics';
 import { IntegrationBroker } from './integrationBroker';
 import * as integrations from './integrations';
+import { connectionSecret, listConnections, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
 import { buildWorkerLaunch } from './workerLaunch';
@@ -2778,6 +2779,23 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // result so the renderer types it through the per-pty write-chain. (ondev-b)
   let seedPrompt: string | undefined;
   if (opts.hive && hive.enabled()) {
+    // REST integrations for EVERY hive agent, not only god-hired temps: a broker
+    // capability token keyed by this PTY id (teardownPty revokes it on exit),
+    // unless the caller already granted one (the worker path does), plus the list
+    // for its prompt. Before this only temps got a token, and no agent was ever
+    // told how to use it.
+    let brokerIntegrations: Array<{ id: string; label: string }> = [];
+    if (integrationBroker.running()) {
+      const ids = integrations.enabledIds();
+      if (ids.length) {
+        if (!opts.env?.MD_BROKER_TOKEN) {
+          const token = integrationBroker.grant(opts.id, ids);
+          opts.env = { ...(opts.env ?? {}), MD_BROKER_URL: integrationBroker.url(), MD_BROKER_TOKEN: token };
+        }
+        const labels = new Map(integrations.listRecords().map((r) => [r.id, r.label]));
+        brokerIntegrations = ids.map((id) => ({ id, label: labels.get(id) ?? id }));
+      }
+    }
     try {
       const inj = await hive.ensureAgent(
         { ...opts.hive, cwd: opts.cwd, provider },
@@ -2789,10 +2807,12 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           // expands to nothing, so every knowledge-graph instruction was dead on a
           // Windows floor. Empty when the KG is off (the line isn't emitted then).
           kgCliPath: knowledge.env().KG_CLI,
+          integrations: brokerIntegrations,
           theme: readConfig().terminalTheme ?? 'light',
           // W3 — default-MCP consent state + the bundled skills source dir.
           mcpDefaults: readConfig().mcpDefaults,
           mcpGrant: readConfig().agentMcpGrants?.[opts.hive.id],
+          mcpScopes: readConfig().connectionScopes,
           skillsDir: skillsResourceDir(),
           // The shared palace is mutated by the agent's own `mempalace` calls, so
           // the OS sandbox must let it through (empty when memory is off).
@@ -3242,6 +3262,14 @@ ipcMain.handle('config:update', (_evt, patch: Partial<HarnessConfig>) => {
 ipcMain.handle('config:setAgentMcpGrant', (_evt, agentId: unknown, servers: unknown) =>
   setAgentMcpGrant(agentId, servers)
 );
+// Pro → Connections: keyed MCP servers. Values go one way into the encrypted
+// store; nothing here ever returns one (see connections.ts).
+hive.setMcpSecretResolver(connectionSecret);
+ipcMain.handle('connections:list', () => listConnections());
+ipcMain.handle('connections:setSecret', (_evt, id: unknown, env: unknown, value: unknown) => setConnectionSecret(id, env, value));
+ipcMain.handle('connections:setEnabled', (_evt, id: unknown, on: unknown) => setConnectionEnabled(id, on));
+ipcMain.handle('connections:setScope', (_evt, id: unknown, agentIds: unknown) => setConnectionScope(id, agentIds));
+ipcMain.handle('connections:test', (_evt, id: unknown) => testConnection(id));
 ipcMain.handle('hive:taskKeys', () => hive.taskKeys());
 ipcMain.handle('config:setAgentTokenCap', (_evt, agentId: unknown, tokenCap: unknown) =>
   setAgentTokenCap(agentId, tokenCap)
