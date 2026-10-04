@@ -32,7 +32,7 @@ export function InboxView({ tasks }: { tasks: KeyedTask[] }) {
 
   const real = messages.filter((m) => !SYSTEM.has(m.from));
   const forYou = real.filter((m) => m.to === 'human');
-  const outsideMail = real.filter((m) => OUTSIDE.has(m.from));
+  const outsideMail = real.filter((m) => OUTSIDE.has(m.from) || m.from.startsWith('team:'));
   const slackWaiting = Object.entries(queues).flatMap(([id, q]) => q.filter((m) => m.slack).map((m) => ({ ...m, agentId: id })));
 
   const name = (id: string) => byId.get(id)?.name ?? (id === 'human' ? 'You' : id);

@@ -26,6 +26,20 @@ export type {
 /** Renderer-visible integration record: the secretRef handle is redacted to a
  *  presence boolean. Matches main `integrations.listRecordsRedacted()` — the
  *  write-only secret contract (spec §2): a secret value is NEVER returned over IPC. */
+/** Team status as the renderer sees it (mirrors main/team.ts teamPublicStatus). */
+export type TeamLevelView = 'message' | 'view' | 'manage';
+export type TeamModeView = 'strict' | 'communication-only' | 'allow-all';
+export interface TeamStatusView {
+  enabled: boolean;
+  me: { id: string; name: string; relay: string } | null;
+  teams: Array<{ id: string; name: string; relay: string; level: TeamLevelView; mode: TeamModeView }>;
+  /** level/mode are one-to-one overrides; absent = the team default. */
+  peers: Array<{ id: string; name: string; confirmed: boolean; addedAt: number; teamId: string; level?: TeamLevelView; mode?: TeamModeView }>;
+}
+export interface TeamLogView {
+  id: string; peerId: string; peerName: string; direction: 'in' | 'out'; by?: 'you' | 'agent';
+  subject: string; body: string; at: string;
+}
 /** A main-initiated agent's floor card (hive:agentSpawned / workers:cards). */
 export interface AgentSpawnCard {
   id: string; name: string; provider?: string; cwd: string;
@@ -1324,6 +1338,25 @@ const api = {
     ipcRenderer.invoke('connections:setScope', id, agentIds),
   connectionsTest: (id: string): Promise<{ ok: boolean; message: string }> =>
     ipcRenderer.invoke('connections:test', id),
+  // Team: paired installs, sealed end to end over a public relay. Private keys
+  // never leave main; this surface sees names, status and the conversation.
+  teamStatus: (): Promise<TeamStatusView> => ipcRenderer.invoke('team:status'),
+  teamEnable: (arg: { name: string; relay?: string }): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('team:enable', arg),
+  teamDisable: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('team:disable'),
+  teamCreateInvite: (teamId: string): Promise<{ ok: boolean; code?: string; error?: string }> => ipcRenderer.invoke('team:createInvite', teamId),
+  teamCreateTeam: (arg: { name: string; relay?: string }): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('team:createTeam', arg),
+  teamUpdateTeam: (id: string, patch: { name?: string; relay?: string; level?: TeamLevelView; mode?: TeamModeView }): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('team:updateTeam', id, patch),
+  teamRemoveTeam: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('team:removeTeam', id),
+  teamSetMember: (id: string, patch: { level?: TeamLevelView | null; mode?: TeamModeView | null }): Promise<{ ok: boolean }> => ipcRenderer.invoke('team:setMember', id, patch),
+  teamJoin: (code: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('team:join', code),
+  teamRemovePeer: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('team:removePeer', id),
+  teamSend: (arg: { to: string; subject?: string; body: string }): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('team:send', arg),
+  teamLog: (): Promise<TeamLogView[]> => ipcRenderer.invoke('team:log'),
+  onTeamUpdated: (cb: () => void): (() => void) => {
+    const listener = (): void => cb();
+    ipcRenderer.on('team:updated', listener);
+    return () => ipcRenderer.removeListener('team:updated', listener);
+  },
   integrationsTemplates: (): Promise<IntegrationTemplate[]> =>
     ipcRenderer.invoke('integrations:templates'),
   integrationsUpsert: (record: IntegrationRecord): Promise<{ ok: true; record: IntegrationRecord } | { ok: false; error: string }> =>

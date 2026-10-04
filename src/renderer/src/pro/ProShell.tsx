@@ -15,6 +15,7 @@ import { AgentsView } from './AgentsView';
 import { AgentView } from './AgentView';
 import { TempsView } from './TempsView';
 import { ConnectionsView } from './ConnectionsView';
+import { TeamView } from './TeamView';
 import './pro.css';
 
 const TOP: { id: ProSection; label: string; icon: ProIconName }[] = [
@@ -23,7 +24,8 @@ const TOP: { id: ProSection; label: string; icon: ProIconName }[] = [
   { id: 'automations', label: 'Automations', icon: 'automations' },
   { id: 'memory', label: 'Memory', icon: 'memory' },
   { id: 'capabilities', label: 'Capabilities', icon: 'capabilities' },
-  { id: 'connections', label: 'Connections', icon: 'connections' }
+  { id: 'connections', label: 'Connections', icon: 'connections' },
+  { id: 'team', label: 'Team', icon: 'team' }
 ];
 
 /**
@@ -65,6 +67,7 @@ export function ProShell({ config }: { config: HarnessConfig }) {
     case 'capabilities': page = <CapabilitiesView roster={roster} config={config} />; break;
     case 'temps': page = <TempsView roster={roster} />; break;
     case 'connections': page = <ConnectionsView roster={roster} />; break;
+    case 'team': page = <TeamView />; break;
     case 'agents': page = <AgentsView roster={roster} tasks={tasks} directory={directory} asking={asking} config={config} onOpen={openAgent} />; break;
     default: page = <AgentView agent={agentInView!} roster={roster} tasks={tasks} directory={directory} config={config} onOpen={openAgent} />;
   }
