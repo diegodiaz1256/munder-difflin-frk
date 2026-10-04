@@ -1,5 +1,5 @@
-- **The interface speaks Chinese and Arabic.** Set it in Settings.
-- **Updates install themselves.** Download, restart, done.
-- **Fonts ship inside the app.** No Google Fonts fetch on launch.
-- **Hardened how engine commands launch.**
-- **Settings has one Save button.** Connections get their own tab.
+- **Pro layout:** the office in a sidebar.
+- **Connections:** GitHub, Notion, Sentry, search, DB.
+- **MCP servers now reach your agents.**
+- **Make your own role bundles.**
+- **No analytics.** Safer stops on Windows.

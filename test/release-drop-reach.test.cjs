@@ -34,9 +34,10 @@ test('(c) the same version never fires twice', () => {
 
 // (d) a second RC of the SAME version — deliberate, not accidental
 test('(d) 0.4.7-rc.1 -> 0.4.7-rc.2 fires, deliberately', () => {
-  // isNewer discards -rc.N, so the two compare EQUAL. That is exactly why the
-  // decision asks "is this a downgrade?" instead of "is this newer?".
-  assert.equal(isNewer('0.4.7-rc.2', '0.4.7-rc.1'), false, 'isNewer still ignores -rc.N');
+  // isNewer follows SemVer pre-release order (the fork's -fork.N patches need
+  // it), so rc.2 IS newer than rc.1. The decision still asks "is this a
+  // downgrade?" rather than "is this newer?", so the drop fires either way.
+  assert.equal(isNewer('0.4.7-rc.2', '0.4.7-rc.1'), true);
   assert.equal(shouldShowReleaseDrop('0.4.7-rc.1', '0.4.7-rc.2'), true);
   // and the rehearsal hop itself
   assert.equal(shouldShowReleaseDrop('0.4.6-rc.1', '0.4.7-rc.1'), true);

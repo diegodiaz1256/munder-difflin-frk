@@ -36,6 +36,16 @@ test('isNewer compares numerically, not lexically', () => {
   assert.equal(isNewer('garbage', '0.3.6'), false);
 });
 
+test('isNewer follows SemVer pre-release precedence (fork patches)', () => {
+  assert.equal(isNewer('0.4.6-fork.2', '0.4.6-fork.1'), true);
+  assert.equal(isNewer('0.4.6-fork.10', '0.4.6-fork.9'), true, 'numeric, not lexical');
+  assert.equal(isNewer('0.5.5-fork.1', '0.4.6-fork.7'), true);
+  assert.equal(isNewer('0.4.6-fork.1', '0.4.6-fork.1'), false);
+  assert.equal(isNewer('0.4.7', '0.4.7-rc.2'), true, 'a release outranks its pre-releases');
+  assert.equal(isNewer('0.4.7-rc.2', '0.4.7'), false);
+  assert.equal(isNewer('v0.4.6-fork.1+build.5', '0.4.6-fork.1'), false, 'build metadata is ignored');
+});
+
 test('clampPercent keeps progress renderable', () => {
   assert.equal(clampPercent(42.6), 43);
   assert.equal(clampPercent(-3), 0);
