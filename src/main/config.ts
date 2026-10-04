@@ -176,6 +176,9 @@ export interface KnowledgeGraphConfig {
 export interface HarnessConfig {
   /** Has the user completed the first-run onboarding? */
   onboardingComplete: boolean;
+  /** Set only in a seeded demo office (tools/seed-demo-hive.cjs, `npm run demo`):
+   *  the renderer skips the launch-time hive picker and opens in the Pro layout. */
+  demoMode?: boolean;
   /** Self-identified audience picked on the first onboarding screen. Drives the
    *  copy register everywhere onboarding explains itself: 'technical' shows CLI /
    *  flag lingo, 'non-technical' explains each concept in plain language. Unset =

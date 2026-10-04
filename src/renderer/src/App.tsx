@@ -194,7 +194,17 @@ export function App() {
   // off until the user opens a hive in the launch picker (passing null no-ops the
   // hook) so Michael doesn't boot against the current home while the user may be
   // about to switch to a different one.
-  useHive(hiveOpened ? config : null);
+  // A seeded demo office has nothing to pick between — open it directly.
+  const officeOpen = hiveOpened || !!config?.demoMode;
+  useHive(officeOpen ? config : null);
+  // The demo exists to show the Pro screens, so its first launch opens there.
+  // Only while no layout was ever chosen: switching to Classic sticks.
+  useEffect(() => {
+    if (!config?.demoMode) return;
+    try {
+      if (window.localStorage.getItem('cth.layout') === null) useProStore.getState().setLayout('pro');
+    } catch { /* storage unavailable — stay on the default */ }
+  }, [config?.demoMode]);
 
   // Pre-warm a persistent terminal for every live agent so its output is
   // buffered from spawn. Switching agents then re-attaches an already-rendered
@@ -267,7 +277,7 @@ export function App() {
   // Launch-time hive picker: on reopen, let the user open their current hive,
   // switch to a recent one, or open/create another. Skipped right after onboarding
   // and right after a switch-relaunch (see hiveOpened init).
-  if (!hiveOpened) {
+  if (!officeOpen) {
     return <HivePicker config={config} onOpenCurrent={() => setHiveOpened(true)} />;
   }
 

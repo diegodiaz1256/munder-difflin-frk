@@ -56,6 +56,9 @@ export interface KnowledgeGraphConfig {
 
 export interface HarnessConfig {
   onboardingComplete: boolean;
+  /** Set only in a seeded demo office (tools/seed-demo-hive.cjs): skips the
+   *  launch-time hive picker and opens in the Pro layout. Mirrors src/main/config.ts. */
+  demoMode?: boolean;
   /** Self-identified audience from the first onboarding screen ('technical' vs
    *  'non-technical') — drives the copy register across onboarding. Mirrors
    *  src/main/config.ts. */
