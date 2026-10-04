@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { PRODUCT_ANALYTICS } from '@shared/fork';
 import { Trans, useTranslation } from 'react-i18next';
 import { PixelPanel } from './PixelPanel';
 import { PixelButton } from './PixelButton';
@@ -102,7 +103,8 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   const [autoMode, setAutoMode] = useState<boolean>(true);
   // Anonymous usage stats (TELEMETRY.md). Default ON (opt-out); persisted by
   // finish() so unchecking before finishing means nothing is ever sent.
-  const [shareStats, setShareStats] = useState<boolean>(true);
+  // Off and hidden: this fork ships no analytics (shared/fork.ts).
+  const [shareStats, setShareStats] = useState<boolean>(PRODUCT_ANALYTICS);
   const [godProvider, setGodProvider] = useState<AgentProvider>('claude');
   const [godModel, setGodModel] = useState<string | undefined>(
     providerPreset('claude').recommendedOrchestratorModel
@@ -687,15 +689,17 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                   onChange={toggleOpenAtLogin}
                 />
 
-                <ToggleRow
-                  icon="info"
-                  label={t('onboarding.permissions.shareStats')}
-                  desc={t('onboarding.permissions.shareStatsDesc')}
-                  on={shareStats}
-                  tint="var(--cth-lemon-light)"
-                  edge="var(--cth-lemon)"
-                  onChange={() => setShareStats(!shareStats)}
-                />
+                {PRODUCT_ANALYTICS && (
+                  <ToggleRow
+                    icon="info"
+                    label={t('onboarding.permissions.shareStats')}
+                    desc={t('onboarding.permissions.shareStatsDesc')}
+                    on={shareStats}
+                    tint="var(--cth-lemon-light)"
+                    edge="var(--cth-lemon)"
+                    onChange={() => setShareStats(!shareStats)}
+                  />
+                )}
 
                 {/* LEVER 4 "— instruction-only: the OS won't let the app flip its sleep setting itself, so we deep-link the pane where one exists (macOS/Windows) and fall back to text-only guidance on Linux. */}
                 <div style={{

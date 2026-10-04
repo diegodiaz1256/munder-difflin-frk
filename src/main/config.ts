@@ -11,6 +11,7 @@ import {
 } from '../shared/agentProvider';
 import { defaultMcpDefaults } from '../shared/mcpCatalog';
 import { MAX_AGENT_TOKEN_CAP } from '../shared/tokenCaps';
+import { cleanServerList } from '../shared/roleBundles';
 import { expandTilde, normalizeHiveHome } from './fs';
 import type { IntegrationRecord } from '../shared/integrations';
 import {
@@ -175,6 +176,9 @@ export interface KnowledgeGraphConfig {
 export interface HarnessConfig {
   /** Has the user completed the first-run onboarding? */
   onboardingComplete: boolean;
+  /** Set only in a seeded demo office (tools/seed-demo-hive.cjs, `npm run demo`):
+   *  the renderer skips the launch-time hive picker and opens in the Pro layout. */
+  demoMode?: boolean;
   /** Self-identified audience picked on the first onboarding screen. Drives the
    *  copy register everywhere onboarding explains itself: 'technical' shows CLI /
    *  flag lingo, 'non-technical' explains each concept in plain language. Unset =
@@ -215,6 +219,16 @@ export interface HarnessConfig {
    *  Seeded from MCP_CATALOG (safe-readonly ON, write/secret OFF); the user flips
    *  these in Settings. A server is wired into an agent only when enabled here. */
   mcpDefaults?: { [id: string]: { enabled: boolean } };
+  /** Per-agent MCP grants from Pro Capabilities, keyed by agent id → catalog ids.
+   *  A grant replaces the default set for that agent on its next (re)spawn;
+   *  write/secret servers in it still need consent in `mcpDefaults`. */
+  agentMcpGrants?: Record<string, string[]>;
+  /** Pro → Connections "Choose agents": a keyed MCP server listed here reaches
+   *  only these agent ids (on their next spawn). Absent → every agent. */
+  connectionScopes?: Record<string, string[]>;
+  /** The user's own role bundles (Pro Capabilities), after the built-ins.
+   *  Saved through config:saveRoleBundles, which validates them. */
+  customRoleBundles?: Array<{ id: string; label: string; icon: string; servers: string[] }>;
   /** Enable semantic memory (MemPalace CLI). No-op if mempalace isn't installed. */
   semanticMemory: boolean;
   /** Embedding model for the palace: lightweight 'minilm' or multilingual 'embeddinggemma'. */
@@ -695,6 +709,20 @@ export function writeConfig(patch: Partial<HarnessConfig>): HarnessConfig {
     next.recentHives = recentHives;
   }
   return persistConfig(next);
+}
+
+/** Set or clear one agent's MCP grant (Pro Capabilities) against the latest
+ *  config on disk, the same read-modify-write as setAgentTokenCap below. */
+export function setAgentMcpGrant(agentId: unknown, servers: unknown): HarnessConfig {
+  if (typeof agentId !== 'string' || agentId.trim().length === 0) {
+    throw new Error('invalid agent id');
+  }
+  if (servers !== undefined && !Array.isArray(servers)) throw new Error('invalid MCP grant');
+  const current = readConfig();
+  const agentMcpGrants = { ...(current.agentMcpGrants ?? {}) };
+  if (servers === undefined) delete agentMcpGrants[agentId];
+  else agentMcpGrants[agentId] = cleanServerList(servers);
+  return persistConfig({ ...current, agentMcpGrants });
 }
 
 /** Set or clear one agent's token ceiling against the latest config on disk.

@@ -43,6 +43,8 @@ import { preferredAgentRole } from '../shared/agentRole';
 import { mergeTaskLedger } from '../shared/taskLedger';
 import { expandTilde } from './fs';
 import { resolveGodName } from '../shared/godIdentity';
+import { assignTaskKeys, normalizeTaskKeyLedger, taskKeyPrefix } from '../shared/taskKeys';
+import { cleanServerList } from '../shared/roleBundles';
 
 /** The subset of HarnessConfig the hive consumes for the default-MCP merge.
  *  Kept as a local shape so hive.ts never imports the foundation-owned config
@@ -601,11 +603,35 @@ export class HiveManager {
     return [launcher ? `"${launcher}"` : 'node', `"${script}"`, ...args].join(' ');
   }
 
-  /** Same, but UNQUOTED — only for configs or platforms that cannot preserve
-   *  embedded quotes. POSIX JSON hook configs must use nodeRun() because the
-   *  user-selected hive path may legitimately contain spaces. */
-  private nodeRunUnquoted(script: string, ...args: string[]): string {
-    return [this.nodeLauncher() ?? 'node', script, ...args].join(' ');
+  /** A hook command for a CLI that runs it through cmd.exe on Windows (agy,
+   *  Gemini, Codex). Those CLIs cannot be handed quotes: they escape embedded
+   *  quotes the C-runtime way (`\"`), which cmd.exe does not understand (#350).
+   *  But unquoted, a hive under a path with a space (`D:\Dunder Mifflin\…`)
+   *  splits at the space and every hook dies, so the agent never reports a
+   *  state again.
+   *
+   *  So the command carries no path at all once a path has a space in it: a
+   *  `<name>.cmd` wrapper (which may quote freely — it is a batch file, not an
+   *  argument) goes into `bin/runtime`, which pty.spawn appends to every hive
+   *  agent's PATH, and the hook command is just the wrapper's name. Short 8.3
+   *  names would be the other way out, but volumes routinely have them turned
+   *  off. Without a space nothing changes. */
+  private windowsHookCommand(name: string, script: string, ...args: string[]): string {
+    const launcher = this.nodeLauncher() ?? 'node';
+    if (!/\s/.test(launcher) && !/\s/.test(script)) return [launcher, script, ...args].join(' ');
+    const dir = this.runtimeBinDir();
+    if (dir) {
+      try {
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, `${name}.cmd`), `@echo off
+"${launcher}" "${script}" %*
+`, 'utf8');
+        return [name, ...args].join(' ');
+      } catch (e) {
+        console.error('[hive] could not write hook wrapper:', e);
+      }
+    }
+    return [launcher, script, ...args].join(' ');
   }
 
   /** One proxy sidecar per live proxy-tier agent, keyed by agentId. Spawned in
@@ -665,6 +691,8 @@ export class HiveManager {
     writeFileSync(this.shimPath()!, HOOK_SHIM, 'utf8');
     // The proxy-bridge sidecar for hookless CLIs (qwen). Same refresh policy.
     writeFileSync(this.proxyShimPath()!, PROXY_BRIDGE_SHIM, 'utf8');
+    // md-api: an agent's door to the REST integrations behind the key broker.
+    writeFileSync(join(root, 'bin', 'md-api.cjs'), MD_API_CLI, 'utf8');
     // The bundled-node launcher every shim above is invoked through — MUST be
     // written before any hook installer runs (they probe for it).
     this.writeNodeLauncher();
@@ -721,10 +749,22 @@ export class HiveManager {
        *  instructions were unusable on Windows. Optional: undefined degrades to the
        *  old env-var spelling. */
       kgCliPath?: string;
+      /** REST integrations this agent may call through the key broker (its
+       *  MD_BROKER_TOKEN is granted for exactly these). Listed in its prompt with
+       *  the md-api command; empty/undefined → no line. */
+      integrations?: Array<{ id: string; label: string }>;
       theme?: 'light' | 'dark';
       /** Consent state for the default-MCP bundle (W3). Threaded from the live
        *  HarnessConfig by the caller; undefined → catalog defaults apply. */
       mcpDefaults?: { [id: string]: { enabled: boolean } };
+      /** This agent's own MCP grant (Pro Capabilities), catalog ids. When set it
+       *  REPLACES the default set for this agent; write/secret servers in it still
+       *  need the user's consent in mcpDefaults. Undefined → the defaults. */
+      mcpGrant?: string[];
+      /** Per-server agent lists (Pro → Connections "Choose agents"): a server
+       *  listed here reaches only these agent ids. Absent → everyone it would
+       *  otherwise reach. */
+      mcpScopes?: Record<string, string[]>;
       /** App-resources `skills/` source dir (W3). The bundled read-only skills are
        *  copied into the agent's `.claude/skills/` per spawn; undefined or missing
        *  is a no-op (tolerated until Kevin populates the resource dir). */
@@ -846,7 +886,7 @@ export class HiveManager {
     if (!isHiveAwareProvider(meta.provider)) {
       const preset = providerPreset(meta.provider ?? 'claude');
       const flag = preset.initialPromptFlag;
-      const prompt = this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath);
+      const prompt = this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath, opts.integrations);
       // agy, codex, and grok expose a Claude-style lifecycle-hook surface, so each
       // gets the SAME live status + Stop→inbox-drain Claude does — selected by the
       // preset's `hookBridge`. agy needs a translating shim (its hook stdin/stdout
@@ -991,7 +1031,24 @@ export class HiveManager {
     const args: string[] = [];
     if (!claudeProvider) return { args, env };
 
-    args.push('--append-system-prompt', this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath));
+    // MCP servers go in their own file, passed with --mcp-config: Claude Code does
+    // NOT load `mcpServers` from a --settings file (verified on 2.1.286 — a server
+    // listed there is never started), so the default bundle and every Capabilities
+    // grant used to reach no agent at all. --mcp-config is additive to the user's
+    // own servers. It takes several values, so the option pushed right after it
+    // ends the list and nothing positional can be swallowed as a config path.
+    const mcp = this.buildDefaultMcpServers(meta.cwd, opts.mcpDefaults, opts.mcpGrant, meta.id, opts.mcpScopes);
+    const mcpPath = join(dir, 'mcp.json');
+    if (Object.keys(mcp.servers).length) {
+      this.writeJson(mcpPath, { mcpServers: mcp.servers });
+      args.push('--mcp-config', mcpPath);
+      // The credentials themselves: process env only (the file says `${ENV}`).
+      Object.assign(env, mcp.env);
+    } else if (existsSync(mcpPath)) {
+      try { rmSync(mcpPath, { force: true }); } catch { /* stale, harmless */ }
+    }
+
+    args.push('--append-system-prompt', this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath, opts.integrations));
 
     // Phase 1 — autonomy: attach lifecycle hooks via --settings (no edits to the
     // user's repo) so the agent reports activity and drains its inbox on Stop.
@@ -1000,7 +1057,7 @@ export class HiveManager {
     if (sock && shim) {
       env.HIVE_SOCK = sock;
       const settingsPath = join(dir, 'settings.json');
-      this.writeJson(settingsPath, this.hookSettings(shim, meta.cwd, opts.mcpDefaults, opts.theme, this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs)));
+      this.writeJson(settingsPath, this.hookSettings(shim, opts.theme, this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs)));
       args.push('--settings', settingsPath);
     }
     return { args, env };
@@ -1226,10 +1283,9 @@ export class HiveManager {
     return this.registry().agents[agentId]?.sessionId;
   }
 
-  /** Claude Code settings that route every relevant hook through the shim, plus
-   *  (W3) the default MCP bundle merged into this PER-SESSION settings file. cwd
-   *  scopes the filesystem/git servers; cfg (the consent map) gates which servers
-   *  are written. Claude-only — this is invoked solely on the Claude spawn path. */
+  /** Claude Code settings that route every relevant hook through the shim.
+   *  Claude-only — this is invoked solely on the Claude spawn path. (The MCP
+   *  bundle is NOT here: see the --mcp-config note in ensureAgent.) */
   /**
    * Directories a sandboxed agent may write BESIDES its cwd: its own agent
    * folder (hive housekeeping) and the hive root (research deliverables; the
@@ -1242,7 +1298,7 @@ export class HiveManager {
     return Array.from(new Set(out));
   }
 
-  private hookSettings(shim: string, cwd: string, cfg: McpDefaultsMap, theme?: 'light' | 'dark', writableDirs: string[] = []): unknown {
+  private hookSettings(shim: string, theme?: 'light' | 'dark', writableDirs: string[] = []): unknown {
     // Bundled node, NOT bare `node` — see nodeLauncherPath(). Claude runs each of
     // these through `sh -c` with a stripped PATH, where `node` is often absent.
     const cmd = this.nodeRun(shim);
@@ -1250,7 +1306,6 @@ export class HiveManager {
       ...(matcher ? { matcher } : {}),
       hooks: [{ type: 'command', command: cmd }]
     });
-    const mcpServers = this.buildDefaultMcpServers(cwd, cfg);
     return {
       // Match the TUI's truecolor palette to the harness terminal theme —
       // PER SESSION, so the user's global Claude theme (their own terminals
@@ -1264,11 +1319,6 @@ export class HiveManager {
       // listens. The terminal reports the current theme the moment the CLI enables
       // 2031, so startup still matches without pinning anything.
       ...(theme ? { theme: 'auto' } : {}),
-      // W3 — default skills/MCP bundle. Written into the PER-SESSION settings file
-      // only (never ~/.claude), so the user's own MCP servers are never clobbered;
-      // Claude merges this additively. Omitted entirely when empty so a settings
-      // file with no enabled servers is unchanged from before.
-      ...(Object.keys(mcpServers).length ? { mcpServers } : {}),
       // The status line gets the session status JSON after every response —
       // including context_window.{total_input_tokens,context_window_size},
       // the only clean programmatic source for the session's REAL context
@@ -1314,30 +1364,64 @@ export class HiveManager {
    * of the same name in the user's own ~/.claude is never clobbered. A write/secret
    * server is included ONLY on an explicit `enabled:true` consent — never via a
    * default — so a malformed/partial config can't silently arm a keyed server.
+   *
+   * A per-agent `grant` (Pro Capabilities) replaces the default membership: the
+   * agent gets exactly the granted servers. It never replaces consent, so a
+   * granted write/secret server the user has not switched on is still left out.
    */
-  private buildDefaultMcpServers(
+  buildDefaultMcpServers(
     cwd: string,
-    cfg: McpDefaultsMap
-  ): Record<string, { command: string; args: string[]; env?: Record<string, string> }> {
-    const out: Record<string, { command: string; args: string[]; env?: Record<string, string> }> = {};
+    cfg: McpDefaultsMap,
+    grant?: string[],
+    agentId?: string,
+    scopes?: Record<string, string[]>
+  ): { servers: Record<string, { command: string; args: string[]; env?: Record<string, string> }>; env: Record<string, string> } {
+    const servers: Record<string, { command: string; args: string[]; env?: Record<string, string> }> = {};
+    const env: Record<string, string> = {};
+    const granted = grant ? new Set(cleanServerList(grant)) : null;
     for (const e of MCP_CATALOG) {
       const consented = cfg?.[e.id]?.enabled;
-      const enabled = consented ?? e.defaultEnabled;
+      const enabled = granted ? granted.has(e.id) : (consented ?? e.defaultEnabled);
       if (!enabled) continue;
       // Defense-in-depth: a write/secret server requires an EXPLICIT opt-in; it can
       // never ride in on a default (the catalog already ships these OFF, but this
       // guards a hand-edited/partial mcpDefaults map too).
       if (e.tier !== 'safe-readonly' && consented !== true) continue;
+      // "Choose agents" (Connections): a scoped server reaches only its list.
+      const scope = scopes?.[e.id];
+      if (Array.isArray(scope) && !(agentId && scope.includes(agentId))) continue;
+      // Credentials: every required one must be stored, or the server could only
+      // fail. The config gets `${ENV}`, which Claude Code expands from the process
+      // env, so no secret is ever written into the (git-committed) hive.
+      const serverEnv: Record<string, string> = {};
+      let missing = false;
+      for (const field of e.secrets ?? []) {
+        const value = this.mcpSecret(e.id, field.env);
+        if (value) {
+          env[field.env] = value;
+          serverEnv[field.env] = '${' + field.env + '}';
+        } else if (!field.optional) {
+          missing = true;
+        }
+      }
+      if (missing) continue;
       // Replace the `<cwd>` placeholder (filesystem/git) with the agent cwd at merge
       // time so these stay strictly workspace-scoped.
       const args = e.spec.args.map((a) => (a === '<cwd>' ? cwd : a));
-      out[`munder-${e.id}`] = {
+      servers[`munder-${e.id}`] = {
         command: e.spec.command,
         args,
-        ...(e.spec.env ? { env: e.spec.env } : {})
+        ...(Object.keys(serverEnv).length ? { env: serverEnv } : {})
       };
     }
-    return out;
+    return { servers, env };
+  }
+
+  /** Reads a stored Connections credential. Injected by main (the encrypted store
+   *  needs electron); unset (tests, or before main wires it) means "none". */
+  private mcpSecret: (serverId: string, envName: string) => string | undefined = () => undefined;
+  setMcpSecretResolver(resolve: (serverId: string, envName: string) => string | undefined): void {
+    this.mcpSecret = resolve;
   }
 
   /**
@@ -1533,7 +1617,8 @@ export class HiveManager {
     root: string,
     semanticMemory: boolean,
     knowledgeGraph: boolean,
-    kgCliPath?: string
+    kgCliPath?: string,
+    integrations?: Array<{ id: string; label: string }>
   ): string {
     // Native-separator path helpers — see the 🪟 note above.
     const inDir = (...parts: string[]): string => join(dir, ...parts);
@@ -1589,6 +1674,18 @@ export class HiveManager {
       ? `You are ${godNameForPrompt}'s PREP ASSISTANT. You will be handed short, possibly vague instructions (each begins with "ENRICH TASK:"). For each one: (1) figure out which project it concerns and cd into the most relevant repo — you start in ${godNameForPrompt}'s home directory; (2) gather concrete context READ-ONLY (exact file paths, current state, relevant code, conventions, active branch, gotchas) — NEVER modify, create, or delete files; (3) rewrite the instruction into ONE clear, self-contained prompt that ${godNameForPrompt} can execute autonomously, preserving the user's original intent without inventing scope. Then deliver it: write ONE message JSON into your outbox with "to":"god", "act":"request", a short subject, and the finished prompt as the body. Do NOT perform the task yourself — your only output is the improved prompt sent to ${godNameForPrompt}.`
       : 'For anything ambiguous, cross-cutting, or needing sign-off, address a message to "god".';
     const guardrailsLine = 'Guardrails: a circuit breaker watches the floor — a "Circuit breaker: steer/constrain" message means you are looping or overspending, so STOP repeating, summarize what you tried, and follow it. Be token-frugal (a floor-wide or per-agent token budget can pause you). The shared plan has two parts: board.md (freeform; god is the sole scribe) and tasks.json (structured kanban — todo/doing/blocked/done).';
+    // REST integrations through the loopback key broker. The agent never holds a
+    // key: md-api reads MD_BROKER_URL/MD_BROKER_TOKEN from its env, and the
+    // broker adds the credential upstream. Absolute paths, not `$VAR` (cmd.exe).
+    const apiCli = inRoot('bin', 'md-api.cjs');
+    const integrationsLine = integrations && integrations.length
+      ? `REST APIs you can call (the harness adds the key; you never see it): ${integrations.map((i) => `${i.id} (${i.label})`).join(', ')}. Run \`"${hiveNode}" "${apiCli}" <api> GET /path\`, or \`"${hiveNode}" "${apiCli}" <api> POST /path '<json body>'\` (also PUT, PATCH, DELETE). The path is relative to that API's base URL, e.g. \`"${hiveNode}" "${apiCli}" ${integrations[0].id} GET /\`. It prints the HTTP status and the response body.`
+      : '';
+    // Automations: the orchestrator changes scheduled missions by request file
+    // (main validates and applies them, then answers in its inbox).
+    const scheduleLine = meta.isGod
+      ? `AUTOMATIONS: you can create, change and delete scheduled missions (a prompt sent to an agent on a clock). Read ${inRoot('missions.json')} for the current ones and their ids. To change them, write ONE JSON file per change into ${inDir('schedule')}: {"op":"create","label":"…","to":"<agent id>","body":"<the prompt>","every":"1d"} (every: 30m, 2h, 1d, 1w; or "weekly":{"days":["mon","fri"],"time":"09:00"}), {"op":"update","id":"<id>", …only the fields to change, incl. "enabled":false}, or {"op":"delete","id":"<id>"}. The harness applies it and tells you the result in your inbox. Built-in missions can only be switched on/off or re-timed. Every mission spends tokens each time it fires, so schedule only what the human asked for or clearly needs.`
+      : '';
     const slackLine = meta.isGod
       ? 'SLACK REPLIES: When composing a Slack reply (or writing the `result` field of a Slack-origin kanban card), you MUST: (1) directly address what the user asked — never a bare "done"; (2) include the relevant specifics, outcome, and details; (3) format for Slack mrkdwn — open with a short *bold* headline, use bullet points for multiple items, wrap code/paths in `backtick` blocks, keep it concise (no walls of text). When finishing a Slack-origin task, always write a complete, user-facing, well-formatted `result` on the kanban card — the system posts it verbatim to Slack as the done reply.'
       : `SLACK REPLIES: If god dispatches you a task that came from Slack, it will include an exact \`"${hiveNode}" "<helper>" --channel … --thread … --text "…"\` reply command — when you finish, run it VERBATIM to post your result back to that thread yourself. The reply must be SUBSTANTIVE Slack mrkdwn (a short *bold* headline + the actual outcome/specifics/links), NEVER a bare "done".`;
@@ -1604,7 +1701,9 @@ export class HiveManager {
       guardrailsLine,
       memoryLine,
       knowledgeLine,
+      integrationsLine,
       godLine,
+      scheduleLine,
       spawnQueueLine,
       runtimeLine,
       slackLine,
@@ -1908,6 +2007,22 @@ export class HiveManager {
     return root ? this.readJson(join(root, 'tasks.json'), { tasks: [] }) : { tasks: [] };
   }
 
+  /** Ticket keys for every card (`bmt-12`), assigned on first sight and kept in
+   *  taskKeys.json, a ledger only the harness writes (see shared/taskKeys.ts).
+   *  The prefix comes from the hive's parent folder name. */
+  taskKeys(): { prefix: string; keys: Record<string, number> } {
+    const root = this.root();
+    if (!root) return { prefix: taskKeyPrefix(null), keys: {} };
+    const prefix = taskKeyPrefix(basename(dirname(root)));
+    const ledger = this.tasks() as { tasks?: HiveTask[] };
+    const tasks = Array.isArray(ledger?.tasks) ? ledger.tasks.filter((t) => t && typeof t.id === 'string') : [];
+    const path = join(root, 'taskKeys.json');
+    const current = normalizeTaskKeyLedger(this.readJson<unknown>(path, null));
+    const { ledger: next, changed } = assignTaskKeys(current, tasks);
+    if (changed) this.writeJson(path, next);
+    return { prefix, keys: next.keys };
+  }
+
   /** Persist the task ledger to hive/tasks.json and commit it. Mirrors the
    *  board/message persist pattern: write JSON, log the change, single-commit.
    *
@@ -2088,7 +2203,8 @@ export class HiveManager {
    *  Two agy-isms handled: (1) antigravity-cli#49 — agy LOADS hooks from
    *  `~/.gemini/antigravity-cli/hooks.json` but TRIGGERS from `~/.gemini/config/
    *  hooks.json`, so we write BOTH; (2) on Windows commands go to cmd.exe and
-   *  agy mangles embedded quotes, so that platform retains the legacy form.
+   *  agy mangles embedded quotes, so that platform gets a quote-free command
+   *  (windowsHookCommand).
    *  Runtime-scoped by AGENT_ID (the shim no-ops for non-hive agy sessions), so
    *  this global config never disturbs the user's own `agy` usage. Best-effort,
    *  idempotent (only our own group is overwritten). */
@@ -2100,7 +2216,7 @@ export class HiveManager {
     writeFileSync(shim, AGY_HOOK_SHIM, 'utf8');
     // Bundled node, not bare `node` — agy's hooks run with a stripped PATH too.
     const command = (event: string) => process.platform === 'win32'
-      ? this.nodeRunUnquoted(shim, event)
+      ? this.windowsHookCommand('md-agy-hook', shim, event)
       : this.nodeRun(shim, event);
     const tool = (event: string) => ({
       matcher: '*',
@@ -2151,7 +2267,7 @@ export class HiveManager {
           name: `munder-hive-${name}`,
           type: 'command',
           command: process.platform === 'win32'
-            ? this.nodeRunUnquoted(shim)
+            ? this.windowsHookCommand(`md-gemini-hook-${basename(dir).replace(/[^A-Za-z0-9_-]/g, '-')}`, shim)
             : this.nodeRun(shim),
           timeout: 30000
         }]
@@ -2249,11 +2365,10 @@ export class HiveManager {
       if (shim) {
         const events = ['PreToolUse', 'PostToolUse', 'Stop', 'SubagentStop',
           'SessionStart', 'UserPromptSubmit', 'PreCompact', 'PostCompact'];
-        // Preserve the existing Windows .cmd shape: nested command quotes pass
-        // through a different shell stack there (#350). The reported Codex bug
-        // is POSIX, where ordinary shell quoting is both necessary and verified.
+        // Windows: no nested quotes (#350), and no path with a space either —
+        // see windowsHookCommand. POSIX: ordinary shell quoting, verified.
         const command = process.platform === 'win32'
-          ? this.nodeRunUnquoted(shim)
+          ? this.windowsHookCommand('md-codex-hook', shim)
           : this.nodeRun(shim);
         config += '\n# --- munder-hive lifecycle hooks (auto-generated; do not edit) ---\n';
         for (const ev of events) {
@@ -3097,6 +3212,38 @@ searchable MemPalace and you have the \`mempalace\` CLI:
 
 Your \`memory.md\` is mined into the palace automatically, so the durable facts you
 write there become searchable by every agent. You don't run \`mine\` yourself.
+`;
+
+// ─── md-api (written to <hive>/bin/md-api.cjs) ───────────────────────────────
+// `md-api <integration> <METHOD> <path> [json-body]` → the loopback key broker.
+// The agent's env carries the broker URL and its per-agent capability token (a
+// handle, never the key); the broker checks the grant and adds the real
+// credential upstream. Prints the status line, then the body.
+const MD_API_CLI = `#!/usr/bin/env node
+'use strict';
+const [id, methodArg, pathArg, body] = process.argv.slice(2);
+const base = process.env.MD_BROKER_URL, token = process.env.MD_BROKER_TOKEN;
+if (!id || !methodArg) {
+  console.error('usage: md-api <integration> <GET|POST|PUT|PATCH|DELETE> <path> [json-body]');
+  process.exit(2);
+}
+if (!base || !token) {
+  console.error('md-api: no REST integrations are available to this agent (enable one in Connections, then restart the agent).');
+  process.exit(2);
+}
+const method = methodArg.toUpperCase();
+const path = (pathArg || '/').replace(/^\\/*/, '');
+const url = base.replace(/\\/+$/, '') + '/i/' + encodeURIComponent(id) + '/' + path;
+const headers = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
+if (body !== undefined) headers['Content-Type'] = 'application/json';
+fetch(url, { method, headers, body })
+  .then(async (res) => {
+    console.log('HTTP ' + res.status);
+    const text = await res.text();
+    if (text) console.log(text);
+    process.exit(res.ok ? 0 : 1);
+  })
+  .catch((e) => { console.error('md-api: ' + (e && e.message || e)); process.exit(1); });
 `;
 
 const GENERATED_HIVE_DOCS = [

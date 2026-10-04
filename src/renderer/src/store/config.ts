@@ -56,6 +56,9 @@ export interface KnowledgeGraphConfig {
 
 export interface HarnessConfig {
   onboardingComplete: boolean;
+  /** Set only in a seeded demo office (tools/seed-demo-hive.cjs): skips the
+   *  launch-time hive picker and opens in the Pro layout. Mirrors src/main/config.ts. */
+  demoMode?: boolean;
   /** Self-identified audience from the first onboarding screen ('technical' vs
    *  'non-technical') — drives the copy register across onboarding. Mirrors
    *  src/main/config.ts. */
@@ -116,6 +119,14 @@ export interface HarnessConfig {
   /** Per-agent total-token ceiling, keyed by agent id. Overrides the floor budget
    *  for that agent's meter and trips the breaker for it alone. */
   agentTokenCaps?: Record<string, number>;
+  /** Per-agent MCP grants (Pro Capabilities): agent id → catalog ids. */
+  agentMcpGrants?: Record<string, string[]>;
+  /** Pro → Connections "Choose agents": a keyed MCP server listed here reaches
+   *  only these agent ids (on their next spawn). Absent → every agent. */
+  connectionScopes?: Record<string, string[]>;
+  /** The user's own role bundles (Pro Capabilities), after the built-ins.
+   *  Saved through config:saveRoleBundles, which validates them. */
+  customRoleBundles?: Array<{ id: string; label: string; icon: string; servers: string[] }>;
   autoDeliveryPausedAgents?: string[];
   maxTurns?: number;
   circuitBreaker?: CircuitBreakerConfig;

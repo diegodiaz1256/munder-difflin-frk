@@ -1008,7 +1008,7 @@ export function useHive(config: HarnessConfig | null): void {
   //     be invisible on the floor. Main broadcasts; we build/archive the card here.
   useEffect(() => {
     if (!config?.onboardingComplete) return;
-    const offSpawn = window.cth.onHiveAgentSpawned?.((rec) => {
+    const card = (rec: Parameters<Parameters<typeof window.cth.onHiveAgentSpawned>[0]>[0]) => {
       if (!rec?.id) return;
       // addAgent is idempotent, but bail early if the renderer already carded it.
       if (useStore.getState().agents.some((a) => a.id === rec.id)) return;
@@ -1050,7 +1050,11 @@ export function useHive(config: HarnessConfig | null): void {
         recentTextTs: Date.now()
       };
       useStore.getState().addAgent(agent);
-    });
+    };
+    const offSpawn = window.cth.onHiveAgentSpawned?.(card);
+    // A worker the main process spawned before this listener existed (a queued
+    // spawn-request processed during boot) was broadcast to nobody; card it now.
+    void window.cth.workerCards?.().then((cards) => { for (const c of cards) card(c); }).catch(() => { /* older main */ });
     const offArchive = window.cth.onHiveAgentArchived?.((e) => {
       if (e?.id) useStore.getState().archiveAgent(e.id);
     });

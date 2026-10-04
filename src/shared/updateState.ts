@@ -33,7 +33,15 @@ export type UpdateStatus =
 
 export type UpdateAction = 'none' | 'check' | 'download' | 'restart' | 'open-release' | 'manual';
 
-export const REPO = 'chaitanyagiri/munder-difflin';
+/** The GitHub repo this build updates from, and reads its live catalogs from.
+ *  The ONE place it is named: the updater, the release links in the UI, and the
+ *  remote model catalog / hero payload all derive from it. A fork must point
+ *  here at itself, or its builds "update" into upstream releases and lose the
+ *  fork's changes (electron-builder.yml `publish` must match). */
+export const REPO = 'diegodiaz1256/munder-difflin-frk';
+export const REPO_URL = `https://github.com/${REPO}`;
+/** Raw files on the repo's main branch (docs/model-catalog.json, docs/hero.json). */
+export const REPO_RAW_MAIN = `https://raw.githubusercontent.com/${REPO}/main`;
 
 /** The installer for THIS machine in the release tagged v{version}, by the
  *  names electron-builder.yml produces. Used when a status carries no
@@ -80,6 +88,18 @@ export function parseVersion(v: string): [number, number, number] | null {
   return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
 }
 
+/** The pre-release identifiers of a version (`0.4.6-fork.2` → ['fork', '2']),
+ *  [] for a release. Build metadata (`+…`) is ignored, as SemVer says. */
+function prereleaseOf(v: string): string[] {
+  const m = String(v ?? '').trim().replace(/^v/, '').match(/^\d+\.\d+\.\d+-([0-9A-Za-z.-]+)/);
+  return m ? m[1].split('.') : [];
+}
+
+/** SemVer precedence, pre-release included. This fork versions its patches as
+ *  `<upstream>-fork.N` (0.4.6-fork.1, 0.4.6-fork.2, then 0.5.5-fork.1 once it
+ *  syncs upstream 0.5.5), so a comparison that dropped the suffix could never
+ *  see a fork patch as an update. A release outranks its pre-releases
+ *  (0.4.7 > 0.4.7-rc.2); identifiers compare numerically when both are numbers. */
 export function isNewer(candidate: string, current: string): boolean {
   const a = parseVersion(candidate);
   const b = parseVersion(current);
@@ -87,7 +107,18 @@ export function isNewer(candidate: string, current: string): boolean {
   for (let i = 0; i < 3; i++) {
     if (a[i] !== b[i]) return a[i] > b[i];
   }
-  return false;
+  const pa = prereleaseOf(candidate);
+  const pb = prereleaseOf(current);
+  if (pa.length === 0 || pb.length === 0) return pa.length === 0 && pb.length > 0;
+  for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
+    if (pa[i] === pb[i]) continue;
+    const na = /^\d+$/.test(pa[i]);
+    const nb = /^\d+$/.test(pb[i]);
+    if (na && nb) return Number(pa[i]) > Number(pb[i]);
+    if (na !== nb) return nb; // numeric identifiers rank below alphanumeric ones
+    return pa[i] > pb[i];
+  }
+  return pa.length > pb.length;
 }
 
 /**

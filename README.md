@@ -422,7 +422,14 @@ spawn your first session. The GOD agent seats itself in Michael's office automat
 npm run build      # production build via electron-vite
 npm run preview    # preview the production build
 npm run typecheck  # type-check the node (main/preload) and web (renderer) projects
+npm run demo       # open a seeded demo office (Pro layout, pretend agents, no tokens spent)
+npm run demo:reset # re-seed the demo office from scratch, then open it
 ```
+
+The demo lives in `.demo/` (gitignored) and runs with its own config and storage, so it never
+touches your real office and can run next to a normal instance. Every agent runs
+`tools/demo-agent.cjs`, a fake CLI that prints believable work and reports hook events, tokens and
+spend to the app like a real agent would. Seed data is in `tools/seed-demo-hive.cjs`.
 
 > If `node-pty` fails to load after an Electron upgrade, re-run `npm install` (the `postinstall` hook
 > runs `electron-rebuild` against the current Electron ABI).

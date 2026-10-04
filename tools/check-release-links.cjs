@@ -31,7 +31,14 @@ const path = require('node:path');
 
 const root = path.join(__dirname, '..');
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
-const releaseMd = fs.readFileSync(path.join(root, 'RELEASE.md'), 'utf8');
+// This fork publishes FORK-RELEASE.md as the release body (release.yml); the
+// upstream RELEASE.md is kept only to ease syncing.
+const notesFile = fs.existsSync(path.join(root, 'FORK-RELEASE.md')) ? 'FORK-RELEASE.md' : 'RELEASE.md';
+const releaseMd = fs.readFileSync(path.join(root, notesFile), 'utf8');
+// Fork versions are <upstream>-fork.N. Upstream's own surfaces (its website,
+// llms.txt) track the upstream base, so those compare against `baseVersion`.
+const baseVersion = version.split('-')[0];
+const VERSION = String.raw`\d+\.\d+\.\d+(?:-(?:fork|rc|beta|alpha)\.\d+)?`;
 
 const problems = [];
 
@@ -43,20 +50,20 @@ function compareVersions(a, b) {
 }
 
 // — 1. every pinned artifact name must carry the current version —
-const assetRe = /Munder-Difflin-(\d+\.\d+\.\d+)-([^\s`)]+)/g;
+const assetRe = new RegExp(`Munder-Difflin-(${VERSION})-([^\\s\`)]+)`, 'g');
 const assets = new Set();
 for (const m of releaseMd.matchAll(assetRe)) {
   if (m[1] !== version) {
-    problems.push(`RELEASE.md advertises Munder-Difflin-${m[1]}-${m[2]} but package.json says ${version}`);
+    problems.push(`${notesFile} advertises Munder-Difflin-${m[1]}-${m[2]} but package.json says ${version}`);
   }
   assets.add(`Munder-Difflin-${m[1]}-${m[2]}`);
 }
-if (assets.size === 0) problems.push('RELEASE.md advertises no download assets at all — did the table move?');
+if (assets.size === 0) problems.push(`${notesFile} advertises no download assets at all — did the table move?`);
 
 // — 2. source tarball tags too; a stale tag silently ships last release's source —
-for (const m of releaseMd.matchAll(/archive\/refs\/tags\/v(\d+\.\d+\.\d+)/g)) {
+for (const m of releaseMd.matchAll(new RegExp(`archive/refs/tags/v(${VERSION})`, 'g'))) {
   if (m[1] !== version) {
-    problems.push(`RELEASE.md links source for tag v${m[1]} but package.json says ${version}`);
+    problems.push(`${notesFile} links source for tag v${m[1]} but package.json says ${version}`);
   }
 }
 
@@ -71,8 +78,8 @@ const siteAssets = [];
 if (fs.existsSync(indexHtml)) {
   const html = fs.readFileSync(indexHtml, 'utf8');
   const m = /var REL = '(\d+\.\d+\.\d+)'/.exec(html);
-  if (m && compareVersions(m[1], version) < 0) {
-    problems.push(`docs/index.html download fallback is ${m[1]}, older than package.json ${version}`);
+  if (m && compareVersions(m[1], baseVersion) < 0) {
+    problems.push(`docs/index.html download fallback is ${m[1]}, older than package.json ${baseVersion}`);
   }
   const base = /var BASE = '([^']+)'/.exec(html);
   if (m && base) {
@@ -89,8 +96,8 @@ const llms = path.join(root, 'docs/llms.txt');
 if (fs.existsSync(llms)) {
   const m = /Current version:\s*(\d+\.\d+\.\d+)/.exec(fs.readFileSync(llms, 'utf8'));
   if (!m) problems.push('docs/llms.txt no longer states "Current version: x.y.z" — did the line move?');
-  else if (m[1] !== version) {
-    problems.push(`docs/llms.txt says current version ${m[1]}, package.json says ${version}`);
+  else if (m[1] !== baseVersion) {
+    problems.push(`docs/llms.txt says current version ${m[1]}, package.json says ${baseVersion}`);
   }
 }
 
@@ -108,7 +115,7 @@ async function head(url, label) {
 }
 
 async function checkLive() {
-  const base = 'https://github.com/chaitanyagiri/munder-difflin/releases/latest/download/';
+  const base = 'https://github.com/diegodiaz1256/munder-difflin-frk/releases/latest/download/';
   for (const name of [...assets, 'SHA256SUMS.txt']) await head(base + name, name);
   for (const url of siteAssets) await head(url, url);
 }

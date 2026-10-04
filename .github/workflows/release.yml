@@ -1,18 +1,74 @@
 name: Release
 
-# Build installers for every platform and publish them to a GitHub Release
-# whenever a v* tag is pushed. Run manually (workflow_dispatch) to dry-build
-# without publishing.
+# Build installers for every platform on every push to main (downloadable from
+# the run's artifacts) and publish a GitHub Release when there is a new version:
+#   - push to main whose package.json version has no release yet → tag vX.Y.Z on
+#     that commit and publish it. Releasing = bumping "version" and merging.
+#   - push of a v* tag → publish that tag (the manual path still works).
+# The in-app updater reads these releases (REPO in src/shared/updateState.ts).
+# Run manually (workflow_dispatch) to dry-build without publishing.
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
+    # Site, blog and SEO content ship through their own workflows; a commit that
+    # only touches them changes nothing in the installers. (Tag pushes are not
+    # filtered by paths, so a release always builds.)
+    paths-ignore:
+      - "docs/**"
+      - "blog/**"
+      - "seo/**"
+      - "**/*.md"
   workflow_dispatch:
+
+# A newer push to main supersedes a build still running for an older one. Tag
+# builds are never cancelled: each one is a release.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
 
 permissions:
   contents: write
 
 jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags, to tell a new version from a released one
+      - id: v
+        name: Decide whether this run publishes
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          tag="v$(node -p "require('./package.json').version")"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          release=false
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              release=true
+            elif [[ "$(git rev-list -n 1 "$tag")" == "$GITHUB_SHA" ]]; then
+              release=true # a re-run of the commit that version was tagged on
+            else
+              # This fork carries the upstream tags (v0.5.2, v0.5.3, …). Publishing
+              # onto one would ship another commit's tag, so say so and skip.
+              echo "::notice::$tag already exists on another commit; bump \"version\" in package.json to publish a release."
+            fi
+          fi
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "$tag → release=$release"
+
   build:
     name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -47,14 +103,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # No analytics in this fork's builds: electron.vite.config.ts pins the
+      # key empty (src/shared/fork.ts), so nothing is injected here.
       - name: Compile (electron-vite → out/)
         run: npm run build
-        env:
-          # Anonymous product analytics (TELEMETRY.md). The PostHog project key
-          # is public/write-only, but only official release builds inject it —
-          # forks without the secret compile with '' and analytics no-ops.
-          POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
-          POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
 
       - name: Package installers
         # GH_TOKEN lets electron-builder skip its own publish; we upload via the
@@ -105,13 +157,14 @@ jobs:
             dist/*.AppImage
             dist/*.blockmap
             dist/latest*.yml
+            dist/fork*.yml
             dist/SHA256SUMS-*.txt
           if-no-files-found: warn
 
   publish:
     name: Publish release
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    needs: [version, build]
+    if: needs.version.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -123,15 +176,15 @@ jobs:
       - name: Flatten + merge checksums
         run: |
           mkdir -p release
-          find artifacts -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.blockmap' -o -name 'latest*.yml' \) -exec cp {} release/ \;
+          find artifacts -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.blockmap' -o -name 'latest*.yml' -o -name 'fork*.yml' \) -exec cp {} release/ \;
           cat artifacts/*/SHA256SUMS-*.txt > release/SHA256SUMS.txt 2>/dev/null || true
           ls -la release
 
       - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # RELEASE.md is the human-facing notes; GitHub shows it as the body.
-          body_path: RELEASE.md
+          # FORK-RELEASE.md is the human-facing notes; GitHub shows it as the body.
+          body_path: FORK-RELEASE.md
           # A tag carrying a pre-release suffix (v0.4.4-rc.1, -beta.2 …) publishes
           # as a PRE-RELEASE. This is load-bearing, not cosmetic: the in-app
           # updater polls /releases/latest, and GitHub excludes pre-releases from
@@ -140,7 +193,13 @@ jobs:
           # exactly what you want for a build that needs testing on a platform the
           # authors cannot run. A clean `vX.Y.Z` tag is unaffected and still ships
           # as the latest release to everyone.
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          tag_name: ${{ needs.version.outputs.tag }}
+          # Creates the tag on this commit when a main push is releasing a new
+          # version; ignored when the tag already exists (a tag push).
+          target_commitish: ${{ github.sha }}
+          # Fork patches (-fork.N) are full releases: /releases/latest must
+          # return them. Only -rc/-beta/-alpha builds are pre-releases.
+          prerelease: ${{ contains(needs.version.outputs.tag, '-rc.') || contains(needs.version.outputs.tag, '-beta.') || contains(needs.version.outputs.tag, '-alpha.') }}
           fail_on_unmatched_files: false
           files: |
             release/*.dmg
@@ -149,4 +208,5 @@ jobs:
             release/*.AppImage
             release/*.blockmap
             release/latest*.yml
+            release/fork*.yml
             release/SHA256SUMS.txt

@@ -11,9 +11,9 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { getText } from './fetchText';
 import { parseHeroPayload, DEFAULT_HERO, type HeroPayload } from '../shared/heroPayload';
+import { REPO_RAW_MAIN } from '../shared/updateState';
 
-const HERO_URL =
-  'https://raw.githubusercontent.com/chaitanyagiri/munder-difflin/main/docs/hero.json';
+const HERO_URL = `${REPO_RAW_MAIN}/docs/hero.json`;
 /** Plan copy and sponsors change on a human timescale. */
 const TTL_MS = 6 * 60 * 60 * 1000;
 
