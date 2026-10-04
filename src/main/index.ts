@@ -70,6 +70,7 @@ import { IntegrationBroker } from './integrationBroker';
 import * as integrations from './integrations';
 import { applyMissionRequest, type MissionLike } from '../shared/missionRequests';
 import { cleanCustomBundles } from '../shared/roleBundles';
+import { Factories } from './factories';
 import { addConnection, connectionKeyStored, connectionLaunchEnv, instancesOf, listConnections, removeConnection, renameConnection, serviceOf, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
 import { McpGateway } from './mcpGateway';
 import { TeamNode, type TeamInbound } from './teamNode';
@@ -3569,6 +3570,36 @@ hive.setMcpGateway((agentId, serverIds) =>
   mcpGateway.running() ? { url: mcpGateway.url(), token: mcpGateway.grant(agentId, serverIds) } : null);
 ipcMain.handle('connections:list', () => listConnections());
 ipcMain.handle('connections:add', (_evt, service: unknown, label: unknown) => addConnection(service, label));
+
+// ─── Factories (FACTORY-MCP.md) ──────────────────────────────────────────────
+// Software factories this office watches or sends work to. The token is
+// write-only from the renderer and used only here; the renderer gets what the
+// factory offers and may call only the profile's tools (factories.ts).
+const factories = new Factories({
+  list: () => readConfig().factories ?? [],
+  save: (list) => writeConfig({ factories: list }),
+  token: (id) => integrations.getSecret(`factory:${id}`),
+  setToken: (id, token) => integrations.setSecret(`factory:${id}`, token),
+  deleteToken: (id) => integrations.deleteSecret(`factory:${id}`),
+  log: (m) => console.log('[factories]', m)
+});
+const factoryError = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) });
+ipcMain.handle('factories:list', () => factories.list());
+ipcMain.handle('factories:add', (_evt, arg: unknown) => {
+  const a = (arg ?? {}) as { name?: unknown; url?: unknown; token?: unknown };
+  return factories.add(a.name, a.url, a.token);
+});
+ipcMain.handle('factories:remove', (_evt, id: unknown) => factories.remove(id));
+ipcMain.handle('factories:test', (_evt, id: unknown) => typeof id === 'string' ? factories.test(id) : factoryError('no such factory'));
+ipcMain.handle('factories:floor', async (_evt, id: unknown) => {
+  try { return { ok: true, floor: typeof id === 'string' ? await factories.floor(id) : null }; } catch (e) { return factoryError(e); }
+});
+ipcMain.handle('factories:events', async (_evt, id: unknown, since: unknown) => {
+  try { return { ok: true, feed: typeof id === 'string' ? await factories.events(id, typeof since === 'string' ? since : '0') : null }; } catch (e) { return factoryError(e); }
+});
+ipcMain.handle('factories:call', async (_evt, id: unknown, tool: unknown, args: unknown, confirmed: unknown) => {
+  try { return { ok: true, result: typeof id === 'string' ? await factories.call(id, tool, args, confirmed === true) : null }; } catch (e) { return factoryError(e); }
+});
 ipcMain.handle('connections:rename', (_evt, id: unknown, label: unknown) => renameConnection(id, label));
 ipcMain.handle('connections:remove', (_evt, id: unknown) => removeConnection(id));
 // Pro Capabilities: the user's own role bundles, validated (shared/roleBundles).
@@ -4170,6 +4201,7 @@ function finishTeardown(): void {
   try { stopEphemeralWorkerWatcher(); } catch (e) { console.error('[quit] stopWorkerWatcher:', e); }
   try { integrationBroker.stop(); } catch (e) { console.error('[quit] broker.stop:', e); }
   try { mcpGateway.stop(); } catch (e) { console.error('[quit] mcpGateway.stop:', e); }
+  try { void factories.closeAll(); } catch (e) { console.error('[quit] factories.closeAll:', e); }
   try { stopTeam(); } catch (e) { console.error('[quit] stopTeam:', e); }
   try { hive.stopRouter(); } catch (e) { console.error('[quit] stopRouter:', e); }
   try { hookServer.stop(); } catch (e) { console.error('[quit] hookServer.stop:', e); }

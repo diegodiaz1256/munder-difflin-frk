@@ -127,6 +127,9 @@ export interface HarnessConfig {
   /** Extra Connections beyond each service's first (two GitHub accounts…):
    *  id `<service>--<slug>`, the service's catalog id, and a name. */
   connectionInstances?: Array<{ id: string; service: string; label: string }>;
+  /** Factories this office watches or sends work to (FACTORY-MCP.md). Tokens
+   *  are in the encrypted store as factory:<id>, never here. */
+  factories?: Array<{ id: string; name: string; url: string; addedAt: number }>;
   /** The user's own role bundles (Pro Capabilities), after the built-ins.
    *  Saved through config:saveRoleBundles, which validates them. */
   customRoleBundles?: Array<{ id: string; label: string; icon: string; servers: string[] }>;

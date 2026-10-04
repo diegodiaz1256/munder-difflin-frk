@@ -1,3 +1,4 @@
+- **Factories:** watch a software factory work, send it tasks.
 - **New name: Scranton Branch.** Your data comes along.
 - **Team:** post-quantum, over MQTT or ntfy.
 - **Server edition:** offices on Ubuntu or Docker.
