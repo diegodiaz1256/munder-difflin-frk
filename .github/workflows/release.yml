@@ -111,7 +111,17 @@ jobs:
       - name: Package installers
         # GH_TOKEN lets electron-builder skip its own publish; we upload via the
         # release step below for full control over the asset set.
-        run: npx electron-builder ${{ matrix.args }} --publish never
+        shell: bash
+        run: |
+          # An EMPTY CSC_LINK is not "no certificate" to electron-builder: it
+          # resolves '' to the project folder and fails with "<repo> not a file"
+          # (this fork has no Apple secrets, so every expression below is '').
+          # Drop the empty ones and skip identity discovery: unsigned build.
+          for v in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!v}" ]; then unset "$v"; fi
+          done
+          if [ -z "${CSC_LINK:-}" ]; then export CSC_IDENTITY_AUTO_DISCOVERY=false; fi
+          npx electron-builder ${{ matrix.args }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # macOS code signing + notarization — MUST be macOS-only. CSC_LINK is the

@@ -5,6 +5,9 @@ on:
     branches: [main, 'release/**']
   pull_request:
     branches: [main, 'release/**']
+  # Manual runs: a fork's automatic triggers stay paused until its owner enables
+  # workflows in the Actions tab, and a run is sometimes wanted on demand anyway.
+  workflow_dispatch:
 
 jobs:
   typecheck:
