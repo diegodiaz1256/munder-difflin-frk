@@ -1311,6 +1311,9 @@ const api = {
     ipcRenderer.invoke('integrations:list'),
   // Pro → Connections (keyed MCP servers). WRITE-ONLY like the integrations:
   // `connectionsList` reports only whether each field is stored.
+  /** Save the user's own role bundles; resolves to what was kept after validation. */
+  saveRoleBundles: (bundles: Array<{ id?: string; label: string; icon: string; servers: string[] }>): Promise<Array<{ id: string; label: string; icon: string; servers: string[]; custom?: boolean }>> =>
+    ipcRenderer.invoke('config:saveRoleBundles', bundles),
   connectionsList: (): Promise<ConnectionStatusView[]> =>
     ipcRenderer.invoke('connections:list'),
   connectionsSetSecret: (id: string, env: string, value: string): Promise<{ ok: boolean; error?: string }> =>
