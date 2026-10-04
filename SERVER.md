@@ -28,6 +28,7 @@ Then edit `/etc/munder-difflin/server.env`:
 | `MD_NAME` | its name on Team |
 | `MD_TEAM_JOIN` | an invite from your desktop (Pro → Team → Invite). Used once, then remembered |
 | `MD_MAX_WORKERS` | how many workers may run at once |
+| `MD_RELAY_TOKEN` | `<relay>=<token>` for a relay that needs one (see below) |
 | `ANTHROPIC_API_KEY` | optional: agents use it instead of a login |
 
 and `sudo systemctl restart munder-difflin`. Logs: `journalctl -u munder-difflin -f`.
@@ -74,7 +75,11 @@ counts. Listening costs nothing (one streaming connection).
 
 Fine for conversation between offices. For more, run your own relay (one small
 container: `docker run -p 80:80 binwiederhier/ntfy serve`) and set it as the
-team's relay in Pro → Team.
+team's relay in Pro → Team. A relay that needs an access token (ntfy with
+access control, or a paid ntfy.sh plan) takes it in the team's Edit form on a
+desktop, and in `MD_RELAY_TOKEN=https://relay.example.com=tk_…` (comma-separated
+for several) on a server. Tokens are kept in the encrypted store, sent only to
+their relay, and never reach agents.
 
 ## Not on a server
 

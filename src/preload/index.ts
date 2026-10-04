@@ -32,7 +32,8 @@ export type TeamModeView = 'strict' | 'communication-only' | 'allow-all';
 export interface TeamStatusView {
   enabled: boolean;
   me: { id: string; name: string; relay: string } | null;
-  teams: Array<{ id: string; name: string; relay: string; level: TeamLevelView; mode: TeamModeView }>;
+  /** relayAuth: an access token is stored for the team's relay (never the token). */
+  teams: Array<{ id: string; name: string; relay: string; level: TeamLevelView; mode: TeamModeView; relayAuth?: boolean }>;
   /** level/mode are one-to-one overrides; absent = the team default. */
   peers: Array<{ id: string; name: string; confirmed: boolean; addedAt: number; teamId: string; level?: TeamLevelView; mode?: TeamModeView }>;
 }
@@ -1359,6 +1360,7 @@ const api = {
   teamRemoveTeam: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('team:removeTeam', id),
   teamSetMember: (id: string, patch: { level?: TeamLevelView | null; mode?: TeamModeView | null }): Promise<{ ok: boolean }> => ipcRenderer.invoke('team:setMember', id, patch),
   teamJoin: (code: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('team:join', code),
+  teamSetRelayToken: (arg: { relay: string; token: string }): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('team:setRelayToken', arg),
   teamRemovePeer: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('team:removePeer', id),
   teamSend: (arg: { to: string; subject?: string; body: string }): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('team:send', arg),
   teamLog: (): Promise<TeamLogView[]> => ipcRenderer.invoke('team:log'),

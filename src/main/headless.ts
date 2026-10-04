@@ -35,6 +35,14 @@ function argValue(name: string): string | undefined {
   return flagValue(name) ?? (env && env.trim() ? env.trim() : undefined);
 }
 
+/** Read a secret from the environment and remove it, so no child (agents
+ *  inherit this process's environment) ever sees it. */
+function takeEnv(name: string): string | undefined {
+  const v = process.env[name];
+  delete process.env[name];
+  return v && v.trim() ? v.trim() : undefined;
+}
+
 function flagValue(name: string): string | undefined {
   const argv = process.argv;
   const eq = argv.find((a) => a.startsWith(`--${name}=`));
@@ -54,7 +62,8 @@ export const HEADLESS_SETUP = HEADLESS
       office: argValue('office') ? resolve(argValue('office')!) : undefined,
       name: argValue('name'),
       teamJoin: argValue('team-join'),
-      maxWorkers: Number(argValue('max-workers')) || undefined
+      maxWorkers: Number(argValue('max-workers')) || undefined,
+      relayTokens: takeEnv('MD_RELAY_TOKEN')?.split(',').map((s) => s.trim()).filter(Boolean)
     }
   : null;
 
