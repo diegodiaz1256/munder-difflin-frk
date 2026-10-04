@@ -823,6 +823,34 @@ export class PtyManager {
     return s ? Date.now() - s.lastOutputAt : undefined;
   }
 
+  /** Quit, step one: ask the matching programs to exit on their own, and wait
+   *  (at most `timeoutMs`) for them to do it. Returns how many did.
+   *
+   *  Why bother when killAll() follows anyway: a CLI that is killed outright
+   *  never says goodbye to its servers. Claude Code's Remote Control session in
+   *  particular stays listed in the Claude app (as Michael, still "there") after
+   *  its process is gone. Sent its own exit keys it closes that session itself.
+   *  Natural-exit teardown is suppressed exactly as in killAll(): this is the
+   *  quit, not a per-agent lifecycle event. */
+  async exitGracefully(
+    match: (s: { id: string; command: string }) => boolean,
+    keys: string[],
+    timeoutMs: number
+  ): Promise<number> {
+    this.exitHandler = null;
+    const targets = [...this.sessions.values()].filter((s) => match({ id: s.id, command: s.command }));
+    if (targets.length === 0) return 0;
+    const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+    for (const key of keys) {
+      for (const s of targets) { if (this.sessions.get(s.id) === s) { try { s.proc.write(key); } catch { /* exiting */ } } }
+      await sleep(300);
+    }
+    const alive = () => targets.filter((s) => this.sessions.get(s.id) === s).length;
+    const deadline = Date.now() + timeoutMs;
+    while (alive() > 0 && Date.now() < deadline) await sleep(100);
+    return targets.length - alive();
+  }
+
   /** Bulk-kill every PTY for app quit / reset. This is wholesale shutdown, not
    *  individual agent lifecycle, so it suppresses the natural-exit teardown —
    *  we don't want to archive every agent or fire a storm of `git worktree
