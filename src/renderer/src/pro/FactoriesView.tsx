@@ -208,10 +208,17 @@ function FactoryFloor({ factory, onBack, onChanged }: { factory: FactoryView; on
   // Floor and events, every 3 s (the profile's fallback rate).
   useEffect(() => {
     let alive = true;
+    // A factory may rate-limit (429): wait a while before asking again.
+    let quietUntil = 0;
     const tick = async () => {
+      if (Date.now() < quietUntil) return;
       const f = await window.cth.factoriesFloor(factory.id);
       if (!alive) return;
-      if (!f.ok) { setError(f.error ?? 'The factory did not answer.'); return; }
+      if (!f.ok) {
+        if (/429|too many|rate/i.test(f.error ?? '')) { quietUntil = Date.now() + 30_000; setError('The factory asked us to slow down; trying again in 30 s.'); return; }
+        setError(f.error ?? 'The factory did not answer.');
+        return;
+      }
       setError(null);
       if (f.floor) setFloor(f.floor); else setNoFloor(true);
       const e = await window.cth.factoriesEvents(factory.id, cursor.current || '0');
