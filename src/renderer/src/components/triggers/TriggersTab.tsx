@@ -55,7 +55,7 @@ export function TriggersTab() {
         <WebhooksSection onSummary={setWebhooksSummary} />
       </TriggerCard>
 
-      {/* Teammates' offices live in Pro → Team now (shared/fork.ts). */}
+      {/* Teammates' offices live in Manager → Team now (shared/fork.ts). */}
       {LEGACY_ORG_TRIGGER && (
         <TriggerCard
           title={t('triggersTab.organisation')}

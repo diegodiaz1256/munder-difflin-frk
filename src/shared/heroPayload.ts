@@ -46,8 +46,8 @@ export interface HeroPayload {
  *  fails, so the card is never empty and never waits on the network to render. */
 export const DEFAULT_HERO: HeroPayload = {
   plan: {
-    label: 'Local',
-    blurb: 'Every agent runs on your machine, in your folders, under your own keys. No seat limit, nothing metered.'
+    label: 'Open source',
+    blurb: 'A branch of Munder Difflin with its own floor plan: offices that talk to each other (post-quantum, over any relay), a server edition, and keys agents never see.'
   },
   sponsor: null,
   notice: null

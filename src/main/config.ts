@@ -223,7 +223,7 @@ export interface HarnessConfig {
    *  A grant replaces the default set for that agent on its next (re)spawn;
    *  write/secret servers in it still need consent in `mcpDefaults`. */
   agentMcpGrants?: Record<string, string[]>;
-  /** Pro → Connections "Choose agents": a keyed MCP server listed here reaches
+  /** Manager → Connections "Choose agents": a keyed MCP server listed here reaches
    *  only these agent ids (on their next spawn). Absent → every agent. */
   connectionScopes?: Record<string, string[]>;
   /** Extra Connections beyond each service's first (two GitHub accounts…):

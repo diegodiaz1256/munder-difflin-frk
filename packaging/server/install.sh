@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Install (or upgrade) the Munder Difflin server on Ubuntu / Debian.
+# Install (or upgrade) the Scranton Branch server on Ubuntu / Debian.
 #
-#   sudo ./install.sh            from an unpacked munder-difflin-server tarball
+#   sudo ./install.sh            from an unpacked scranton-branch-server tarball
 #
-# Installs to /opt/munder-difflin, data in /var/lib/munder-difflin, settings in
-# /etc/munder-difflin, a systemd unit, and an `agent` user that agents run as.
+# Installs to /opt/scranton-branch, data in /var/lib/scranton-branch, settings in
+# /etc/scranton-branch, a systemd unit, and an `agent` user that agents run as.
 set -euo pipefail
 
 [ "$(id -u)" = 0 ] || { echo "run as root (sudo)"; exit 1; }
 here="$(cd "$(dirname "$0")" && pwd)"
-dest=/opt/munder-difflin
-etc=/etc/munder-difflin
+dest=/opt/scranton-branch
+etc=/etc/scranton-branch
 
 need() { command -v "$1" >/dev/null 2>&1; }
 if ! need node || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 20 ]; then
@@ -34,8 +34,8 @@ fi
 
 # Settings and the secret-store key (readable by root only; systemd hands it
 # to the service as a credential, never to agents).
-mkdir -p "$etc" /var/lib/munder-difflin
-chmod 700 /var/lib/munder-difflin
+mkdir -p "$etc" /var/lib/scranton-branch
+chmod 700 /var/lib/scranton-branch
 if [ ! -f "$etc/secret.key" ]; then
   (umask 077; head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$etc/secret.key"; echo >> "$etc/secret.key")
   echo "generated $etc/secret.key — back it up: stored Connection keys are unreadable without it"
@@ -55,10 +55,10 @@ mkdir -p "$office"
 chgrp office "$office" && chmod 2775 "$office"
 git config --system --get-all safe.directory | grep -qx '\*' || git config --system --add safe.directory '*'
 
-install -m 644 "$here/packaging/munder-difflin.service" /etc/systemd/system/munder-difflin.service
+install -m 644 "$here/packaging/scranton-branch.service" /etc/systemd/system/scranton-branch.service
 systemctl daemon-reload
-systemctl enable munder-difflin >/dev/null
-systemctl restart munder-difflin
+systemctl enable scranton-branch >/dev/null
+systemctl restart scranton-branch
 echo
-echo "running. logs: journalctl -u munder-difflin -f"
+echo "running. logs: journalctl -u scranton-branch -f"
 echo "agents need a login once:  sudo -u agent -H claude   (or ANTHROPIC_API_KEY in $etc/server.env)"

@@ -11,4 +11,4 @@ chown agent:office "$MD_AGENT_HOME"
 if [ -n "$MD_SECRET_KEY_FILE" ] && su agent -s /bin/sh -c "test -r '$MD_SECRET_KEY_FILE'" 2>/dev/null; then
   echo "WARNING: agents can read $MD_SECRET_KEY_FILE — run: chmod 600 secret.key (on the host)" >&2
 fi
-exec node /opt/munder-difflin/index.cjs "$@"
+exec node /opt/scranton-branch/index.cjs "$@"

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { APP_NAME, LAYOUT_LABELS } from '@shared/fork';
 import type { HarnessConfig } from '@/store/config';
 import { useStore } from '@/store/store';
 import { ProIcon, type ProIconName } from './ProIcon';
@@ -74,10 +75,13 @@ export function ProShell({ config }: { config: HarnessConfig }) {
 
   return (
     <div className="pro-root">
-      <nav className="pro-side" aria-label="Pro navigation">
+      <nav className="pro-side" aria-label="Manager navigation">
         <div className="pro-brand">
           <Avatar agent={god} />
-          <span>Munder Difflin</span>
+          <span style={{ display: 'flex', flexDirection: 'column', lineHeight: '15px' }}>
+            <span>{APP_NAME}</span>
+            <span className="pro-sub" style={{ fontSize: 10 }}>Munder Difflin</span>
+          </span>
         </div>
         {TOP.map((item) => (
           <button key={item.id} className="pro-nav" aria-current={section === item.id} onClick={() => go(item.id)}>
@@ -127,14 +131,14 @@ export function ProShell({ config }: { config: HarnessConfig }) {
   );
 }
 
-/** Classic / PRO switch for the title bar. */
+/** Floor / Manager switch for the title bar. */
 export function LayoutSwitch() {
   const layout = useProStore((s) => s.layout);
   const setLayout = useProStore((s) => s.setLayout);
   return (
     <div className="pro-switch cth-titlebar-nodrag" role="group" aria-label="Layout">
-      <button aria-pressed={layout === 'classic'} onClick={() => setLayout('classic')}>Classic</button>
-      <button aria-pressed={layout === 'pro'} onClick={() => setLayout('pro')}>PRO</button>
+      <button aria-pressed={layout === 'classic'} onClick={() => setLayout('classic')}>{LAYOUT_LABELS.classic}</button>
+      <button aria-pressed={layout === 'pro'} onClick={() => setLayout('pro')}>{LAYOUT_LABELS.pro}</button>
     </div>
   );
 }

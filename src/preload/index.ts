@@ -49,7 +49,7 @@ export interface AgentSpawnCard {
   character?: string; accent?: string;
 }
 export type IntegrationRecordView = Omit<IntegrationRecord, 'secretRef'> & { hasSecret: boolean };
-/** One keyed MCP server as Pro → Connections shows it (mirrors main/connections.ts). */
+/** One keyed MCP server as Manager → Connections shows it (mirrors main/connections.ts). */
 export interface ConnectionStatusView {
   id: string;
   service: string;
@@ -1329,7 +1329,7 @@ const api = {
   // feature-detection (camelCase ↔ colon-channel), so its real path activates as-is.
   integrationsList: (): Promise<IntegrationRecordView[]> =>
     ipcRenderer.invoke('integrations:list'),
-  // Pro → Connections (keyed MCP servers). WRITE-ONLY like the integrations:
+  // Manager → Connections (keyed MCP servers). WRITE-ONLY like the integrations:
   // `connectionsList` reports only whether each field is stored.
   /** Save the user's own role bundles; resolves to what was kept after validation. */
   saveRoleBundles: (bundles: Array<{ id?: string; label: string; icon: string; servers: string[] }>): Promise<Array<{ id: string; label: string; icon: string; servers: string[]; custom?: boolean }>> =>
