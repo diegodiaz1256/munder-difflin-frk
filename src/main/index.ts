@@ -71,6 +71,7 @@ import * as integrations from './integrations';
 import { applyMissionRequest, type MissionLike } from '../shared/missionRequests';
 import { cleanCustomBundles } from '../shared/roleBundles';
 import { Factories } from './factories';
+import { EnvVault, fingerprintOf } from './envVault';
 import { addConnection, connectionKeyStored, connectionLaunchEnv, instancesOf, listConnections, removeConnection, renameConnection, serviceOf, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
 import { McpGateway } from './mcpGateway';
 import { TeamNode, type TeamInbound } from './teamNode';
@@ -420,10 +421,61 @@ const mcpGateway = new McpGateway({
   }
 });
 
+// Environment & secrets (envVault.ts): agents use secrets, never see them.
+const envVault = new EnvVault({
+  readVars: () => readConfig().envVars ?? [],
+  writeVars: (v) => writeConfig({ envVars: v }),
+  readRunners: () => readConfig().runners ?? [],
+  writeRunners: (r) => writeConfig({ runners: r }),
+  getSecret: (ref) => integrations.getSecret(ref),
+  setSecret: (ref, v) => integrations.setSecret(ref, v),
+  deleteSecret: (ref) => integrations.deleteSecret(ref),
+  approve: async ({ runner, agentName, cwd, changed }) => {
+    const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    const opts = {
+      type: 'question' as const,
+      buttons: ['Run once', 'Always for this runner', 'Deny'],
+      defaultId: 0, cancelId: 2, noLink: true,
+      title: 'Run with secrets?',
+      message: `${agentName} wants to run "${runner.name}"`,
+      detail: `${runner.command}\n\nIn: ${cwd}\nWith secrets: ${runner.secrets.join(', ') || 'none'}${changed ? '\n\nFiles in this worktree changed since you last allowed it: the command runs code the agent may have edited.' : ''}\n\nThe agent only gets the output, with every secret masked.`
+    };
+    const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
+    if (win && !win.isDestroyed()) win.webContents.focus();
+    return response === 0 ? 'once' : response === 1 ? 'always' : 'deny';
+  },
+  log: (m) => console.log('[env]', m)
+});
+
 const integrationBroker = new IntegrationBroker({
   getRecord: integrations.getRecord,
-  getSecret: integrations.getSecret
+  getSecret: integrations.getSecret,
+  runners: {
+    describe: () => envVault.describeRunners(),
+    run: async (workerId, runnerId) => {
+      // The worktree is the one the app started this agent in — never a path
+      // the agent names.
+      const pty = ptyManager.list().find((p) => p.id === workerId);
+      if (!pty) return { ok: false, error: 'unknown agent' };
+      const agentId = ptyToAgent.get(workerId);
+      const name = (agentId && hive.registry().agents?.[agentId]?.name) || agentId || workerId;
+      const head = await gitRun(pty.cwd, ['rev-parse', 'HEAD']);
+      const status = await gitRun(pty.cwd, ['status', '--porcelain']);
+      return envVault.run(runnerId, { agentName: name, cwd: pty.cwd, fingerprint: fingerprintOf(head, status) });
+    }
+  }
 });
+
+/** Best-effort git output for runner fingerprints ('' outside a repo). */
+function gitRun(cwd: string, args: string[]): Promise<string> {
+  return new Promise((resolve) => {
+    const p = spawn('git', args, { cwd, windowsHide: true });
+    let out = '';
+    p.stdout.on('data', (d) => { out += d; });
+    p.on('error', () => resolve(''));
+    p.on('close', () => resolve(out.trim()));
+  });
+}
 
 /** BYOK backend model-providers whose API keys the non-Claude CLI engines
  *  (OpenCode/Crush/pi/qwen) read from standard env vars. Keys are stored
@@ -3082,10 +3134,14 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     // unless the caller already granted one (the worker path does), plus the list
     // for its prompt. Before this only temps got a token, and no agent was ever
     // told how to use it.
+    // Environment: PLAIN variables only (envVault.plainEnvFor); a value the
+    // agent's own spawn already sets wins. Secrets never go in here.
+    opts.env = { ...envVault.plainEnvFor(opts.hive.id), ...(opts.env ?? {}) };
     let brokerIntegrations: Array<{ id: string; label: string }> = [];
+    const runnersForAgent = envVault.describeRunners();
     if (integrationBroker.running()) {
       const ids = integrations.enabledIds();
-      if (ids.length) {
+      if (ids.length || runnersForAgent.length) {
         if (!opts.env?.MD_BROKER_TOKEN) {
           const token = integrationBroker.grant(opts.id, ids);
           opts.env = { ...(opts.env ?? {}), MD_BROKER_URL: integrationBroker.url(), MD_BROKER_TOKEN: token };
@@ -3106,6 +3162,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           // Windows floor. Empty when the KG is off (the line isn't emitted then).
           kgCliPath: knowledge.env().KG_CLI,
           integrations: brokerIntegrations,
+          runners: runnersForAgent,
           theme: readConfig().terminalTheme ?? 'light',
           // W3 — default-MCP consent state + the bundled skills source dir.
           mcpDefaults: readConfig().mcpDefaults,
@@ -3584,6 +3641,21 @@ const factories = new Factories({
   log: (m) => console.log('[factories]', m)
 });
 const factoryError = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) });
+// Environment & secrets: values go in, never come out (envVault.ts).
+ipcMain.handle('env:list', () => ({ vars: envVault.listVars(), runners: envVault.listRunners() }));
+ipcMain.handle('env:setVar', (_evt, v: unknown, secret: unknown) => envVault.setVar(v, secret));
+ipcMain.handle('env:removeVar', (_evt, name: unknown) => envVault.removeVar(name));
+ipcMain.handle('env:setRunner', (_evt, r: unknown) => envVault.setRunner(r));
+ipcMain.handle('env:removeRunner', (_evt, id: unknown) => envVault.removeRunner(id));
+ipcMain.handle('env:opStatus', () => new Promise((resolve) => {
+  // Is the 1Password CLI installed? (Signing in happens through the desktop app.)
+  const p = spawn('op', ['--version'], { windowsHide: true });
+  let out = '';
+  p.stdout.on('data', (d) => { out += d; });
+  p.on('error', () => resolve({ installed: false }));
+  p.on('close', (code) => resolve({ installed: code === 0, version: out.trim() || undefined }));
+}));
+
 ipcMain.handle('factories:list', () => factories.list());
 ipcMain.handle('factories:add', (_evt, arg: unknown) => {
   const a = (arg ?? {}) as { name?: unknown; url?: unknown; token?: unknown };
