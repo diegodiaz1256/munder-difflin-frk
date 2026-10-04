@@ -8,7 +8,8 @@
  *   npm run demo          seed .demo/ if it is missing, then launch
  *   npm run demo:reset    re-seed .demo/ from scratch, then launch
  *
- * Pass --no-launch to only seed.
+ * Pass --no-launch to only seed. Anything else is handed to electron-vite, e.g.
+ *   npm run demo -- --remoteDebuggingPort 9222
  */
 const fs = require('node:fs');
 const path = require('node:path');
@@ -29,7 +30,8 @@ if (reset || !fs.existsSync(path.join(home, 'userData', 'config.json'))) {
 if (launch) {
   // electron-vite's package `exports` hide its bin, so resolve it by path.
   const cli = path.join(path.dirname(require.resolve('electron-vite/package.json')), 'bin', 'electron-vite.js');
-  const child = spawn(process.execPath, [cli, 'dev'], {
+  const passThrough = process.argv.slice(2).filter((a) => a !== '--reset' && a !== '--no-launch');
+  const child = spawn(process.execPath, [cli, 'dev', ...passThrough], {
     cwd: path.resolve(__dirname, '..'),
     stdio: 'inherit',
     env: { ...process.env, MD_DEMO_HOME: home }
