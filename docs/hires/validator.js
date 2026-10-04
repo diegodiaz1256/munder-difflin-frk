@@ -15,7 +15,7 @@ window.HireSpec = (function () {
   const BUNDLED_SKILL_IDS = new Set(['md-hive-sync', 'md-fetch-summarize', 'md-audit']);
   const MCP_SERVER_IDS = new Set([
     'sequential-thinking', 'time', 'fetch', 'context7', 'filesystem', 'git',
-    'github-token', 'db', 'email-calendar', 'search-with-key'
+    'github-token', 'db', 'search-with-key', 'notion', 'sentry'
   ]);
   // model flows onto the spawn command line — reject shell metacharacters
   // (mirror of MODEL_RE in the app's src/shared/hire.ts).

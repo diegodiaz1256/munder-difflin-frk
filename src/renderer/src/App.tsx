@@ -31,6 +31,8 @@ import { FullscreenTerminal } from '@/components/FullscreenTerminal';
 import { TaskDetailOverlay } from '@/components/TaskDetailOverlay';
 import { IdePanel } from '@/ide/IdePanel';
 import { useHoldOptionToTalk } from '@/freeflow/holdOption';
+import { ProShell, LayoutSwitch } from '@/pro/ProShell';
+import { useProStore } from '@/pro/proStore';
 import brandLogo from '@brand/logo.png?url';
 
 // Injected at build time from package.json (see electron.vite.config.ts).
@@ -57,6 +59,7 @@ export function App() {
   const setSidebarWidth = useStore(s => s.setSidebarWidth);
   const ideOpen = useStore(s => s.ideOpen);
   const setIdeOpen = useStore(s => s.setIdeOpen);
+  const layout = useProStore(s => s.layout);
 
   const [config, setConfig] = useState<HarnessConfig | null>(null);
   // Whether the user has passed the launch-time hive picker this session. Starts
@@ -191,7 +194,17 @@ export function App() {
   // off until the user opens a hive in the launch picker (passing null no-ops the
   // hook) so Michael doesn't boot against the current home while the user may be
   // about to switch to a different one.
-  useHive(hiveOpened ? config : null);
+  // A seeded demo office has nothing to pick between — open it directly.
+  const officeOpen = hiveOpened || !!config?.demoMode;
+  useHive(officeOpen ? config : null);
+  // The demo exists to show the Pro screens, so its first launch opens there.
+  // Only while no layout was ever chosen: switching to Classic sticks.
+  useEffect(() => {
+    if (!config?.demoMode) return;
+    try {
+      if (window.localStorage.getItem('cth.layout') === null) useProStore.getState().setLayout('pro');
+    } catch { /* storage unavailable — stay on the default */ }
+  }, [config?.demoMode]);
 
   // Pre-warm a persistent terminal for every live agent so its output is
   // buffered from spawn. Switching agents then re-attaches an already-rendered
@@ -264,7 +277,7 @@ export function App() {
   // Launch-time hive picker: on reopen, let the user open their current hive,
   // switch to a recent one, or open/create another. Skipped right after onboarding
   // and right after a switch-relaunch (see hiveOpened init).
-  if (!hiveOpened) {
+  if (!officeOpen) {
     return <HivePicker config={config} onOpenCurrent={() => setHiveOpened(true)} />;
   }
 
@@ -344,6 +357,7 @@ export function App() {
         >
           {appThemeNow === 'dark' ? '☀' : '☾'}
         </button>
+        <LayoutSwitch />
         {/* v0.3.4: the IDE button moved to agent level — every agent's header
             (sidebar detail, god Command Center, fullscreen) carries it. */}
         <button
@@ -392,6 +406,7 @@ export function App() {
 
       </div>
 
+      {layout === 'pro' ? <ProShell config={config} /> : <>
       <div style={{
         flex: 1, minHeight: 0,
         display: 'flex',
@@ -478,6 +493,7 @@ export function App() {
       </div>
 
       <AgentStrip config={config} />
+      </>}
 
       {addAgentOpen && (
         <AddAgentModal

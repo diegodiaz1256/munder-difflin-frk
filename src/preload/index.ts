@@ -26,7 +26,25 @@ export type {
 /** Renderer-visible integration record: the secretRef handle is redacted to a
  *  presence boolean. Matches main `integrations.listRecordsRedacted()` — the
  *  write-only secret contract (spec §2): a secret value is NEVER returned over IPC. */
+/** A main-initiated agent's floor card (hive:agentSpawned / workers:cards). */
+export interface AgentSpawnCard {
+  id: string; name: string; provider?: string; cwd: string;
+  command?: string; role?: string; worktreePath?: string;
+  character?: string; accent?: string;
+}
 export type IntegrationRecordView = Omit<IntegrationRecord, 'secretRef'> & { hasSecret: boolean };
+/** One keyed MCP server as Pro → Connections shows it (mirrors main/connections.ts). */
+export interface ConnectionStatusView {
+  id: string;
+  label: string;
+  description: string;
+  docsUrl?: string;
+  fields: Array<{ env: string; label: string; help: string; placeholder?: string; optional?: boolean; stored: boolean }>;
+  enabled: boolean;
+  ready: boolean;
+  scope: string[] | null;
+  testable: boolean;
+}
 
 // Injected at build time from package.json (see electron.vite.config.ts).
 declare const __APP_VERSION__: string;
@@ -314,6 +332,8 @@ export interface HarnessConfig {
   costCapUsd?: number;
   costCapTokens?: number;
   agentTokenCaps?: Record<string, number>;
+  /** Per-agent MCP grants (Pro Capabilities): agent id → catalog ids. */
+  agentMcpGrants?: Record<string, string[]>;
   autoDeliveryPausedAgents?: string[];
   maxTurns?: number;
   circuitBreaker?: CircuitBreakerConfig;
@@ -660,6 +680,10 @@ const api = {
   updateConfig: (patch: Partial<HarnessConfig>): Promise<HarnessConfig> =>
     ipcRenderer.invoke('config:update', patch),
   /** Set or clear one per-agent token ceiling against main's latest config. */
+  /** Grant an agent exactly these MCP catalog servers (undefined clears the
+   *  grant). Takes effect on the agent's next restart. */
+  setAgentMcpGrant: (agentId: string, servers?: string[]): Promise<HarnessConfig> =>
+    ipcRenderer.invoke('config:setAgentMcpGrant', agentId, servers),
   setAgentTokenCap: (agentId: string, tokenCap?: number): Promise<HarnessConfig> =>
     ipcRenderer.invoke('config:setAgentTokenCap', agentId, tokenCap),
   ensureHarnessHome: (path: string): Promise<{ ok: boolean; error?: string }> =>
@@ -761,6 +785,8 @@ const api = {
     ipcRenderer.invoke('hive:setAgentHold', id, hold),
   hiveBoard: (): Promise<string> => ipcRenderer.invoke('hive:board'),
   hiveTasks: (): Promise<unknown> => ipcRenderer.invoke('hive:tasks'),
+  /** Stable ticket keys for the board: prefix + task id → number. */
+  hiveTaskKeys: (): Promise<{ prefix: string; keys: Record<string, number> }> => ipcRenderer.invoke('hive:taskKeys'),
   hiveLog: (n?: number): Promise<unknown[]> => ipcRenderer.invoke('hive:log', n ?? 200),
   hiveMemory: (id: string): Promise<string> => ipcRenderer.invoke('hive:memory', id),
   hiveInbox: (id: string): Promise<HiveMessage[]> => ipcRenderer.invoke('hive:inbox', id),
@@ -781,6 +807,9 @@ const api = {
   /** Manually stop a live ephemeral worker (safety-gated teardown; work preserved). */
   stopWorker: (workerId: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('workers:stop', workerId),
+  /** Hire a temp: one ephemeral worker for one job, started by the human. */
+  hireTemp: (req: { objective: string; cwd: string; name?: string }): Promise<{ ok: boolean; workerId?: string; error?: string }> =>
+    ipcRenderer.invoke('workers:hire', req),
 
   // ─── Semantic memory (MemPalace CLI) ─────────────────────────────────────
   memoryStatus: (): Promise<MemoryStatus> => ipcRenderer.invoke('hive:memoryStatus'),
@@ -894,12 +923,12 @@ const api = {
   },
   /** A MAIN-initiated agent spawn (e.g. a voice hire via rt-5) — the renderer adds
    *  the floor card from this descriptor since it didn't initiate the hire itself. */
+  /** Live workers' floor cards (the hive:agentSpawned payloads), for a renderer
+   *  that mounted after they spawned. */
+  workerCards: (): Promise<AgentSpawnCard[]> =>
+    ipcRenderer.invoke('workers:cards'),
   onHiveAgentSpawned: (
-    cb: (rec: {
-      id: string; name: string; provider?: string; cwd: string;
-      command?: string; role?: string; worktreePath?: string;
-      character?: string; accent?: string;
-    }) => void
+    cb: (rec: AgentSpawnCard) => void
   ): (() => void) => {
     const listener = (_e: IpcRendererEvent, payload: Parameters<typeof cb>[0]) => cb(payload);
     ipcRenderer.on('hive:agentSpawned', listener);
@@ -1280,6 +1309,21 @@ const api = {
   // feature-detection (camelCase ↔ colon-channel), so its real path activates as-is.
   integrationsList: (): Promise<IntegrationRecordView[]> =>
     ipcRenderer.invoke('integrations:list'),
+  // Pro → Connections (keyed MCP servers). WRITE-ONLY like the integrations:
+  // `connectionsList` reports only whether each field is stored.
+  /** Save the user's own role bundles; resolves to what was kept after validation. */
+  saveRoleBundles: (bundles: Array<{ id?: string; label: string; icon: string; servers: string[] }>): Promise<Array<{ id: string; label: string; icon: string; servers: string[]; custom?: boolean }>> =>
+    ipcRenderer.invoke('config:saveRoleBundles', bundles),
+  connectionsList: (): Promise<ConnectionStatusView[]> =>
+    ipcRenderer.invoke('connections:list'),
+  connectionsSetSecret: (id: string, env: string, value: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('connections:setSecret', id, env, value),
+  connectionsSetEnabled: (id: string, on: boolean): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('connections:setEnabled', id, on),
+  connectionsSetScope: (id: string, agentIds: string[] | null): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('connections:setScope', id, agentIds),
+  connectionsTest: (id: string): Promise<{ ok: boolean; message: string }> =>
+    ipcRenderer.invoke('connections:test', id),
   integrationsTemplates: (): Promise<IntegrationTemplate[]> =>
     ipcRenderer.invoke('integrations:templates'),
   integrationsUpsert: (record: IntegrationRecord): Promise<{ ok: true; record: IntegrationRecord } | { ok: false; error: string }> =>

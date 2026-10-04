@@ -276,6 +276,75 @@ test('POSIX Gemini and Antigravity hooks survive a hive path containing spaces',
   assert.equal(received.length, 2, 'both provider hook shims must reach HIVE_SOCK');
 });
 
+test('Windows: Codex, Gemini and Antigravity hooks survive a hive path containing spaces', { skip: POSIX, timeout: 30_000 }, async (t) => {
+  // These CLIs run hook commands through cmd.exe and cannot carry quotes (#350),
+  // so a hive under "…\harness space\…" used to split at the space and every hook
+  // died. The command must now carry no path at all: a wrapper on PATH.
+  const { home, harness: base } = isolatedHomes(t);
+  const harness = `${base} space`;
+  t.after(() => fs.rmSync(harness, { recursive: true, force: true }));
+  const hive = new HiveManager(() => harness);
+  hive.ensureHive();
+  const agentDir = path.join(harness, 'hive', 'agents', 'a1');
+  hive.installAgyHooks();
+  hive.installGeminiHooks(agentDir);
+  hive.installCodexHooks(agentDir, 'a1');
+
+  const providerCommands = [
+    ['antigravity', hookCommandsUnder(home).find((c) => c.includes('agy-hook.cjs')) ?? findWrapperCommand(home, 'md-agy-hook')],
+    ['gemini', findWrapperCommand(harness, 'md-gemini-hook-a1')],
+    ['codex', findWrapperCommand(harness, 'md-codex-hook')]
+  ];
+
+  const sock = hive.sockPath();
+  const received = [];
+  const server = net.createServer((conn) => {
+    let buf = '';
+    conn.on('error', () => { /* shim may hang up first */ });
+    conn.on('data', (d) => { buf += d; });
+    conn.on('close', () => { if (buf) received.push(buf); });
+    conn.write(JSON.stringify({ ok: true }) + '\n', () => conn.end());
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(sock, resolve); });
+  t.after(() => server.close());
+
+  // PATH the way pty.spawn builds it for a hive agent: the system dirs (no node
+  // there) plus the hive's runtime dir appended.
+  const runtime = path.join(harness, 'hive', 'bin', 'runtime');
+  const env = { ...process.env, PATH: `${process.env.SystemRoot}\\System32;${runtime}`, AGENT_ID: 'a1', HIVE_SOCK: sock, USERPROFILE: home };
+  const viaCmd = (command) => new Promise((resolve) => {
+    const child = spawn('cmd.exe', ['/d', '/c', command], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.stdin.on('error', () => {});
+    child.stdin.end(JSON.stringify({ hook_event_name: 'Stop', session_id: 's1' }));
+    child.on('close', (code) => resolve({ code, stderr }));
+  });
+
+  const legacy = await viaCmd(`${launcherIn(harness)} ${path.join(harness, 'hive', 'bin', 'cth-hook.cjs')}`);
+  assert.notEqual(legacy.code, 0, 'negative control: the old unquoted command splits at the space');
+
+  for (const [provider, command] of providerCommands) {
+    assert.ok(command, `${provider} installer produced no command`);
+    assert.ok(!/["\s].*[\\/]/.test(command) && !command.includes('"'), `${provider} command still carries a path or quotes: ${command}`);
+    const result = await viaCmd(command);
+    assert.equal(result.code, 0, `${provider} command failed: ${command}\n${result.stderr}`);
+  }
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  assert.equal(received.length, 3, 'every provider hook must reach HIVE_SOCK');
+});
+
+/** The first hook command in any config under `dir` that invokes the named wrapper. */
+function findWrapperCommand(dir, name) {
+  for (const file of walk(dir)) {
+    let text;
+    try { text = fs.readFileSync(file, 'utf8'); } catch { continue; }
+    const m = text.match(new RegExp(`"command"\\s*:\\s*"(${name}[^"]*)"|^command\\s*=\\s*"(${name}[^"]*)"`, 'm'));
+    if (m) return m[1] ?? m[2];
+  }
+  return undefined;
+}
+
 test('Codex rollouts remain isolated and are visible under the standard scan roots', (t) => {
   const { home, harness } = isolatedHomes(t);
   const hive = new HiveManager(() => harness);

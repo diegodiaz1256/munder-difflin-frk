@@ -1,3 +1,5 @@
+// Demo mode redirects userData — must load before anything else (see demo.ts).
+import { DEMO_HOME } from './demo';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, powerSaveBlocker, screen, shell, Notification } from 'electron';
 import { spawn } from 'node:child_process';
 import {
@@ -14,7 +16,7 @@ import { resolveCommand as resolveCliCommand, isSafeCommandName } from './shellE
 import { initAutoUpdater, abortPendingRestart } from './updater';
 import { RealtimeFloorWatcher } from './realtimeFloorWatcher';
 import {
-  readConfig, writeConfig, setAgentTokenCap, resetConfig, onConfigWritten, ensureHarnessHome, ensureClaudePermissionsAccepted,
+  readConfig, writeConfig, setAgentTokenCap, setAgentMcpGrant, resetConfig, onConfigWritten, ensureHarnessHome, ensureClaudePermissionsAccepted,
   modelForRole, OPS_STANDUP_MISSION, HEARTBEAT_MISSION, COMPACT_MAINTENANCE_MISSION, type HarnessConfig, type ScheduledMission
 } from './config';
 import { listDir, readFileText, readFileBinary, writeFileText, statAbs, expandTilde } from './fs';
@@ -60,6 +62,9 @@ import { analytics, isRendererMessageSurface } from './analytics';
 import type { SpawnFailReason } from './analytics';
 import { IntegrationBroker } from './integrationBroker';
 import * as integrations from './integrations';
+import { applyMissionRequest, type MissionLike } from '../shared/missionRequests';
+import { cleanCustomBundles } from '../shared/roleBundles';
+import { connectionSecret, listConnections, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
 import { buildWorkerLaunch } from './workerLaunch';
@@ -377,6 +382,10 @@ interface WorkerRec {
   /** Per-worker TOTAL-token cap from the spawn-request (overrides the config
    *  default). 0/undefined = no per-request cap. P4 plumbing — unlimited today. */
   tokenCap?: number;
+  /** The floor card broadcast at spawn (hive:agentSpawned). Kept so a renderer
+   *  that was not listening yet (a request processed while the app boots) can
+   *  card the worker later through workers:cards. */
+  card?: Record<string, unknown>;
 }
 /** Live ephemeral workers by id. Populated by the spawn-request watcher; consulted
  *  by teardownPty so a finished/crashed/reaped worker's worktree is PRESERVED (not
@@ -479,15 +488,13 @@ function teardownPty(id: string): void {
     // Ephemeral workers get a SAFETY-GATED teardown: never auto-remove a worktree
     // that holds unintegrated work. This sits INSIDE teardownPty so it covers ALL
     // teardown routes — a worker that finished (controller kill), crashed, or was
-    // idle-reaped all land here. Normal agents keep the immediate force-remove.
+    // idle-reaped all land here. Normal agents get the same rule (below).
     const worker = liveWorkers.get(id);
     if (worker) {
       liveWorkers.delete(id);
       void finalizeWorkerWorktree(wtPath, origCwd, worker);
     } else {
-      void removeWorktree(origCwd, wtPath)
-        .then(r => { if (!r.ok) console.error('[worktree] removeWorktree failed:', r.error); })
-        .catch(e => console.error('[worktree] removeWorktree threw:', e));
+      void finalizeAgentWorktree(wtPath, origCwd, agentId ?? id);
     }
   }
   // A worker whose isolation failed (non-repo cwd) has no worktree to gate above —
@@ -518,6 +525,94 @@ function informGod(subject: string, body: string, slack?: { channel: string; thr
     hive.send({ to: 'god', act: 'inform', subject, body: body + slackLine }, 'ephemeral-worker');
   } catch (e) {
     console.error('[worker] informGod failed:', e);
+  }
+}
+
+/** Where the orchestrator drops Automations requests: its OWN folder, the
+ *  single-writer rule every agent already follows. */
+function scheduleRequestsDir(): string | null {
+  const root = hive.root();
+  if (!root) return null;
+  return join(root, 'agents', hive.registry().godId ?? 'god', 'schedule');
+}
+
+/** Mirror of the missions the orchestrator can read (and the ids it needs). */
+function writeMissionsMirror(missions: unknown[]): void {
+  const root = hive.root();
+  if (!root) return;
+  try {
+    writeFileSync(join(root, 'missions.json'), JSON.stringify({
+      note: 'Read-only mirror of Automations. To change them, write a request into your schedule/ folder (see your instructions).',
+      missions: missions.map((m) => {
+        const { lastFiredAt, ...rest } = m as Record<string, unknown>;
+        return { ...rest, lastFiredAt: typeof lastFiredAt === 'number' ? new Date(lastFiredAt).toISOString() : null };
+      })
+    }, null, 2), 'utf8');
+  } catch { /* best-effort */ }
+}
+
+/** Apply every pending Automations request, archive it, and tell the
+ *  orchestrator what happened (or why not). Pure logic in shared/missionRequests. */
+function processScheduleRequests(): void {
+  const dir = scheduleRequestsDir();
+  if (!dir || !existsSync(dir)) return;
+  let files: string[] = [];
+  try { files = readdirSync(dir).filter((f) => f.endsWith('.json')).sort(); } catch { return; }
+  for (const f of files) {
+    const fp = join(dir, f);
+    let result: { ok: boolean; message: string; missions?: MissionLike[] };
+    try {
+      const req = JSON.parse(readFileSync(fp, 'utf8')) as unknown;
+      const reg = hive.registry();
+      const agents = new Set<string>([reg.godId ?? 'god', ...Object.entries(reg.agents).filter(([, a]) => !a.archived).map(([id]) => id)]);
+      result = applyMissionRequest((readConfig().missions ?? []) as unknown as MissionLike[], req, agents);
+    } catch (e) {
+      result = { ok: false, message: `Could not read ${f}: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    if (result.ok && result.missions) {
+      writeConfig({ missions: result.missions as unknown as ScheduledMission[] });
+      syncMissions();
+      try { liveWebContents()?.send('missions:updated'); } catch { /* window gone */ }
+    }
+    try {
+      const sub = join(dir, result.ok ? '.done' : '.failed');
+      mkdirSync(sub, { recursive: true });
+      renameSync(fp, join(sub, f));
+    } catch { try { unlinkSync(fp); } catch { /* poison file must not loop */ } }
+    try { hive.appendLog({ kind: 'schedule_request', file: f, ok: result.ok, message: result.message }); } catch { /* best-effort */ }
+    try {
+      hive.send({ to: 'god', act: 'inform', subject: `[automations ${result.ok ? 'updated' : 'request refused'}] ${f}`, body: result.message }, 'scheduler');
+    } catch { /* best-effort */ }
+  }
+}
+
+/** Gated worktree teardown for a regular (non-worker) isolated agent. This used
+ *  to be an unconditional `git worktree remove --force`, so stopping or closing
+ *  an agent threw away whatever it had not committed or merged. Now: remove only
+ *  a worktree with nothing to lose; otherwise keep it, log it in the hive and
+ *  tell the user. Reopen re-enters a kept worktree (the restore path reuses an
+ *  existing one), so the agent resumes with its work intact. The base is the
+ *  parent repo's current branch, which the worktree was cut from. Fail-safe:
+ *  any uncertainty keeps it. */
+async function finalizeAgentWorktree(wtPath: string, origCwd: string, agentId: string): Promise<void> {
+  try {
+    const deps = await unlinkWorktreeDeps(origCwd, wtPath);
+    if (!deps.ok) console.error('[worktree] dependency unlink failed:', deps.error);
+    const br = await getBranch(origCwd);
+    const base = 'current' in br && br.current ? br.current : 'HEAD';
+    const work = await worktreeHasUnintegratedWork(wtPath, base);
+    if (work.keep) {
+      console.warn(`[worktree] KEEPING ${agentId}'s worktree with unsaved work: ${wtPath} (${work.detail})`);
+      try { hive.appendLog({ kind: 'worktree_kept', agentId, path: wtPath, branch: work.branch, base, dirty: work.dirty, ahead: work.ahead }); } catch { /* best-effort */ }
+      breakerToast('Kept an agent’s unsaved work',
+        `${agentId} stopped with ${work.dirty ? 'uncommitted changes' : `${work.ahead} unmerged commit(s)`} on ${work.branch}. `
+        + `Its worktree was kept at ${wtPath}; reopening the agent picks it up again.`);
+      return;
+    }
+    const r = await removeWorktree(origCwd, wtPath);
+    if (!r.ok) console.error('[worktree] removeWorktree failed:', r.error);
+  } catch (e) {
+    console.error('[worktree] finalizeAgentWorktree failed (worktree kept):', e);
   }
 }
 
@@ -2776,6 +2871,23 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // result so the renderer types it through the per-pty write-chain. (ondev-b)
   let seedPrompt: string | undefined;
   if (opts.hive && hive.enabled()) {
+    // REST integrations for EVERY hive agent, not only god-hired temps: a broker
+    // capability token keyed by this PTY id (teardownPty revokes it on exit),
+    // unless the caller already granted one (the worker path does), plus the list
+    // for its prompt. Before this only temps got a token, and no agent was ever
+    // told how to use it.
+    let brokerIntegrations: Array<{ id: string; label: string }> = [];
+    if (integrationBroker.running()) {
+      const ids = integrations.enabledIds();
+      if (ids.length) {
+        if (!opts.env?.MD_BROKER_TOKEN) {
+          const token = integrationBroker.grant(opts.id, ids);
+          opts.env = { ...(opts.env ?? {}), MD_BROKER_URL: integrationBroker.url(), MD_BROKER_TOKEN: token };
+        }
+        const labels = new Map(integrations.listRecords().map((r) => [r.id, r.label]));
+        brokerIntegrations = ids.map((id) => ({ id, label: labels.get(id) ?? id }));
+      }
+    }
     try {
       const inj = await hive.ensureAgent(
         { ...opts.hive, cwd: opts.cwd, provider },
@@ -2787,9 +2899,12 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           // expands to nothing, so every knowledge-graph instruction was dead on a
           // Windows floor. Empty when the KG is off (the line isn't emitted then).
           kgCliPath: knowledge.env().KG_CLI,
+          integrations: brokerIntegrations,
           theme: readConfig().terminalTheme ?? 'light',
           // W3 — default-MCP consent state + the bundled skills source dir.
           mcpDefaults: readConfig().mcpDefaults,
+          mcpGrant: readConfig().agentMcpGrants?.[opts.hive.id],
+          mcpScopes: readConfig().connectionScopes,
           skillsDir: skillsResourceDir(),
           // The shared palace is mutated by the agent's own `mempalace` calls, so
           // the OS sandbox must let it through (empty when memory is off).
@@ -3236,6 +3351,24 @@ ipcMain.handle('config:update', (_evt, patch: Partial<HarnessConfig>) => {
   }
   return next;
 });
+ipcMain.handle('config:setAgentMcpGrant', (_evt, agentId: unknown, servers: unknown) =>
+  setAgentMcpGrant(agentId, servers)
+);
+// Pro → Connections: keyed MCP servers. Values go one way into the encrypted
+// store; nothing here ever returns one (see connections.ts).
+hive.setMcpSecretResolver(connectionSecret);
+ipcMain.handle('connections:list', () => listConnections());
+// Pro Capabilities: the user's own role bundles, validated (shared/roleBundles).
+ipcMain.handle('config:saveRoleBundles', (_evt, bundles: unknown) => {
+  const clean = cleanCustomBundles(bundles);
+  writeConfig({ customRoleBundles: clean.map(({ custom: _c, ...b }) => b) });
+  return clean;
+});
+ipcMain.handle('connections:setSecret', (_evt, id: unknown, env: unknown, value: unknown) => setConnectionSecret(id, env, value));
+ipcMain.handle('connections:setEnabled', (_evt, id: unknown, on: unknown) => setConnectionEnabled(id, on));
+ipcMain.handle('connections:setScope', (_evt, id: unknown, agentIds: unknown) => setConnectionScope(id, agentIds));
+ipcMain.handle('connections:test', (_evt, id: unknown) => testConnection(id));
+ipcMain.handle('hive:taskKeys', () => hive.taskKeys());
 ipcMain.handle('config:setAgentTokenCap', (_evt, agentId: unknown, tokenCap: unknown) =>
   setAgentTokenCap(agentId, tokenCap)
 );
@@ -4787,25 +4920,26 @@ async function processSpawnRequest(filePath: string): Promise<void> {
   // RESTORED after an app quit revives through the renderer's normal spawn path
   // and never re-enters liveWorkers: ephemerality is a property of the hiring,
   // not of the card, so a restored worker is a regular agent (no reaping).
+  const card = {
+    id: workerId,
+    name: meta.name,
+    provider: raw.provider ?? 'claude',
+    cwd: res.worktreePath ?? cwd,
+    command: launch.command,
+    role: meta.role,
+    worktreePath: res.worktreePath,
+    character: typeof raw.character === 'string' ? raw.character : undefined,
+    accent: typeof raw.accent === 'string' ? raw.accent : undefined
+  };
   try {
-    liveWebContents()?.send('hive:agentSpawned', {
-      id: workerId,
-      name: meta.name,
-      provider: raw.provider ?? 'claude',
-      cwd: res.worktreePath ?? cwd,
-      command: launch.command,
-      role: meta.role,
-      worktreePath: res.worktreePath,
-      character: typeof raw.character === 'string' ? raw.character : undefined,
-      accent: typeof raw.accent === 'string' ? raw.accent : undefined
-    });
+    liveWebContents()?.send('hive:agentSpawned', card);
   } catch { /* window torn down */ }
 
   // Register for done-scan / idle-reap / token-cap / safe teardown (pty id == workerId).
   // tokenCap is optional plumbing (default unlimited) — only a positive finite cap is kept.
   const tokenCap = typeof raw.tokenCap === 'number' && Number.isFinite(raw.tokenCap) && raw.tokenCap > 0
     ? raw.tokenCap : undefined;
-  liveWorkers.set(workerId, { workerId, reqId, name: meta.name, slack, baseBranch, spawnedAt: Date.now(), tokenCap });
+  liveWorkers.set(workerId, { workerId, reqId, name: meta.name, slack, baseBranch, spawnedAt: Date.now(), tokenCap, card });
 
   // Dispatch the objective via the standard inbox path (zero new transport),
   // reusing the autonomous-request preamble so the worker gets the exact Slack
@@ -5004,6 +5138,11 @@ async function ephemeralWorkerTick(): Promise<void> {
       }
     }
 
+    // (2b) The orchestrator's Automations requests (create/update/delete a
+    //      scheduled mission). Not gated by orchestratorMaySpawn: every change
+    //      shows up in Automations and is reported back to the orchestrator.
+    processScheduleRequests();
+
     // (3) GC preserved worktrees whose work has since integrated. Throttled to
     //     GC_SWEEP_MS and a no-op when nothing is preserved (the common case).
     const now = Date.now();
@@ -5053,6 +5192,10 @@ interface PreservedSnapshot {
 }
 
 /** List live ephemeral workers (+ preserved worktrees awaiting GC) for the tab. */
+/** Floor cards of the live workers — the renderer replays these on mount so a
+ *  worker spawned before it subscribed to hive:agentSpawned is not invisible. */
+ipcMain.handle('workers:cards', () =>
+  [...liveWorkers.values()].filter((w) => !w.releasing && w.card).map((w) => w.card));
 ipcMain.handle('workers:list', (): { live: WorkerSnapshot[]; preserved: PreservedSnapshot[]; maxWorkers: number } => {
   const cfg = readConfig();
   const defaultCap = typeof cfg.defaultWorkerTokenCap === 'number' && cfg.defaultWorkerTokenCap > 0
@@ -5102,6 +5245,41 @@ ipcMain.handle('workers:stop', (_evt, workerId: string): { ok: boolean; error?: 
   return { ok: true };
 });
 
+/** Pro Temps: the HUMAN hires a temp for one job. Same path as a god
+ *  spawn-request (fresh worktree, objective through the inbox, released on
+ *  `done`), minus the orchestratorMaySpawn gate: that toggle governs god spending
+ *  unprompted, and here the human is the one asking. The concurrency cap still
+ *  holds. Human requests sit in their own subfolder so the god queue's intake
+ *  never picks them up a second time. */
+ipcMain.handle('workers:hire', async (_evt, req: unknown): Promise<{ ok: boolean; workerId?: string; error?: string }> => {
+  const r = (req && typeof req === 'object' ? req : {}) as { objective?: unknown; cwd?: unknown; name?: unknown };
+  const objective = typeof r.objective === 'string' ? r.objective.trim() : '';
+  const cwd = typeof r.cwd === 'string' ? r.cwd.trim() : '';
+  const name = typeof r.name === 'string' ? r.name.trim().slice(0, 40) : '';
+  if (!objective) return { ok: false, error: 'Say what the job is.' };
+  if (!cwd) return { ok: false, error: 'Pick the folder the temp works in.' };
+  const queue = spawnRequestsDir();
+  if (!queue) return { ok: false, error: 'No hive is open.' };
+  const cfg = readConfig();
+  if (liveWorkers.size >= Math.max(1, cfg.maxConcurrentWorkers ?? 4)) {
+    return { ok: false, error: 'Every temp desk is taken. Wait for one to finish or stop one.' };
+  }
+  const id = `temp-${Date.now().toString(36)}-${randomBytes(2).toString('hex')}`;
+  const dir = join(queue, 'human');
+  const file = join(dir, `${id}.json`);
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(file, JSON.stringify({ id, objective, cwd, ...(name ? { name } : {}) }, null, 2), 'utf8');
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+  await processSpawnRequest(file);
+  const workerId = `worker-${id}`;
+  return liveWorkers.has(workerId)
+    ? { ok: true, workerId }
+    : { ok: false, error: 'The temp did not start; the orchestrator has the details in its inbox.' };
+});
+
 /** Start every hive-bound background service against the current harnessHome.
  *  Called on boot, and again to recover in place if a folder-change copy fails
  *  (config:changeHome tears these down before copying). No-op without a home. */
@@ -5145,6 +5323,7 @@ function bootstrapHiveServices(): void {
   });
   ensureDefaultMissions(); // one-time: seed the built-in hourly ops standup
   syncMissions(); // arm recurring auto-dispatch missions now the router is live
+  writeMissionsMirror(readConfig().missions ?? []);
   syncContextTriggers(); // …and the context trigger's own compact/clear cadences
   // Pair replies to inbound webhook messages in the ledger. Tied to the FEATURE
   // (any endpoint configured), not to the server: an approved message's card can
@@ -5157,7 +5336,13 @@ function bootstrapHiveServices(): void {
   // failure just leaves telemetry off (transcript reconciler stays). No breaker.start():
   // the breaker is POLICY-only, ticked by the heartbeat beat (#1, ships disabled).
   void telemetry.start().then((r) => {
-    if (r.ok && r.endpoint) { hive.setOtelEndpoint(r.endpoint); console.log('[telemetry] collector listening', r.endpoint); }
+    if (r.ok && r.endpoint) {
+      hive.setOtelEndpoint(r.endpoint);
+      // Demo agents are hookless `custom` CLIs, so the hive never hands them the
+      // OTel endpoint; they find it here (PTYs inherit process.env).
+      if (DEMO_HOME) process.env.MD_DEMO_OTEL = r.endpoint;
+      console.log('[telemetry] collector listening', r.endpoint);
+    }
     else console.error('[telemetry] collector failed to start:', r.error);
   });
   memory.start(); // init shared palace + mine loop (no-op without mempalace)
@@ -5469,6 +5654,7 @@ app.on('before-quit', (e) => {
 // Every window loads the config once at start-up, so tell them all when a
 // setting is saved — a floor left out would keep showing what it opened with.
 onConfigWritten((config) => {
+  writeMissionsMirror(config.missions ?? []);
   for (const w of allWindows) {
     if (w.isDestroyed() || w.webContents.isDestroyed()) continue;
     w.webContents.send('config:changed', config);

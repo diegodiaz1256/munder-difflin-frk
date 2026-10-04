@@ -92,8 +92,13 @@ const sameMark = (a: FileMark | null, b: FileMark | null): boolean =>
   !!a && !!b && a.dev === b.dev && a.ino === b.ino;
 
 /** Who answers at the path: nobody (missing, or a stale file from a crashed
- *  run), a stranger (another live instance — never touched), or us. */
-type PathOwner = 'nobody' | 'other' | 'self';
+ *  run), a stranger (another live instance — never touched), or us. `busy` is
+ *  "no verdict before the timeout": the probe talks to our own listener on our
+ *  own event loop, so a main thread blocked past the timeout (a synchronous git
+ *  call while a worker's worktree is created) reads exactly like a slow stranger.
+ *  A path nobody listens on fails fast with an error, so a timeout is never
+ *  "nobody" — it is "ask again on the next beat". */
+type PathOwner = 'nobody' | 'other' | 'self' | 'busy';
 
 export class HookServer {
   private server: Server | null = null;
@@ -200,6 +205,10 @@ export class HookServer {
       // Definitive check: does connecting to the path reach US?
       const owner = await this.probe(sock);
       if (owner === 'self') { this.mark = markOf(sock); return this.health(); }
+      // No answer in time is not evidence of loss. Detaching here used to strand
+      // a Windows floor for the rest of the session: the abandoned listener
+      // still holds the pipe name, so every re-bind failed with EADDRINUSE.
+      if (owner === 'busy') return this.health();
       const code = owner === 'other' ? 'REPLACED' : 'ENOENT';
       this.detach(owner === 'other');
       console.error(`[hive] hook socket LOST (${code}): ${sock} no longer reaches our listener — every hook has been allowed meanwhile`);
@@ -217,7 +226,8 @@ export class HookServer {
       if (process.platform !== 'win32' && existsSync(sock)) {
         // A file left by a crashed run is normal and is cleared. A file a LIVE
         // stranger accepts on is theirs: report it, never steal it.
-        if (await this.probe(sock) === 'other') { this.fail(sock, 'EADDRINUSE', 'another process is listening there'); return; }
+        const owner = await this.probe(sock);
+        if (owner === 'other' || owner === 'busy') { this.fail(sock, 'EADDRINUSE', 'another process is listening there'); return; }
         try { rmSync(sock); } catch { /* listen() below reports it */ }
       }
       const server = createServer((conn) => this.serve(conn));
@@ -332,7 +342,7 @@ export class HookServer {
         } catch { finish('other'); }
       });
       c.on('error', () => finish(connected ? 'other' : 'nobody'));
-      setTimeout(() => finish(connected ? 'other' : 'nobody'), timeoutMs).unref();
+      setTimeout(() => finish('busy'), timeoutMs).unref();
     });
   }
 

@@ -29,8 +29,10 @@ concurrency:
 
 jobs:
   update:
-    # Only when something actually merged.
-    if: github.event_name != 'pull_request_target' || github.event.pull_request.merged == true
+    # Only when something actually merged, and only in the upstream repo: it
+    # force-pushes a branch and opens a PR about upstream's contributors, which
+    # means nothing in a fork (and its weekly cron would run there too).
+    if: github.repository == 'HarnessMD/munder-difflin' && (github.event_name != 'pull_request_target' || github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
