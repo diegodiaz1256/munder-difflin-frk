@@ -66,6 +66,8 @@ import { applyMissionRequest, type MissionLike } from '../shared/missionRequests
 import { cleanCustomBundles } from '../shared/roleBundles';
 import { connectionKeyStored, connectionLaunchEnv, listConnections, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
 import { McpGateway } from './mcpGateway';
+import { TeamNode, type TeamInbound } from './teamNode';
+import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, saveTeamState, teamEnabled, teamPublicStatus } from './team';
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
@@ -542,6 +544,174 @@ function informGod(subject: string, body: string, slack?: { channel: string; thr
     console.error('[worker] informGod failed:', e);
   }
 }
+
+// ─── Team: paired installs, sealed end to end over a public relay ───────────
+// (teamCrypto.ts / teamNode.ts / team.ts). Inbound mail passes the same trust
+// gate and ledger as webhooks (orgTrigger.mode, source 'org').
+
+let teamNode: TeamNode | null = null;
+
+function notifyTeam(): void {
+  try { liveWebContents()?.send('team:updated'); } catch { /* window gone */ }
+}
+
+/** The orchestrator's folder for messages to teammates. */
+function teamRequestsDir(): string | null {
+  const root = hive.root();
+  return root ? join(root, 'agents', hive.registry().godId ?? 'god', 'team') : null;
+}
+
+/** Mirror of who the orchestrator can write to (names only, nothing secret). */
+function writeTeamMirror(): void {
+  const root = hive.root();
+  if (!root) return;
+  const st = teamPublicStatus();
+  try {
+    writeFileSync(join(root, 'team.json'), JSON.stringify({
+      note: 'Teammates\' offices you can message. Write a request into your team/ folder (see your instructions).',
+      enabled: st.enabled,
+      me: st.me?.name ?? null,
+      teammates: st.peers.map((p) => ({ name: p.name, ready: p.confirmed }))
+    }, null, 2), 'utf8');
+  } catch { /* best-effort */ }
+}
+
+function routeTeamToGod(peerName: string, subject: string, body: string, kind: InboundKind): void {
+  const dir = teamRequestsDir();
+  try {
+    hive.send({
+      to: 'god',
+      act: kind === 'directive' ? 'request' : 'inform',
+      subject: `[team: ${peerName}] ${subject || '(no subject)'}`,
+      body: `${body}\n\n(From ${peerName}'s office over Team, sealed end to end. To answer, write {"to":"${peerName}","subject":"…","body":"…"} as a JSON file into ${dir ?? 'your team/ folder'}.)`,
+      requires_reply: false
+    }, `team:${peerName}`);
+  } catch (e) {
+    console.error('[team] could not route to god:', e);
+  }
+}
+
+function onTeamMessage(m: TeamInbound): void {
+  appendTeamLog({ id: m.id, peerId: m.from.id, peerName: m.from.name, direction: 'in', subject: m.subject, body: m.body, at: m.sentAt });
+  notifyTeam();
+  // The member's own setting, else their team's: messages queue for the human
+  // or reach the orchestrator according to what you granted that person.
+  const mode: TriggerMode = m.mode;
+  const kind: InboundKind = classifyInboundKind(`${m.subject}\n${m.body}`);
+  const base = {
+    source: 'org' as const, sourceId: m.from.id, sourceName: m.team ? `${m.from.name} (${m.team.name})` : m.from.name, direction: 'inbound' as const,
+    peer: m.from.name, title: m.subject || m.body.slice(0, 80), body: m.body, kind
+  };
+  if (!isAutoAllowed(mode, kind)) {
+    appendTriggerHistory({ ...base, decision: 'pending' });
+    notifyTriggerHistoryUpdated();
+    return;
+  }
+  appendTriggerHistory({ ...base, decision: 'auto-allowed' });
+  notifyTriggerHistoryUpdated();
+  routeTeamToGod(m.from.name, m.subject, m.body, kind);
+}
+
+function startTeam(): void {
+  if (teamNode || !teamEnabled()) return;
+  teamNode = new TeamNode({
+    load: loadTeamState,
+    save: saveTeamState,
+    onMessage: onTeamMessage,
+    onChange: () => { writeTeamMirror(); notifyTeam(); },
+    log: (msg) => console.log('[team]', msg)
+  });
+  teamNode.start();
+  writeTeamMirror();
+}
+
+function stopTeam(): void {
+  teamNode?.stop();
+  teamNode = null;
+}
+
+async function sendToTeammate(to: string, subject: string, body: string, by: 'you' | 'agent'): Promise<{ ok: boolean; error?: string }> {
+  if (!teamNode) return { ok: false, error: 'Team is off' };
+  const res = await teamNode.send(to, subject, body);
+  if (res.ok && res.id) {
+    const peer = loadTeamState().peers.find((p) => p.id === to || p.name.toLowerCase() === to.toLowerCase());
+    appendTeamLog({ id: res.id, peerId: peer?.id ?? to, peerName: peer?.name ?? to, direction: 'out', by, subject, body, at: new Date().toISOString() });
+    notifyTeam();
+  }
+  return res;
+}
+
+/** The orchestrator's outgoing team mail: one JSON file per message. */
+async function processTeamRequests(): Promise<void> {
+  const dir = teamRequestsDir();
+  if (!dir || !existsSync(dir)) return;
+  let files: string[] = [];
+  try { files = readdirSync(dir).filter((f) => f.endsWith('.json')).sort(); } catch { return; }
+  for (const f of files) {
+    const fp = join(dir, f);
+    let result: { ok: boolean; error?: string };
+    try {
+      const r = JSON.parse(readFileSync(fp, 'utf8')) as { to?: unknown; subject?: unknown; body?: unknown };
+      if (typeof r.to !== 'string' || typeof r.body !== 'string' || !r.body.trim()) result = { ok: false, error: '"to" and "body" are required' };
+      else result = await sendToTeammate(r.to, typeof r.subject === 'string' ? r.subject : '', r.body, 'agent');
+    } catch (e) {
+      result = { ok: false, error: `could not read ${f}: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    try {
+      const sub = join(dir, result.ok ? '.done' : '.failed');
+      mkdirSync(sub, { recursive: true });
+      renameSync(fp, join(sub, f));
+    } catch { try { unlinkSync(fp); } catch { /* never loop on it */ } }
+    if (!result.ok) {
+      try { hive.send({ to: 'god', act: 'inform', subject: `[team] message not sent: ${f}`, body: result.error ?? 'unknown error' }, 'scheduler'); } catch { /* best-effort */ }
+    }
+  }
+}
+
+ipcMain.handle('team:status', () => teamPublicStatus());
+ipcMain.handle('team:enable', (_evt, arg: unknown) => {
+  const p = (arg ?? {}) as { name?: unknown; relay?: unknown };
+  const r = enableTeam(typeof p.name === 'string' ? p.name : '', typeof p.relay === 'string' ? p.relay : undefined);
+  if (r.ok) { stopTeam(); startTeam(); notifyTeam(); }
+  return r;
+});
+ipcMain.handle('team:disable', () => { stopTeam(); disableTeam(); writeTeamMirror(); notifyTeam(); return { ok: true }; });
+ipcMain.handle('team:createInvite', (_evt, teamId: unknown) =>
+  teamNode && typeof teamId === 'string' ? teamNode.createInvite(teamId) : { ok: false, error: 'Team is off' });
+ipcMain.handle('team:createTeam', (_evt, arg: unknown) => {
+  const p = (arg ?? {}) as { name?: unknown; relay?: unknown };
+  return teamNode ? teamNode.createTeam(typeof p.name === 'string' ? p.name : '', typeof p.relay === 'string' ? p.relay : undefined) : { ok: false, error: 'Team is off' };
+});
+ipcMain.handle('team:updateTeam', (_evt, id: unknown, patch: unknown) => {
+  if (!teamNode || typeof id !== 'string' || !patch || typeof patch !== 'object') return { ok: false, error: 'Team is off' };
+  const p = patch as Record<string, unknown>;
+  const level = p.level === 'message' || p.level === 'view' || p.level === 'manage' ? p.level : undefined;
+  const mode = p.mode === 'strict' || p.mode === 'communication-only' || p.mode === 'allow-all' ? p.mode : undefined;
+  return teamNode.updateTeam(id, {
+    ...(typeof p.name === 'string' ? { name: p.name } : {}),
+    ...(typeof p.relay === 'string' ? { relay: p.relay } : {}),
+    ...(level ? { level } : {}),
+    ...(mode ? { mode } : {})
+  });
+});
+ipcMain.handle('team:removeTeam', (_evt, id: unknown) => { if (teamNode && typeof id === 'string') teamNode.removeTeam(id); return { ok: true }; });
+ipcMain.handle('team:setMember', (_evt, id: unknown, patch: unknown) => {
+  if (!teamNode || typeof id !== 'string' || !patch || typeof patch !== 'object') return { ok: false };
+  const p = patch as Record<string, unknown>;
+  const level = p.level === null ? null : p.level === 'message' || p.level === 'view' || p.level === 'manage' ? p.level : undefined;
+  const mode = p.mode === null ? null : p.mode === 'strict' || p.mode === 'communication-only' || p.mode === 'allow-all' ? p.mode : undefined;
+  teamNode.setMember(id, { ...(level !== undefined ? { level } : {}), ...(mode !== undefined ? { mode } : {}) });
+  return { ok: true };
+});
+ipcMain.handle('team:join', async (_evt, code: unknown) =>
+  teamNode && typeof code === 'string' ? teamNode.join(code) : { ok: false, error: 'Team is off' });
+ipcMain.handle('team:removePeer', (_evt, id: unknown) => { if (teamNode && typeof id === 'string') teamNode.removePeer(id); return { ok: true }; });
+ipcMain.handle('team:send', (_evt, arg: unknown) => {
+  const p = (arg ?? {}) as { to?: unknown; subject?: unknown; body?: unknown };
+  if (typeof p.to !== 'string' || typeof p.body !== 'string' || !p.body.trim()) return { ok: false, error: 'a teammate and a message are required' };
+  return sendToTeammate(p.to, typeof p.subject === 'string' ? p.subject : '', p.body, 'you');
+});
+ipcMain.handle('team:log', () => readTeamLog());
 
 /** Where the orchestrator drops Automations requests: its OWN folder, the
  *  single-writer rule every agent already follows. */
@@ -3935,6 +4105,7 @@ function teardownAndQuit(): void {
   try { stopEphemeralWorkerWatcher(); } catch (e) { console.error('[quit] stopWorkerWatcher:', e); }
   try { integrationBroker.stop(); } catch (e) { console.error('[quit] broker.stop:', e); }
   try { mcpGateway.stop(); } catch (e) { console.error('[quit] mcpGateway.stop:', e); }
+  try { stopTeam(); } catch (e) { console.error('[quit] stopTeam:', e); }
   try { hive.stopRouter(); } catch (e) { console.error('[quit] stopRouter:', e); }
   try { hookServer.stop(); } catch (e) { console.error('[quit] hookServer.stop:', e); }
   try { telemetry.stop(); } catch (e) { console.error('[quit] telemetry.stop:', e); }
@@ -4465,6 +4636,15 @@ ipcMain.handle('triggerHistory:decide', (_evt, arg: unknown) => {
     return next;
   }
 
+  if (entry.source === 'org') {
+    // A held teammate message: the same delivery an allowed one gets.
+    // `peer` is the teammate's own name (what a reply is addressed to);
+    // sourceName also carries the team, for the ledger.
+    routeTeamToGod(entry.peer, entry.title ?? '', entry.body, entry.kind);
+    const next = updateTriggerHistory(id, { decision: 'approved' });
+    notifyTriggerHistoryUpdated();
+    return next;
+  }
   const taskId = `webhook-${randomBytes(8).toString('hex')}`;
   const tokenHash = heldTokenHashFor(id);
   const title = entry.title ?? (entry.body.length > 80 ? `${entry.body.slice(0, 79)}…` : entry.body);
@@ -5162,6 +5342,7 @@ async function ephemeralWorkerTick(): Promise<void> {
     //      scheduled mission). Not gated by orchestratorMaySpawn: every change
     //      shows up in Automations and is reported back to the orchestrator.
     processScheduleRequests();
+    await processTeamRequests();
 
     // (3) GC preserved worktrees whose work has since integrated. Throttled to
     //     GC_SWEEP_MS and a no-op when nothing is preserved (the common case).
@@ -5337,6 +5518,7 @@ function bootstrapHiveServices(): void {
   startEphemeralWorkerWatcher(); // poll HIVE_ROOT/spawn-requests → ephemeral workers
   // Phase 2: the loopback secret broker. Bind it BEFORE workers spawn so each spawn can
   // be granted a capability token + the broker URL in its env. Loopback-only, idempotent.
+  startTeam();
   void mcpGateway.start().then((r) => {
     if (!r.ok) console.error('[mcp-gateway] failed to start (keyed MCP servers disabled):', r.error);
   });

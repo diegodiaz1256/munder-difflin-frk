@@ -1,5 +1,5 @@
+- **Team:** sealed messages between offices.
+- **Agents never see Connections keys.**
 - **Pro layout:** the office in a sidebar.
-- **Connections:** GitHub, Notion, Sentry, search, DB.
-- **MCP servers now reach your agents.**
 - **Make your own role bundles.**
-- **No analytics.** Safer stops on Windows.
+- **No analytics.** Windows installer fixed.

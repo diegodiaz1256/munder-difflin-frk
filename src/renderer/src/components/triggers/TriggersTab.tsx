@@ -4,6 +4,7 @@ import { SchedulesSection } from './SchedulesSection';
 import { ContextSection } from './ContextSection';
 import { WebhooksSection } from './WebhooksSection';
 import { OrgSection } from './OrgSection';
+import { LEGACY_ORG_TRIGGER } from '@shared/fork';
 import { Muted, Scroll, TriggerCard } from './ui';
 
 /**
@@ -54,13 +55,16 @@ export function TriggersTab() {
         <WebhooksSection onSummary={setWebhooksSummary} />
       </TriggerCard>
 
-      <TriggerCard
-        title={t('triggersTab.organisation')}
-        blurb={t('triggersTab.organisationBlurb')}
-        summary={orgSummary}
-      >
-        <OrgSection onSummary={setOrgSummary} />
-      </TriggerCard>
+      {/* Teammates' offices live in Pro → Team now (shared/fork.ts). */}
+      {LEGACY_ORG_TRIGGER && (
+        <TriggerCard
+          title={t('triggersTab.organisation')}
+          blurb={t('triggersTab.organisationBlurb')}
+          summary={orgSummary}
+        >
+          <OrgSection onSummary={setOrgSummary} />
+        </TriggerCard>
+      )}
     </Scroll>
   );
 }
