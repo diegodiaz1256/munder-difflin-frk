@@ -1,13 +1,29 @@
 name: Release
 
-# Build installers for every platform and publish them to a GitHub Release
-# whenever a v* tag is pushed. Run manually (workflow_dispatch) to dry-build
-# without publishing.
+# Build installers for every platform on every push to main (downloadable from
+# the run's artifacts), and publish them to a GitHub Release whenever a v* tag is
+# pushed. Run manually (workflow_dispatch) to dry-build without publishing.
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
+    # Site, blog and SEO content ship through their own workflows; a commit that
+    # only touches them changes nothing in the installers. (Tag pushes are not
+    # filtered by paths, so a release always builds.)
+    paths-ignore:
+      - "docs/**"
+      - "blog/**"
+      - "seo/**"
+      - "**/*.md"
   workflow_dispatch:
+
+# A newer push to main supersedes a build still running for an older one. Tag
+# builds are never cancelled: each one is a release.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
 
 permissions:
   contents: write
