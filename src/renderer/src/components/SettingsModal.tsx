@@ -1813,7 +1813,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                         )}
                       </div>
 
-                      {/* Upstream's org key (no transport) is hidden: Pro → Team is the working version. */}
+                      {/* Upstream's org key (no transport) is hidden: Manager → Team is the working version. */}
                       {LEGACY_ORG_TRIGGER && (<>
                       <div style={sectionRule} />
 

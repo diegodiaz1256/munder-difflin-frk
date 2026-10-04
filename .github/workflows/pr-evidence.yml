@@ -53,6 +53,13 @@ jobs:
             // applying a label needs write access — so the rule stays mandatory
             // for the people it is aimed at, and every waiver is on the record.
             const WAIVER = 'no-visual-change';
+            // The rule is for outside contributions. People with write access
+            // to this fork (its maintainers) record evidence in the PR as they
+            // see fit; a contributor cannot grant themselves this.
+            if (['OWNER', 'MEMBER', 'COLLABORATOR'].includes(pr.author_association)) {
+              core.info(`Skipped: opened by a maintainer (${pr.author_association}).`);
+              return;
+            }
             if (labels.includes(WAIVER)) {
               core.info(`Waived: the '${WAIVER}' label is applied by a maintainer.`);
               return;
@@ -139,7 +146,7 @@ jobs:
               '',
               `_Genuinely nothing to show — a CI tweak, a typo, a dependency bump? A maintainer can apply the \`${WAIVER}\` label. Please don't ask unless it truly has no observable effect._`,
               '',
-              '📖 [CONTRIBUTING.md → Evidence is mandatory](https://github.com/chaitanyagiri/munder-difflin/blob/main/CONTRIBUTING.md#evidence-is-mandatory)'
+              '📖 [CONTRIBUTING.md → Evidence is mandatory](https://github.com/diegodiaz1256/scranton-branch/blob/main/CONTRIBUTING.md#evidence-is-mandatory)'
             ].join('\n');
 
             if (mine) {

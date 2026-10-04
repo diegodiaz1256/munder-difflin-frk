@@ -1,4 +1,4 @@
-# Munder Difflin server
+# Scranton Branch server
 
 An office with no GUI, for an Ubuntu server or a container. It is the same
 app: `src/main` runs unchanged on plain Node (Electron's API is replaced by
@@ -15,23 +15,23 @@ one of your teammates.
 Needs Node.js 20+ and git.
 
 ```sh
-tar xzf munder-difflin-server-<version>-linux-x64.tar.gz
-cd munder-difflin-server-<version>-linux-x64
+tar xzf scranton-branch-server-<version>-linux-x64.tar.gz
+cd scranton-branch-server-<version>-linux-x64
 sudo ./install.sh
 ```
 
-Then edit `/etc/munder-difflin/server.env`:
+Then edit `/etc/scranton-branch/server.env`:
 
 | Variable | |
 |---|---|
 | `MD_OFFICE` | the office directory (default `/srv/office`) |
 | `MD_NAME` | its name on Team |
-| `MD_TEAM_JOIN` | an invite from your desktop (Pro → Team → Invite). Used once, then remembered |
+| `MD_TEAM_JOIN` | an invite from your desktop (Manager → Team → Invite). Used once, then remembered |
 | `MD_MAX_WORKERS` | how many workers may run at once |
 | `MD_RELAY_TOKEN` | `<relay>=<token>` for a relay that needs one (see below) |
 | `ANTHROPIC_API_KEY` | optional: agents use it instead of a login |
 
-and `sudo systemctl restart munder-difflin`. Logs: `journalctl -u munder-difflin -f`.
+and `sudo systemctl restart scranton-branch`. Logs: `journalctl -u scranton-branch -f`.
 
 Agents run as the `agent` user. Log their CLI in once:
 `sudo -u agent -H claude` (then `/login`).
@@ -55,7 +55,7 @@ and process limits are in the compose file and apply to the whole office.
 Connection keys are stored encrypted, as on a desktop. The key that encrypts
 them is the server's alone:
 
-- **systemd**: `/etc/munder-difflin/secret.key` (root, 0600), handed to the
+- **systemd**: `/etc/scranton-branch/secret.key` (root, 0600), handed to the
   service as a credential.
 - **Docker**: a compose secret (`MD_SECRET_KEY_FILE`). Keep the host file 0600;
   the container warns if agents could read it.

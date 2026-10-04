@@ -1,7 +1,6 @@
-- **Team:** post-quantum, and over MQTT.
-- **Server build:** offices on Ubuntu or Docker, no GUI.
-- **Team:** sealed messages between offices.
+- **New name: Scranton Branch.** Your data comes along.
+- **Team:** post-quantum, over MQTT or ntfy.
+- **Server edition:** offices on Ubuntu or Docker.
 - **Agents never see Connections keys.**
-- **Pro layout:** the office in a sidebar.
-- **Make your own role bundles.**
-- **No analytics.** Windows installer fixed.
+- **Manager layout** next to the Floor.
+- **No analytics.**

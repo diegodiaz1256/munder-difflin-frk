@@ -82,19 +82,19 @@ const swaps = {
   // Deployment: install.sh at the top, its unit and env template beside it.
   copyFileSync(join(root, 'packaging/server/install.sh'), join(out, 'install.sh'));
   mkdirSync(join(out, 'packaging'), { recursive: true });
-  for (const f of ['munder-difflin.service', 'server.env.example']) {
+  for (const f of ['scranton-branch.service', 'server.env.example']) {
     copyFileSync(join(root, 'packaging/server', f), join(out, 'packaging', f));
   }
 
   const deps = Object.fromEntries(NATIVE.map((n) => [n, pkg.dependencies[n]]));
   writeFileSync(join(out, 'package.json'), JSON.stringify({
-    name: 'munder-difflin-server',
+    name: 'scranton-branch-server',
     version: pkg.version,
     private: true,
-    description: 'Munder Difflin office, headless: no GUI, no Chromium.',
+    description: 'Scranton Branch office, headless: no GUI, no Chromium.',
     license: pkg.license,
     main: 'index.cjs',
-    bin: { 'munder-difflin-server': 'index.cjs' },
+    bin: { 'scranton-branch-server': 'index.cjs' },
     engines: { node: '>=20' },
     dependencies: deps
   }, null, 2) + '\n');

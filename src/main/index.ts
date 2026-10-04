@@ -1,7 +1,11 @@
 // Demo mode redirects userData — must load before anything else (see demo.ts).
 import { DEMO_HOME } from './demo';
+// Copies the data of this fork's old name (Munder Difflin) on first launch — before
+// anything reads userData (see legacyMigration.ts).
+import { offerLegacyUninstall } from './legacyMigration';
 // Headless (server) mode sets Chromium switches — must load before ready too.
 import { HEADLESS, HEADLESS_SETUP, SERVER } from './headless';
+import { APP_NAME } from '../shared/fork';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, powerSaveBlocker, screen, shell, Notification } from 'electron';
 import { spawn } from 'node:child_process';
 import {
@@ -2610,7 +2614,7 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
     ...(geom && geom.x !== undefined && geom.y !== undefined ? { x: geom.x, y: geom.y } : {}),
     minWidth: MIN_WIN.width,
     minHeight: MIN_WIN.height,
-    title: isFloor ? 'Munder Difflin — Floor' : 'Munder Difflin',
+    title: isFloor ? `${APP_NAME} — Floor` : APP_NAME,
     backgroundColor: '#FFF8E7',
     titleBarStyle: 'hiddenInset',
     show: false,
@@ -3555,7 +3559,7 @@ ipcMain.handle('config:update', (_evt, patch: Partial<HarnessConfig>) => {
 ipcMain.handle('config:setAgentMcpGrant', (_evt, agentId: unknown, servers: unknown) =>
   setAgentMcpGrant(agentId, servers)
 );
-// Pro → Connections: keyed MCP servers. Values go one way into the encrypted
+// Manager → Connections: keyed MCP servers. Values go one way into the encrypted
 // store; nothing here ever returns one (see connections.ts).
 // Keyed MCP servers run under MAIN, never under an agent: the gateway holds
 // the key and an agent gets a capability token (mcpGateway.ts).
@@ -5539,7 +5543,7 @@ function bootstrapHiveServices(): void {
   // Phase 2: the loopback secret broker. Bind it BEFORE workers spawn so each spawn can
   // be granted a capability token + the broker URL in its env. Loopback-only, idempotent.
   // Headless: --team-join pairs this office with yours (an invite made in your
-  // desktop's Pro → Team). Team is switched on first if needed.
+  // desktop's Manager → Team). Team is switched on first if needed.
   // Servers: MD_RELAY_TOKEN="https://relay.example.com=tk_…[,…]" stores each
   // token in the encrypted store (set before joining, which talks to the relay).
   // headless.ts already took it out of the environment agents inherit.
@@ -5884,7 +5888,14 @@ app.whenReady().then(() => {
   // Multi-window floors (opt-in): install the menu carrying "New Floor". When
   // off, the app keeps Electron's default menu — zero behavior change.
   if (readConfig().multiWindow) installAppMenu();
-  createWindow();
+  const firstWin = createWindow();
+  // The fork used to install as Munder Difflin: offer to remove that old copy.
+  if (!HEADLESS) firstWin.once('ready-to-show', () => {
+    setTimeout(() => void offerLegacyUninstall(firstWin, {
+      ask: (k) => { try { return persist.getKv(k); } catch { return undefined; } },
+      remember: (k, v) => { try { persist.setKv(k, v); } catch { /* DB best-effort */ } }
+    }), 4000);
+  });
   // Auto-start the Slack webhook server when configured. Best-effort: a tunnel
   // failure (offline) is logged, not fatal. The tunnel URL is ephemeral and
   // changes per restart, so the user re-pastes it via Settings → Start.

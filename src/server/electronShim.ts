@@ -26,7 +26,7 @@ declare const __APP_VERSION__: string;
 
 // ─── app ─────────────────────────────────────────────────────────────────────
 
-const dataDir = resolve(process.env.MD_DATA_DIR || join(homedir(), '.munder-difflin-server'));
+const dataDir = resolve(process.env.MD_DATA_DIR || join(homedir(), '.scranton-branch-server'));
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 const appRoot = resolve(__dirname, '..');
 
@@ -55,7 +55,7 @@ class App extends EventEmitter {
   }
   getAppPath(): string { return appRoot; }
   getVersion(): string { return typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0'; }
-  getName(): string { return 'Munder Difflin Server'; }
+  getName(): string { return 'Scranton Branch Server'; }
   getLocale(): string { return process.env.LANG?.split('.')[0]?.replace('_', '-') || 'en-US'; }
   isReady(): boolean { return this.ready; }
   whenReady(): Promise<void> {
@@ -352,5 +352,5 @@ export default {
 
 // A first boot writes nothing here; keeps the data dir obviously ours.
 if (!existsSync(join(dataDir, 'README'))) {
-  try { writeFileSync(join(dataDir, 'README'), 'Munder Difflin server data (config, encrypted secrets, logs). Back it up with the office.\n'); } catch { /* read-only */ }
+  try { writeFileSync(join(dataDir, 'README'), 'Scranton Branch server data (config, encrypted secrets, logs). Back it up with the office.\n'); } catch { /* read-only */ }
 }
