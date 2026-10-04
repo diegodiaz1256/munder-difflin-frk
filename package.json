@@ -1,6 +1,7 @@
 {
   "name": "munder-difflin",
-  "version": "0.4.6-fork.6",
+  "productName": "Scranton Branch",
+  "version": "0.4.6-fork.7",
   "private": true,
   "description": "Clones for you and your team, working 24/7 — a free, local-first multi-agent harness that turns the CLI coding agent you already run into a clone of you, coordinating an office of agents on your machine.",
   "main": "out/main/index.js",
@@ -8,7 +9,7 @@
   "homepage": "https://munderdiffl.in/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/diegodiaz1256/munder-difflin-frk.git"
+    "url": "https://github.com/diegodiaz1256/scranton-branch.git"
   },
   "scripts": {
     "dev": "electron-vite dev",

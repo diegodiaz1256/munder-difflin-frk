@@ -227,7 +227,7 @@ jobs:
         shell: bash
         run: |
           version="${{ needs.version.outputs.tag }}"
-          name="munder-difflin-server-${version#v}-linux-${{ matrix.arch }}"
+          name="scranton-branch-server-${version#v}-linux-${{ matrix.arch }}"
           mkdir -p dist
           rm -f out/server/index.cjs.map
           tar -C out -czf "dist/$name.tar.gz" --transform "s|^server|$name|" server

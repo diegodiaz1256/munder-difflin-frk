@@ -10,8 +10,18 @@
 export const PRODUCT_ANALYTICS = false;
 
 /**
+ * The fork's own name. Munder Difflin stays the company in the office theme;
+ * this app is its Scranton Branch. Installs separately from upstream's app (own
+ * app id, data folder and keychain entry; see main/legacyMigration.ts for the
+ * move from the old name).
+ */
+export const APP_NAME = 'Scranton Branch';
+/** The two layouts, as the title-bar switch names them. */
+export const LAYOUT_LABELS = { classic: 'Floor', pro: 'Manager' } as const;
+
+/**
  * LEGACY_ORG_TRIGGER: upstream's "organisation key / clone node" settings saved
- * a key that no transport ever read. This fork's Team (Pro → Team; main/team.ts)
+ * a key that no transport ever read. This fork's Team (Manager → Team; main/team.ts)
  * is the working version, so the old controls are hidden.
  */
 export const LEGACY_ORG_TRIGGER = false;

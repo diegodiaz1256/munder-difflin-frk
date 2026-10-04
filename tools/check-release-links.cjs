@@ -6,7 +6,7 @@
  *
  * WHY THIS EXISTS. RELEASE.md is published verbatim as the GitHub release body,
  * and its download table links to
- * `/releases/latest/download/Munder-Difflin-<version>-<platform>.<ext>`. That URL
+ * `/releases/latest/download/Scranton-Branch-<version>-<platform>.<ext>`. That URL
  * form requires the EXACT filename present in whichever release is currently
  * "latest", and electron-builder bakes ${version} into every artifact name — so a
  * version string left behind in RELEASE.md turns all four download links into
@@ -50,13 +50,13 @@ function compareVersions(a, b) {
 }
 
 // — 1. every pinned artifact name must carry the current version —
-const assetRe = new RegExp(`Munder-Difflin-(${VERSION})-([^\\s\`)]+)`, 'g');
+const assetRe = new RegExp(`Scranton-Branch-(${VERSION})-([^\\s\`)]+)`, 'g');
 const assets = new Set();
 for (const m of releaseMd.matchAll(assetRe)) {
   if (m[1] !== version) {
-    problems.push(`${notesFile} advertises Munder-Difflin-${m[1]}-${m[2]} but package.json says ${version}`);
+    problems.push(`${notesFile} advertises Scranton-Branch-${m[1]}-${m[2]} but package.json says ${version}`);
   }
-  assets.add(`Munder-Difflin-${m[1]}-${m[2]}`);
+  assets.add(`Scranton-Branch-${m[1]}-${m[2]}`);
 }
 if (assets.size === 0) problems.push(`${notesFile} advertises no download assets at all — did the table move?`);
 
@@ -83,8 +83,8 @@ if (fs.existsSync(indexHtml)) {
   }
   const base = /var BASE = '([^']+)'/.exec(html);
   if (m && base) {
-    for (const f of html.matchAll(/'Munder-Difflin-' \+ REL \+ '([^']+)'/g)) {
-      siteAssets.push(`${base[1]}Munder-Difflin-${m[1]}${f[1]}`);
+    for (const f of html.matchAll(/'Scranton-Branch-' \+ REL \+ '([^']+)'/g)) {
+      siteAssets.push(`${base[1]}Scranton-Branch-${m[1]}${f[1]}`);
     }
   }
 }
@@ -115,7 +115,7 @@ async function head(url, label) {
 }
 
 async function checkLive() {
-  const base = 'https://github.com/diegodiaz1256/munder-difflin-frk/releases/latest/download/';
+  const base = 'https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/';
   for (const name of [...assets, 'SHA256SUMS.txt']) await head(base + name, name);
   for (const url of siteAssets) await head(url, url);
 }

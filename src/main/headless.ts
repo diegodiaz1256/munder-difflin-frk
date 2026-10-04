@@ -9,7 +9,7 @@
  *
  *   --office <dir>        MD_OFFICE        the office (first run: skips onboarding)
  *   --name <name>         MD_NAME          this office's name on Team
- *   --team-join <code>    MD_TEAM_JOIN     pair with an invite from Pro → Team
+ *   --team-join <code>    MD_TEAM_JOIN     pair with an invite from Manager → Team
  *   --max-workers <n>     MD_MAX_WORKERS   cap on concurrent workers
  *
  * In the desktop host the renderer still runs, in a window that is never shown, so every bit of
@@ -22,7 +22,7 @@
  * to be set before the app is ready.
  *
  * Talk to a headless office from your desktop through Team: create an invite in
- * Pro → Team and pass it as --team-join; the server's orchestrator is then one of
+ * Manager → Team and pass it as --team-join; the server's orchestrator is then one of
  * your teammates.
  */
 import { app } from 'electron';

@@ -94,7 +94,7 @@ export class MqttRelays {
       c.publish(TOPIC_PREFIX + topic, body, { qos: 1 }, (err) => {
         clearTimeout(timer);
         if (err) reject(new Error(/not authori[sz]ed|bad user/i.test(err.message)
-          ? 'the relay refused access: it needs an access token (Pro → Team → the team → Relay token)'
+          ? 'the relay refused access: it needs an access token (Manager → Team → the team → Relay token)'
           : `relay ${relay}: ${err.message}`));
         else resolve();
       });

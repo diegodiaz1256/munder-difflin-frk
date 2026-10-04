@@ -1,6 +1,6 @@
-# Munder Difflin server image: Node + git + the agent CLIs, no Chromium.
+# Scranton Branch server image: Node + git + the agent CLIs, no Chromium.
 #
-#   docker build -f packaging/server/Dockerfile -t munder-difflin-server .
+#   docker build -f packaging/server/Dockerfile -t scranton-branch-server .
 #   docker compose -f packaging/server/docker-compose.yml up -d
 #
 # AGENT_CLIS picks which agent CLIs are baked in (npm package names).
@@ -28,7 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
  && groupadd --gid 1001 office \
  && useradd --create-home --uid 1001 --gid office --shell /bin/bash agent \
  && if [ -n "$AGENT_CLIS" ]; then npm install -g $AGENT_CLIS && npm cache clean --force; fi
-COPY --from=build /src/out/server /opt/munder-difflin
+COPY --from=build /src/out/server /opt/scranton-branch
 COPY packaging/server/docker-entrypoint.sh /usr/local/bin/md-entrypoint
 RUN chmod +x /usr/local/bin/md-entrypoint
 ENV MD_DATA_DIR=/data \

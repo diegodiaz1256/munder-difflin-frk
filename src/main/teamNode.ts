@@ -124,7 +124,7 @@ const now = (): number => Date.now();
 
 function relayError(status: number): string {
   if (status === 429) return 'the relay is rate-limiting this office (the public ntfy.sh allows 250 messages a day per IP; a team on its own relay has no such cap)';
-  if (status === 401 || status === 403) return 'the relay refused access: it needs an access token (Pro → Team → the team → Relay token)';
+  if (status === 401 || status === 403) return 'the relay refused access: it needs an access token (Manager → Team → the team → Relay token)';
   return `relay answered ${status}`;
 }
 const trimRelay = (r: string): string => r.replace(/\/+$/, '');

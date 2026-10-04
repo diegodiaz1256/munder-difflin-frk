@@ -38,7 +38,7 @@ export type UpdateAction = 'none' | 'check' | 'download' | 'restart' | 'open-rel
  *  remote model catalog / hero payload all derive from it. A fork must point
  *  here at itself, or its builds "update" into upstream releases and lose the
  *  fork's changes (electron-builder.yml `publish` must match). */
-export const REPO = 'diegodiaz1256/munder-difflin-frk';
+export const REPO = 'diegodiaz1256/scranton-branch';
 export const REPO_URL = `https://github.com/${REPO}`;
 /** Raw files on the repo's main branch (docs/model-catalog.json, docs/hero.json). */
 export const REPO_RAW_MAIN = `https://raw.githubusercontent.com/${REPO}/main`;
@@ -48,9 +48,9 @@ export const REPO_RAW_MAIN = `https://raw.githubusercontent.com/${REPO}/main`;
  *  `downloadUrl` of its own (the native updater path never does). */
 export function installerUrl(version: string, platform: string, arch: string): string {
   const v = version.replace(/^v/, '');
-  const file = platform === 'darwin' ? `Munder-Difflin-${v}-mac-${arch}.dmg`
-    : platform === 'win32' ? `Munder-Difflin-${v}-win-x64-setup.exe`
-    : `Munder-Difflin-${v}-linux-x86_64.AppImage`;
+  const file = platform === 'darwin' ? `Scranton-Branch-${v}-mac-${arch}.dmg`
+    : platform === 'win32' ? `Scranton-Branch-${v}-win-x64-setup.exe`
+    : `Scranton-Branch-${v}-linux-x86_64.AppImage`;
   return `https://github.com/${REPO}/releases/download/v${v}/${file}`;
 }
 
@@ -311,7 +311,7 @@ export function describeUpdateSettings(
     case 'downloaded':
       return {
         headline: `v${status.version} is ready to install`,
-        detail: `Restart Munder Difflin to finish updating from v${v}.`,
+        detail: `Restart Scranton Branch to finish updating from v${v}.`,
         button: 'Restart to update', action: 'restart', busy: false, tone: 'ready'
       };
     case 'available-manual':
@@ -358,7 +358,7 @@ export function manualInstallSteps(platform: string): { os: string; steps: strin
     return {
       os: 'macOS',
       steps: [
-        'Open the .dmg and drag Munder Difflin onto Applications. Choose Replace when asked.',
+        'Open the .dmg and drag Scranton Branch onto Applications. Choose Replace when asked.',
         'Quit this app, open the new one from Applications, and pick the same project.'
       ]
     };
@@ -368,7 +368,7 @@ export function manualInstallSteps(platform: string): { os: string; steps: strin
       os: 'Windows',
       steps: [
         'Quit this app, then run the downloaded setup .exe. It replaces the installed version.',
-        'Open Munder Difflin again and pick the same project.'
+        'Open Scranton Branch again and pick the same project.'
       ]
     };
   }

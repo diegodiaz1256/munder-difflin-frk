@@ -24,7 +24,7 @@
 
 export type McpTier = 'safe-readonly' | 'write' | 'secret';
 
-/** One credential a keyed server needs (Pro → Connections). The value lives in
+/** One credential a keyed server needs (Manager → Connections). The value lives in
  *  the encrypted secret store, never in config or in any file the hive writes:
  *  the per-agent MCP config carries `${ENV}` and the value rides in the agent
  *  process environment (see HiveManager.buildDefaultMcpServers). */

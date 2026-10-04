@@ -1,5 +1,5 @@
 /**
- * Munder Difflin as a server: the office with no GUI and no Chromium.
+ * Scranton Branch as a server: the office with no GUI and no Chromium.
  *
  *   node server/index.cjs --office /srv/office [--name "Build server"]
  *                         [--team-join <invite code>]
