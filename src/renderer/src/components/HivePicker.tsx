@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PixelPanel } from './PixelPanel';
 import { PixelButton } from './PixelButton';
 import { Icon } from './Icon';
@@ -16,7 +16,22 @@ export interface HivePickerProps {
 const SKIP_KEY = 'cth.skipHivePickerOnce';
 
 function folderName(path: string): string {
-  return path.split('/').filter(Boolean).pop() ?? path;
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+/** "Ubuntu" for a floor that lives in WSL, else null (main/wsl.ts decides the same way). */
+function wslDistro(path: string): string | null {
+  return /^[\\/]{2}(?:wsl\.localhost|wsl\$)[\\/]([^\\/]+)/i.exec(path)?.[1] ?? null;
+}
+
+function RunsOn({ path }: { path: string }) {
+  const d = wslDistro(path);
+  return (
+    <span style={{
+      fontFamily: 'var(--cth-font-mono)', fontSize: 10, padding: '1px 5px', flexShrink: 0,
+      background: d ? 'var(--cth-lilac-light)' : 'var(--cth-cream-200)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)'
+    }}>{d ? `WSL · ${d}` : 'Windows'}</span>
+  );
 }
 
 /**
@@ -32,6 +47,8 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
   const recents = (config.recentHives ?? []).filter((h) => h && h !== current);
   const [busy, setBusy] = useState<string | undefined>();
   const [error, setError] = useState<string | undefined>();
+  const isWindows = window.cth.platform === 'win32';
+  const [creating, setCreating] = useState(false);
 
   // Open a hive. Same folder as the current one → just enter it (no relaunch).
   // A different folder → changeHome('fresh') re-points + relaunches the process.
@@ -95,8 +112,8 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
                 }}>
                   <Icon name="folder" />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: 'var(--cth-font-display)', fontSize: 11, lineHeight: '15px' }}>
-                      {folderName(current)}
+                    <div style={{ fontFamily: 'var(--cth-font-display)', fontSize: 11, lineHeight: '15px', display: 'flex', gap: 6, alignItems: 'center' }}>
+                      {folderName(current)} {isWindows && <RunsOn path={current} />}
                     </div>
                     <div style={{
                       fontFamily: 'var(--cth-font-mono)', fontSize: 11, color: 'var(--cth-ink-500)',
@@ -132,8 +149,8 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
                     >
                       <Icon name="folder" />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--cth-ink-900)' }}>
-                          {folderName(h)}
+                        <div style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--cth-ink-900)', display: 'flex', gap: 6, alignItems: 'center' }}>
+                          {folderName(h)} {isWindows && <RunsOn path={h} />}
                         </div>
                         <div style={{
                           fontFamily: 'var(--cth-font-mono)', fontSize: 11, color: 'var(--cth-ink-500)',
@@ -148,6 +165,9 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
                 </div>
               </div>
             )}
+
+            {creating && <NewOffice onCancel={() => setCreating(false)} onWindows={() => { setCreating(false); void browse(); }}
+              onCreated={(p) => { setCreating(false); void openHive(p); }} onError={setError} />}
 
             {error && (
               <div style={{
@@ -170,7 +190,7 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
                   <Icon name="folder" /> open existing config…
                 </span>
               </PixelButton>
-              <PixelButton variant="secondary" size="md" onClick={browse} disabled={!!busy}>
+              <PixelButton variant="secondary" size="md" onClick={isWindows ? () => setCreating(true) : browse} disabled={!!busy}>
                 <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                   <Icon name="plus" /> create new config…
                 </span>
@@ -178,6 +198,88 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
             </div>
           </div>
         </PixelPanel>
+      </div>
+    </div>
+  );
+}
+
+/** New floor: where it runs is chosen here. On Windows a folder is picked as
+ *  before; in WSL the floor is created as ~/offices/<name> inside the distro,
+ *  where its agents, git and tools will run. */
+function NewOffice({ onCancel, onWindows, onCreated, onError }: {
+  onCancel: () => void; onWindows: () => void; onCreated: (path: string) => void; onError: (e: string | undefined) => void;
+}) {
+  const [where, setWhere] = useState<'windows' | 'wsl'>('windows');
+  const [distros, setDistros] = useState<string[] | null>(null);
+  const [wslError, setWslError] = useState<string | null>(null);
+  const [mirrored, setMirrored] = useState(true);
+  const [distro, setDistro] = useState('');
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void window.cth.wslDistros().then((r) => {
+      setDistros(r.distros);
+      setMirrored(r.mirrored !== false);
+      if (!r.ok || !r.distros.length) setWslError(r.error ?? 'No WSL distribution is installed.');
+      else setDistro(r.distros[0]);
+    });
+  }, []);
+  const create = async () => {
+    onError(undefined);
+    setBusy(true);
+    const r = await window.cth.wslCreateOffice(distro, name);
+    setBusy(false);
+    if (r.ok && r.path) onCreated(r.path); else onError(r.error ?? 'Could not create it.');
+  };
+  const label = { fontFamily: 'var(--cth-font-display)', fontSize: 9, color: 'var(--cth-ink-500)' } as const;
+  return (
+    <div style={{ padding: 12, background: 'var(--cth-paper-100)', boxShadow: 'inset 0 0 0 2px var(--cth-ink-300)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={label}>NEW CONFIG · WHERE DOES IT RUN?</div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {(['windows', 'wsl'] as const).map((w) => (
+          <button key={w} onClick={() => setWhere(w)} style={{
+            flex: 1, padding: '8px 10px', textAlign: 'left', border: 'none', cursor: 'pointer',
+            background: where === w ? 'var(--cth-mint-light)' : 'var(--cth-cream-100)',
+            boxShadow: `inset 0 0 0 2px ${where === w ? 'var(--cth-mint)' : 'var(--cth-ink-100)'}`
+          }}>
+            <div style={{ fontWeight: 600, fontSize: 12 }}>{w === 'windows' ? 'Windows' : 'WSL (Linux)'}</div>
+            <div style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>
+              {w === 'windows' ? 'Agents run on Windows, in a folder you pick.' : 'Agents, git and tools run inside a Linux distribution.'}
+            </div>
+          </button>
+        ))}
+      </div>
+      {where === 'wsl' && (
+        distros === null ? <div style={{ fontSize: 12, color: 'var(--cth-ink-500)' }}>Looking for WSL…</div>
+        : wslError ? (
+          <div style={{ fontSize: 12, lineHeight: '18px', color: 'var(--cth-ink-700)' }}>
+            {wslError}<br />
+            Install it from an administrator PowerShell with <code>wsl --install -d Ubuntu</code> (virtualization must be on in the BIOS), then come back.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <select value={distro} onChange={(e) => setDistro(e.target.value)} style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 12 }}>
+                {distros.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="name, e.g. shop"
+                style={{ flex: 1, fontFamily: 'var(--cth-font-mono)', fontSize: 12, padding: '4px 6px' }} />
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>Created as <code>~/offices/{name.trim() || 'name'}</code> in {distro}.</div>
+            {!mirrored && (
+              <div style={{ fontSize: 11, lineHeight: '16px', color: 'var(--cth-ink-700)', background: 'var(--cth-lemon-light)', padding: '4px 6px' }}>
+                Agents in WSL report back to the app over localhost, which needs WSL's mirrored networking:
+                add <code>networkingMode=mirrored</code> under <code>[wsl2]</code> in <code>%UserProfile%\.wslconfig</code>, then run <code>wsl --shutdown</code>.
+              </div>
+            )}
+          </div>
+        )
+      )}
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <PixelButton variant="secondary" size="md" onClick={onCancel}>cancel</PixelButton>
+        {where === 'windows'
+          ? <PixelButton variant="primary" size="md" onClick={onWindows}>pick a folder…</PixelButton>
+          : <PixelButton variant="primary" size="md" onClick={() => void create()} disabled={busy || !!wslError || !distro || !name.trim()}>{busy ? 'creating…' : 'create in WSL'}</PixelButton>}
       </div>
     </div>
   );

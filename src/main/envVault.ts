@@ -26,6 +26,7 @@
  */
 import { spawn, execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { parseWslPath, secretStdin, wslSecretRun } from './wsl';
 
 export type EnvKind = 'plain' | 'secret' | 'op';
 
@@ -256,8 +257,12 @@ function execRunner(r: Runner, cwd: string, secrets: Record<string, string>): Pr
   return new Promise((resolve) => {
     let output = '';
     const add = (d: Buffer) => { if (output.length < MAX_OUTPUT) output += d.toString('utf8'); };
-    const child = spawn(r.command, { cwd, shell: true, windowsHide: true, env: { ...process.env, ...secrets } });
-    child.stdin.end();
+    // A WSL floor's worktree: run inside its distro, secrets over stdin.
+    const wsl = parseWslPath(cwd);
+    const child = wsl
+      ? (() => { const c = wslSecretRun(wsl.distro, wsl.linuxPath, r.command); return spawn(c.file, c.args, { windowsHide: true }); })()
+      : spawn(r.command, { cwd, shell: true, windowsHide: true, env: { ...process.env, ...secrets } });
+    child.stdin.end(wsl ? secretStdin(secrets) : undefined);
     child.stdout.on('data', add);
     child.stderr.on('data', add);
     const timer = setTimeout(() => {

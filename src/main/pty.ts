@@ -6,6 +6,8 @@ import { spawnSync } from 'node:child_process';
 import { ensureKilled, hardKillTree } from './procKill';
 import { expandTilde } from './fs';
 import { buildPtyEnv } from './ptyEnv';
+import { homedir } from 'node:os';
+import { linuxizeText, parseWslPath, wslCommand } from './wsl';
 import {
   captureFromLoginShell,
   isSafeCommandName,
@@ -89,7 +91,19 @@ interface PtySession {
   /** True after the child has emitted at least one frame. Automation waits for
    *  this before typing, so startup prompts cannot outrun the TUI subscription. */
   hasOutput: boolean;
+  /** WSL floors: when the agent first printed visible text (0 = not yet).
+   *  wsl.exe paints escape sequences long before the agent starts. */
+  wslVisibleAt?: number;
 }
+
+/** Visible text once escape sequences are removed. */
+const ESCAPES = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]/g;
+export function hasVisibleText(data: string): boolean {
+  return /[^\s\x00-\x1f\x7f]/.test(data.replace(ESCAPES, ''));
+}
+/** How long a WSL agent's first visible frame must settle before automation
+ *  types into it (its TUI turns on raw input a moment after painting). */
+const WSL_READY_MS = 1500;
 
 export interface SpawnOptions {
   id: string;
@@ -592,9 +606,12 @@ export class PtyManager {
       // (2) the legacy fallback, route the whole thing through cmd.exe as one
       // pre-escaped string (loses newlines — see buildCmdCommandLine).
       const isWin = process.platform === 'win32';
+      // A WSL floor (main/wsl.ts): the agent runs inside the distro, so none of
+      // the Windows command resolution below applies.
+      const wsl = isWin ? parseWslPath(opts.cwd) : null;
       const lower = resolved.toLowerCase();
       const directExe = lower.endsWith('.exe') || lower.endsWith('.com');
-      const needsCmd = isWin && !directExe;
+      const needsCmd = isWin && !directExe && !wsl;
       // Prefer decoding an npm shim to its interpreter over the cmd.exe route (see
       // resolveWindowsShimSpawn). win32-only and null-on-anything-unexpected, so
       // macOS/Linux and every undecodable Windows target keep today's behaviour.
@@ -604,7 +621,26 @@ export class PtyManager {
         : null;
       let file: string;
       let spawnArgs: string[] | string;
-      if (typeof opts.shellScript === 'string') {
+      if (wsl) {
+        // Paths the agent is handed (its hive, its worktree) become Linux paths;
+        // Windows-only values (the bundled Electron node launcher, PATH) are not
+        // passed — inside the distro node and the CLIs come from the user's own
+        // setup (WSL_PRELUDE loads nvm & co).
+        const DROP = new Set(['PATH', 'Path', 'HIVE_NODE', 'ELECTRON_RUN_AS_NODE', 'ComSpec', 'PATHEXT']);
+        const env: Record<string, string> = { TERM: 'xterm-256color', COLORTERM: 'truecolor' };
+        for (const [k, v] of Object.entries(opts.env ?? {})) {
+          if (DROP.has(k) || typeof v !== 'string') continue;
+          env[k] = linuxizeText(v, wsl.distro);
+        }
+        env.HIVE_NODE = 'node';
+        const cmd = typeof opts.shellScript === 'string' ? 'bash' : opts.command;
+        const args = typeof opts.shellScript === 'string'
+          ? ['-lc', opts.shellScript]
+          : (opts.args ?? []).map((a) => linuxizeText(a, wsl.distro));
+        const inv = wslCommand(wsl.distro, wsl.linuxPath, cmd, args, env);
+        file = inv.file;
+        spawnArgs = inv.args;
+      } else if (typeof opts.shellScript === 'string') {
         // Missing-CLI auto-install: run a banner + install command through the
         // platform shell so it streams to this same Terminal tab. On Windows we
         // hand cmd.exe a verbatim STRING (`/d /s /c "<script>"`) — node-pty passes
@@ -679,7 +715,9 @@ export class PtyManager {
         name: 'xterm-256color',
         cols: opts.cols ?? 100,
         rows: opts.rows ?? 30,
-        cwd: opts.cwd,
+        // wsl.exe gets the floor's folder through --cd; its own working
+        // directory stays a plain Windows one.
+        cwd: wsl ? homedir() : opts.cwd,
         // Inherited env minus the parent Claude session's identity markers,
         // then the app's defaults and locale, then per-agent values — see
         // ptyEnv.ts for why the strip exists and why it is prefix-based.
@@ -703,7 +741,8 @@ export class PtyManager {
         lastOutputAt: Date.now(),
         hasOutput: false,
         tail: '',
-        owner
+        owner,
+        ...(wsl ? { wslVisibleAt: 0 } : {})
       };
       this.sessions.set(opts.id, session);
 
@@ -713,6 +752,7 @@ export class PtyManager {
         if (this.sessions.get(opts.id) !== session) return;
         session.hasOutput = true;
         session.lastOutputAt = Date.now();
+        if (session.wslVisibleAt === 0 && hasVisibleText(data)) session.wslVisibleAt = Date.now();
         // Keep only the trailing window; slice AFTER appending so a single
         // oversized write still leaves us its end (the part that explains a death).
         session.tail = (session.tail + data).slice(-TAIL_MAX);
@@ -807,7 +847,7 @@ export class PtyManager {
       command: s.command,
       pid: s.proc.pid,
       lastOutputAt: s.lastOutputAt,
-      hasOutput: s.hasOutput
+      hasOutput: s.wslVisibleAt === undefined ? s.hasOutput : s.wslVisibleAt > 0 && Date.now() - s.wslVisibleAt >= WSL_READY_MS
     }));
   }
 

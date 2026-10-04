@@ -1,12 +1,15 @@
 import { spawn } from 'node:child_process';
 import { openForRead, safeResolve } from './fs';
+import { gitInvocation, parseWslPath, toWslUnc } from './wsl';
 
 /** Run git in `cwd` with `args`. Returns stdout text or an error. */
 function runGit(cwd: string, args: string[], timeoutMs = 8000): Promise<{
   ok: true; stdout: string;
 } | { ok: false; error: string }> {
   return new Promise((resolve) => {
-    const proc = spawn('git', args, { cwd });
+    // Inside the distro for a WSL floor (wsl.ts gitInvocation).
+    const inv = gitInvocation(cwd, args);
+    const proc = spawn(inv.file, inv.args, { cwd: inv.cwd, windowsHide: true });
     let stdout = '';
     let stderr = '';
     const timer = setTimeout(() => {
@@ -478,7 +481,13 @@ export async function listWorktrees(cwd: string): Promise<GitWorktreeInfo[] | { 
   const out: GitWorktreeInfo[] = [];
   let cur: Partial<GitWorktreeInfo> = {};
   for (const line of res.stdout.split('\n')) {
-    if (line.startsWith('worktree ')) { if (cur.path) out.push(cur as GitWorktreeInfo); cur = { path: line.slice(9), head: '', branch: null }; }
+    if (line.startsWith('worktree ')) {
+      if (cur.path) out.push(cur as GitWorktreeInfo);
+      // Git inside a distro reports Linux paths; the app needs the Windows one.
+      const p = line.slice(9);
+      const w = parseWslPath(cwd);
+      cur = { path: w && p.startsWith('/') ? toWslUnc(w.distro, p) : p, head: '', branch: null };
+    }
     else if (line.startsWith('HEAD ')) cur.head = line.slice(5);
     else if (line.startsWith('branch ')) cur.branch = line.slice(7).replace(/^refs\/heads\//, '');
   }

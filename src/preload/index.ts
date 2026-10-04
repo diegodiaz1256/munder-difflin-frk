@@ -1384,6 +1384,10 @@ const api = {
     ipcRenderer.invoke('config:saveRoleBundles', bundles),
   connectionsList: (): Promise<ConnectionStatusView[]> =>
     ipcRenderer.invoke('connections:list'),
+  // WSL floors (main/wsl.ts): Windows only.
+  wslDistros: (): Promise<{ ok: boolean; distros: string[]; mirrored?: boolean; error?: string }> => ipcRenderer.invoke('wsl:distros'),
+  wslCreateOffice: (distro: string, name: string): Promise<{ ok: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke('wsl:createOffice', distro, name),
   // Environment & secrets (main/envVault.ts). Secret values are write-only.
   envList: (): Promise<{ vars: EnvVarView[]; runners: RunnerView[] }> => ipcRenderer.invoke('env:list'),
   envSetVar: (v: { name: string; kind: 'plain' | 'secret' | 'op'; value?: string; agents?: string[] | null; note?: string }, secret?: string): Promise<{ ok: boolean; error?: string }> =>

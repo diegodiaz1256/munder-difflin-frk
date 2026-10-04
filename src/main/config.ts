@@ -13,6 +13,7 @@ import { defaultMcpDefaults } from '../shared/mcpCatalog';
 import { MAX_AGENT_TOKEN_CAP } from '../shared/tokenCaps';
 import { cleanServerList } from '../shared/roleBundles';
 import { expandTilde, normalizeHiveHome } from './fs';
+import { distroHomeUnc, parseWslPath } from './wsl';
 import type { IntegrationRecord } from '../shared/integrations';
 import {
   DEFAULT_CONTEXT_TRIGGER,
@@ -917,6 +918,16 @@ function ensureClaudeProjectTrust(home: string, cwd: string): void {
  *  are preserved without preventing the other file from being handled safely. */
 export function ensureClaudePermissionsAccepted(cwd?: string): void {
   let home: string;
+  // A WSL floor: Claude Code runs inside the distro, so its prompts are
+  // gated by the distro's ~/.claude.json, keyed by the Linux path.
+  const wsl = parseWslPath(cwd);
+  if (wsl) {
+    const h = distroHomeUnc(wsl.distro);
+    if (!h) return;
+    ensureClaudeGlobalPermissions(h);
+    ensureClaudeProjectTrust(h, wsl.linuxPath);
+    return;
+  }
   try { home = homedir(); } catch { return; }
   if (!home) return;
 

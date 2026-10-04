@@ -18,6 +18,7 @@
  *
  * Everything here runs in the Electron main process.
  */
+import { gitInvocation, linuxizeText, parseWslPath, runInDistro, toWslUnc, type WslLocation } from './wsl';
 import {
   existsSync, mkdirSync, readFileSync, writeFileSync, renameSync,
   readdirSync, statSync, lstatSync, realpathSync, rmSync, appendFileSync,
@@ -605,8 +606,59 @@ export class HiveManager {
   /** Build a hook command string that runs `script` under the guaranteed node,
    *  DOUBLE-QUOTED (safe for paths with spaces). */
   private nodeRun(script: string, ...args: string[]): string {
+    // A WSL floor's agents run inside the distro: Linux node, Linux paths.
+    if (this.wslRoot()) return ['node', `"${this.forAgent(script)}"`, ...args].join(' ');
     const launcher = this.nodeLauncher();
     return [launcher ? `"${launcher}"` : 'node', `"${script}"`, ...args].join(' ');
+  }
+
+  // ─── WSL floors (main/wsl.ts) ───────────────────────────────────────────────
+  // A floor that lives in a distro runs its agents there. Main still reads and
+  // writes the hive through the \\wsl.localhost path; anything an AGENT reads
+  // (hook commands, settings, mcp.json, identity) carries Linux paths, and
+  // provider configs go to the distro's home, not the Windows profile.
+
+  /** The distro and Linux path of a WSL floor, else null. */
+  wslRoot(): WslLocation | null {
+    return process.platform === 'win32' ? parseWslPath(this.root()) : null;
+  }
+
+  /** Do this floor's agents run on Windows (cmd.exe hook commands, .cmd
+   *  launchers)? False on POSIX and on a WSL floor. */
+  private winAgents(): boolean {
+    return process.platform === 'win32' && !this.wslRoot();
+  }
+
+  /** Text an agent will read, with this floor's UNC paths as Linux paths. */
+  forAgent(text: string): string {
+    const w = this.wslRoot();
+    return w ? linuxizeText(text, w.distro) : text;
+  }
+
+  /** Every string in a JSON-able value through forAgent (settings, mcp.json). */
+  private forAgentJson<T>(value: T): T {
+    if (!this.wslRoot()) return value;
+    const walk = (v: unknown): unknown =>
+      typeof v === 'string' ? this.forAgent(v)
+        : Array.isArray(v) ? v.map(walk)
+        : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]))
+        : v;
+    return walk(value) as T;
+  }
+
+  private distroHomes = new Map<string, string>();
+  /** The home folder the agents' CLIs use: the Windows profile, or the
+   *  distro user's home (as a \\wsl.localhost path) on a WSL floor. */
+  private userHome(): string {
+    const w = this.wslRoot();
+    if (!w) return homedir();
+    let h = this.distroHomes.get(w.distro);
+    if (!h) {
+      try { h = runInDistro(w.distro, 'sh', ['-c', 'printf %s "$HOME"']); } catch { h = ''; }
+      if (!h.startsWith('/')) h = '/root';
+      this.distroHomes.set(w.distro, h);
+    }
+    return toWslUnc(w.distro, h);
   }
 
   /** A hook command for a CLI that runs it through cmd.exe on Windows (agy,
@@ -623,6 +675,7 @@ export class HiveManager {
    *  names would be the other way out, but volumes routinely have them turned
    *  off. Without a space nothing changes. */
   private windowsHookCommand(name: string, script: string, ...args: string[]): string {
+    if (this.wslRoot()) return this.nodeRun(script, ...args);
     const launcher = this.nodeLauncher() ?? 'node';
     if (!/\s/.test(launcher) && !/\s/.test(script)) return [launcher, script, ...args].join(' ');
     const dir = this.runtimeBinDir();
@@ -662,7 +715,7 @@ export class HiveManager {
     if (!existsSync(registry)) {
       this.writeJson(registry, { godId: null, agents: {} } as Registry);
     }
-    const userCodexHome = join(homedir(), '.codex');
+    const userCodexHome = join(this.userHome(), '.codex');
     for (const [id, agent] of Object.entries(this.registry().agents)) {
       const codexHome = join(root, 'agents', id, '.codex');
       if (agent.provider === 'codex' && existsSync(codexHome)) {
@@ -803,7 +856,7 @@ export class HiveManager {
     meta = { ...meta, role };
 
     const identity = join(dir, 'identity.md');
-    writeFileSync(identity, this.identityText(meta), 'utf8'); // refresh on each spawn
+    writeFileSync(identity, this.forAgent(this.identityText(meta)), 'utf8'); // refresh on each spawn
 
     // W3 — bundled read-only skills: refresh the agent's .claude/skills/ from the
     // app-resources skills/ dir on every spawn (same policy as identity.md), so an
@@ -1050,7 +1103,7 @@ export class HiveManager {
     const mcp = this.buildDefaultMcpServers(meta.cwd, opts.mcpDefaults, opts.mcpGrant, meta.id, opts.mcpScopes);
     const mcpPath = join(dir, 'mcp.json');
     if (Object.keys(mcp.servers).length) {
-      this.writeJson(mcpPath, { mcpServers: mcp.servers });
+      this.writeJson(mcpPath, this.forAgentJson({ mcpServers: mcp.servers }));
       args.push('--mcp-config', mcpPath);
       // Only the gateway capability token rides in env (the file says `${...}`);
       // keys never reach the agent at all.
@@ -1068,7 +1121,7 @@ export class HiveManager {
     if (sock && shim) {
       env.HIVE_SOCK = sock;
       const settingsPath = join(dir, 'settings.json');
-      this.writeJson(settingsPath, this.hookSettings(shim, opts.theme, this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs)));
+      this.writeJson(settingsPath, this.forAgentJson(this.hookSettings(shim, opts.theme, this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs))));
       args.push('--settings', settingsPath);
     }
     return { args, env };
@@ -1089,7 +1142,7 @@ export class HiveManager {
       agent.role = next;
       agent.lastSeen = Date.now();
       this.writeJson(join(root, 'registry.json'), reg);
-      writeFileSync(join(this.agentDir(id), 'identity.md'), this.identityText(agent), 'utf8');
+      writeFileSync(join(this.agentDir(id), 'identity.md'), this.forAgent(this.identityText(agent)), 'utf8');
       this.appendLog({ kind: 'role', agentId: id, role: next });
       this.commit(`hive: role ${id}`);
       return { ok: true };
@@ -1695,7 +1748,7 @@ export class HiveManager {
     // keeps the prefix prompt-cache-stable while making the command runnable in
     // cmd.exe/PowerShell as well as a POSIX shell.
     const hiveNode = this.nodeCommand();
-    const kgCli = kgCliPath || (process.platform === 'win32' ? '%KG_CLI%' : '$KG_CLI');
+    const kgCli = kgCliPath || (this.winAgents() ? '%KG_CLI%' : '$KG_CLI');
     const knowledgeLine = knowledgeGraph
       ? `Enterprise knowledge: this organisation has a private Knowledge Graph of its own documents, policies, and business context. When a task needs that context — company-specific facts, house style, internal processes — query it instead of guessing: run \`"${hiveNode}" "${kgCli}" search "<query>"\` for ranked passages, \`"${hiveNode}" "${kgCli}" list\` to see what is available, and \`"${hiveNode}" "${kgCli}" get <id>\` for a full document. (That first path is the harness's bundled Node — use it instead of bare \`node\`, which may not be on your PATH.)`
       : '';
@@ -2276,7 +2329,7 @@ export class HiveManager {
     mkdirSync(join(root, 'bin'), { recursive: true });
     writeFileSync(shim, AGY_HOOK_SHIM, 'utf8');
     // Bundled node, not bare `node` — agy's hooks run with a stripped PATH too.
-    const command = (event: string) => process.platform === 'win32'
+    const command = (event: string) => this.winAgents()
       ? this.windowsHookCommand('md-agy-hook', shim, event)
       : this.nodeRun(shim, event);
     const tool = (event: string) => ({
@@ -2293,7 +2346,7 @@ export class HiveManager {
       PostInvocation: [plain('PostInvocation')],
       Stop: [plain('Stop')]
     };
-    const gem = join(homedir(), '.gemini');
+    const gem = join(this.userHome(), '.gemini');
     for (const p of [join(gem, 'config', 'hooks.json'), join(gem, 'antigravity-cli', 'hooks.json')]) {
       try {
         mkdirSync(dirname(p), { recursive: true });
@@ -2327,7 +2380,7 @@ export class HiveManager {
         hooks: [{
           name: `munder-hive-${name}`,
           type: 'command',
-          command: process.platform === 'win32'
+          command: this.winAgents()
             ? this.windowsHookCommand(`md-gemini-hook-${basename(dir).replace(/[^A-Za-z0-9_-]/g, '-')}`, shim)
             : this.nodeRun(shim),
           timeout: 30000
@@ -2371,7 +2424,7 @@ export class HiveManager {
     const home = join(dir, '.codex');
     try {
       mkdirSync(home, { recursive: true });
-      const userHome = join(homedir(), '.codex');
+      const userHome = join(this.userHome(), '.codex');
       // Symlink the user's login so the isolated home authenticates as them.
       // (config.toml is NOT symlinked — we write our own below, seeded from theirs,
       // because it must carry our [hooks] tables.) Fall back to copy where symlinks
@@ -2428,7 +2481,7 @@ export class HiveManager {
           'SessionStart', 'UserPromptSubmit', 'PreCompact', 'PostCompact'];
         // Windows: no nested quotes (#350), and no path with a space either —
         // see windowsHookCommand. POSIX: ordinary shell quoting, verified.
-        const command = process.platform === 'win32'
+        const command = this.winAgents()
           ? this.windowsHookCommand('md-codex-hook', shim)
           : this.nodeRun(shim);
         config += '\n# --- munder-hive lifecycle hooks (auto-generated; do not edit) ---\n';
@@ -2529,7 +2582,7 @@ export class HiveManager {
     if (!root) return;
     const agents = join(root, 'agents');
     if (!existsSync(agents)) return;
-    const userHome = join(homedir(), '.codex');
+    const userHome = join(this.userHome(), '.codex');
 
     for (const entry of readdirSync(agents, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
@@ -2578,7 +2631,7 @@ export class HiveManager {
       const manifest = { name: 'munder-hive-bridge', version: '0.3.2', main: 'extensions/hive-bridge.js', auto: true };
       writeFileSync(join(home, 'extensions.json'), JSON.stringify(manifest, null, 2), 'utf8');
 
-      const userPiDir = join(homedir(), '.pi', 'agent');
+      const userPiDir = join(this.userHome(), '.pi', 'agent');
       for (const fileName of ['models.json', 'models-store.json'] as const) {
         try {
           const data = readFileSync(join(userPiDir, fileName), 'utf8');
@@ -2712,7 +2765,7 @@ export class HiveManager {
         PreCompact: [tool('.*')],
         PostCompact: [tool('.*')]
       };
-      const hookDir = join(homedir(), '.grok', 'hooks');
+      const hookDir = join(this.userHome(), '.grok', 'hooks');
       mkdirSync(hookDir, { recursive: true });
       writeFileSync(
         join(hookDir, 'munder-hive.json'),
@@ -2999,8 +3052,10 @@ export class HiveManager {
   // The gc still happens — this only stops it from outliving the command that
   // triggered it, which is what "single committer" was supposed to mean.
   private git(args: string[], cwd: string): { ok: boolean; out: string; err: string } {
-    const res = spawnSync('git', ['-c', 'commit.gpgsign=false', '-c', 'gc.autoDetach=false', '-c', 'user.name=Hive', '-c', 'user.email=hive@local', ...args], {
-      cwd, encoding: 'utf8', timeout: 8000
+    // A WSL floor's hive is committed by git inside that distro (wsl.ts).
+    const inv = gitInvocation(cwd, ['-c', 'commit.gpgsign=false', '-c', 'gc.autoDetach=false', '-c', 'user.name=Hive', '-c', 'user.email=hive@local', ...args]);
+    const res = spawnSync(inv.file, inv.args, {
+      cwd: inv.cwd, encoding: 'utf8', timeout: inv.distro ? 20000 : 8000, windowsHide: true
     });
     return { ok: res.status === 0, out: res.stdout ?? '', err: res.stderr ?? '' };
   }
@@ -3367,7 +3422,7 @@ process.stdin.on('end', () => {
     }
     if (sock) {
       try {
-        const c = net.createConnection(sock, () => { c.end(JSON.stringify(payload) + '\\n'); });
+        const c = net.createConnection((String(sock).startsWith('tcp://') ? { host: '127.0.0.1', port: Number(String(sock).slice(String(sock).lastIndexOf(':') + 1)) } : sock), () => { c.end(JSON.stringify(payload) + '\\n'); });
         c.on('error', () => {});
         c.on('close', () => process.exit(0));
       } catch (_) { process.exit(0); }
@@ -3380,7 +3435,7 @@ process.stdin.on('end', () => {
   if (!sock) { process.exit(0); }
   let resp = '';
   const done = (code) => { if (resp) process.stdout.write(resp); process.exit(code); };
-  const c = net.createConnection(sock, () => c.write(JSON.stringify(payload) + '\\n'));
+  const c = net.createConnection((String(sock).startsWith('tcp://') ? { host: '127.0.0.1', port: Number(String(sock).slice(String(sock).lastIndexOf(':') + 1)) } : sock), () => c.write(JSON.stringify(payload) + '\\n'));
   c.setEncoding('utf8');
   c.on('data', (d) => { resp += d; });
   c.on('end', () => done(0));
@@ -3443,7 +3498,7 @@ process.stdin.on('end', () => {
     process.exit(0);
   };
   try {
-    const c = net.createConnection(sock, () => c.write(JSON.stringify(payload) + '\\n'));
+    const c = net.createConnection((String(sock).startsWith('tcp://') ? { host: '127.0.0.1', port: Number(String(sock).slice(String(sock).lastIndexOf(':') + 1)) } : sock), () => c.write(JSON.stringify(payload) + '\\n'));
     c.setEncoding('utf8');
     c.on('data', (d) => { resp += d; });
     c.on('end', done);
@@ -3470,7 +3525,7 @@ function post(payload) {
   try {
     if (!SOCK) return;
     payload.agent_id = payload.agent_id || AGENT;
-    var c = net.createConnection(SOCK, function () { try { c.end(JSON.stringify(payload) + '\\n'); } catch (e) {} });
+    var c = net.createConnection((String(SOCK).startsWith('tcp://') ? { host: '127.0.0.1', port: Number(String(SOCK).slice(String(SOCK).lastIndexOf(':') + 1)) } : SOCK), function () { try { c.end(JSON.stringify(payload) + '\\n'); } catch (e) {} });
     c.on('error', function () {});
   } catch (e) {}
 }
@@ -3527,7 +3582,7 @@ function post(payload) {
   try {
     if (!SOCK) return;
     payload.agent_id = payload.agent_id || AGENT;
-    const c = createConnection(SOCK, () => { try { c.end(JSON.stringify(payload) + '\\n'); } catch (e) {} });
+    const c = createConnection((String(SOCK).startsWith('tcp://') ? { host: '127.0.0.1', port: Number(String(SOCK).slice(String(SOCK).lastIndexOf(':') + 1)) } : SOCK), () => { try { c.end(JSON.stringify(payload) + '\\n'); } catch (e) {} });
     c.on('error', () => {});
   } catch (e) {}
 }
@@ -3586,7 +3641,7 @@ function ctxSize(model) {
 function emit(payload) {
   if (!SOCK) return;
   try {
-    const c = net.createConnection(SOCK, function () { c.end(JSON.stringify(payload) + '\\n'); });
+    const c = net.createConnection((String(SOCK).startsWith('tcp://') ? { host: '127.0.0.1', port: Number(String(SOCK).slice(String(SOCK).lastIndexOf(':') + 1)) } : SOCK), function () { c.end(JSON.stringify(payload) + '\\n'); });
     c.on('error', function () {});
   } catch (e) {}
 }
@@ -3816,7 +3871,7 @@ process.stdin.on('end', () => {
     process.exit(0);
   };
   try {
-    const c = net.createConnection(sock, () => c.write(JSON.stringify(payload) + '\\n'));
+    const c = net.createConnection((String(sock).startsWith('tcp://') ? { host: '127.0.0.1', port: Number(String(sock).slice(String(sock).lastIndexOf(':') + 1)) } : sock), () => c.write(JSON.stringify(payload) + '\\n'));
     c.setEncoding('utf8');
     c.on('data', (d) => { resp += d; });
     c.on('end', done);
@@ -3890,7 +3945,7 @@ process.stdin.on('end', () => {
     process.exit(0);
   };
   try {
-    const c = net.createConnection(sock, () => c.write(JSON.stringify(payload) + '\\n'));
+    const c = net.createConnection((String(sock).startsWith('tcp://') ? { host: '127.0.0.1', port: Number(String(sock).slice(String(sock).lastIndexOf(':') + 1)) } : sock), () => c.write(JSON.stringify(payload) + '\\n'));
     c.setEncoding('utf8');
     c.on('data', (d) => { resp += d; });
     c.on('end', done);

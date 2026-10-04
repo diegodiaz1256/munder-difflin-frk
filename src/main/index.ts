@@ -71,6 +71,8 @@ import * as integrations from './integrations';
 import { applyMissionRequest, type MissionLike } from '../shared/missionRequests';
 import { cleanCustomBundles } from '../shared/roleBundles';
 import { Factories } from './factories';
+import { createWslOffice, listDistros, mirroredNetworking, parseWslPath, probeInDistro, WSL_INSTALL } from './wsl';
+import { WslBridge } from './wslBridge';
 import { McpServers } from './mcpServers';
 import { EnvVault, fingerprintOf } from './envVault';
 import { addConnection, connectionKeyStored, connectionLaunchEnv, instancesOf, listConnections, removeConnection, renameConnection, serviceOf, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
@@ -3037,7 +3039,8 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // isn't archived and no worktree is torn down) before the relaunch takes over.
   {
     const bin = opts.command.trim().split(/\s+/)[0] || opts.command;
-    if (bin && !opts.noAutoInstall && !ptyManager.isCommandAvailable(bin)) {
+    const onWsl = process.platform === 'win32' && !!parseWslPath(opts.cwd);
+    if (bin && !opts.noAutoInstall && !onWsl && !ptyManager.isCommandAvailable(bin)) {
       // The installer commands are `npm install -g …`. Probe for npm the same way
       // we probe for the engine CLI, so a no-Node machine gets the node-free rung
       // (or an honest manual hint) instead of watching `npm: not found` scroll by.
@@ -3416,6 +3419,20 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   if (provider === 'codex' && opts.hive?.id) {
     await enableCodexRemoteForSpawn(opts, opts.hive.id);
   }
+  // A WSL floor: its agents reach the hook server, MCP gateway, key broker and
+  // telemetry through this distro's bridge (wslBridge.ts) — no mirrored
+  // networking needed. The hook server is a named pipe on Windows, so agents get
+  // the bridge's TCP port instead.
+  const wslLoc = process.platform === 'win32' ? parseWslPath(opts.cwd) : null;
+  if (wslLoc) {
+    try {
+      const ports = await wslBridgeFor(wslLoc.distro).start();
+      if (typeof ports.hooks === 'number') opts.env = { ...(opts.env ?? {}), HIVE_SOCK: `tcp://127.0.0.1:${ports.hooks}` };
+      for (const [name, v] of Object.entries(ports)) if (typeof v === 'string' && v !== 'direct') console.warn(`[wsl-bridge] ${name}: ${v}`);
+    } catch (e) {
+      return { ok: false, error: `could not reach WSL (${wslLoc.distro}): ${e instanceof Error ? e.message : String(e)}` };
+    }
+  }
   const res = ptyManager.spawn(opts, owner);
   if (res.ok) analytics.track('agent_spawned', { provider });
   else analytics.track('agent_spawn_failed', { provider, reason: spawnFailReason(res.error) });
@@ -3661,6 +3678,38 @@ const factories = new Factories({
   log: (m) => console.log('[factories]', m)
 });
 const factoryError = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) });
+// ─── WSL floors (wsl.ts): a floor created inside a distro runs there ─────────
+const wslBridges = new Map<string, WslBridge>();
+/** The bridge into one distro, created on first use. Listener ports inside WSL
+ *  match the Windows services, so URLs in agents' env work unchanged; the hook
+ *  server (a named pipe here) gets any free port. */
+function wslBridgeFor(distro: string): WslBridge {
+  let b = wslBridges.get(distro);
+  if (b) return b;
+  const listeners: Array<{ name: string; port: number; target: { port: number } | { path: string } }> = [];
+  const sock = hive.sockPath();
+  if (sock) listeners.push({ name: 'hooks', port: 0, target: { path: sock } });
+  const portOf = (url: string | null | undefined): number => { const m = url ? /:(\d+)\/?$/.exec(url) : null; return m ? Number(m[1]) : 0; };
+  const gw = portOf(mcpGateway.url());
+  if (gw) listeners.push({ name: 'gateway', port: gw, target: { port: gw } });
+  const br = integrationBroker.running() ? portOf(integrationBroker.url()) : 0;
+  if (br) listeners.push({ name: 'broker', port: br, target: { port: br } });
+  const tel = portOf(telemetry.endpoint?.() ?? null);
+  if (tel) listeners.push({ name: 'telemetry', port: tel, target: { port: tel } });
+  b = new WslBridge(distro, listeners, (m) => console.log(m));
+  wslBridges.set(distro, b);
+  return b;
+}
+
+ipcMain.handle('wsl:distros', async () => {
+  if (process.platform !== 'win32') return { ok: false, distros: [], error: 'WSL is a Windows feature' };
+  const r = await listDistros();
+  return { ...r, mirrored: mirroredNetworking() };
+});
+ipcMain.handle('wsl:createOffice', (_evt, distro: unknown, name: unknown) => {
+  if (process.platform !== 'win32' || typeof distro !== 'string' || typeof name !== 'string') return { ok: false, error: 'invalid' };
+  return createWslOffice(distro, name);
+});
 // Environment & secrets: values go in, never come out (envVault.ts).
 ipcMain.handle('env:list', () => ({ vars: envVault.listVars(), runners: envVault.listRunners() }));
 ipcMain.handle('env:setVar', (_evt, v: unknown, secret: unknown) => envVault.setVar(v, secret));
@@ -4123,9 +4172,24 @@ ipcMain.handle('skills:reveal', (_evt, path: unknown) => {
  * Finder-launched app) and knows whether the palace is initialised, so it is
  * authoritative and reused rather than re-probed differently here.
  */
-ipcMain.handle('tools:status', (): ToolStatus[] => {
+ipcMain.handle('tools:status', async (): Promise<ToolStatus[]> => {
   const win = process.platform === 'win32';
   const mem = (() => { try { memory.resetBinCache(); return memory.status(); } catch { return null; } })();
+  // A WSL floor: its agents and tools run inside the distro, so look there and
+  // give Linux install commands (memory stays on Windows, with the app).
+  const wslLoc = win ? parseWslPath(readConfig().harnessHome) : null;
+  if (wslLoc) {
+    const specs = toolCatalog();
+    const found = await probeInDistro(wslLoc.distro, specs.map((s) => s.bin).filter((b): b is string => !!b));
+    return specs.map((spec): ToolStatus => {
+      if (spec.id === 'mempalace') {
+        return { ...spec, installCommand: spec.install.win32, found: !!mem?.available, path: mem?.bin ?? null };
+      }
+      const installCommand = WSL_INSTALL[spec.id] ?? spec.install.posix.replace(/^xcode-select --install\s+# macOS · or: /, '');
+      const path = spec.bin ? found[spec.bin] ?? null : null;
+      return { ...spec, installCommand, found: !!path, path, detail: `inside WSL (${wslLoc.distro})` };
+    });
+  }
   return toolCatalog().map((spec): ToolStatus => {
     const installCommand = win ? spec.install.win32 : spec.install.posix;
     if (spec.id === 'mempalace') {
@@ -4323,6 +4387,7 @@ function finishTeardown(): void {
   try { integrationBroker.stop(); } catch (e) { console.error('[quit] broker.stop:', e); }
   try { mcpGateway.stop(); } catch (e) { console.error('[quit] mcpGateway.stop:', e); }
   try { void factories.closeAll(); } catch (e) { console.error('[quit] factories.closeAll:', e); }
+  for (const b of wslBridges.values()) { try { b.stop(); } catch (e) { console.error('[quit] wsl bridge:', e); } }
   try { stopTeam(); } catch (e) { console.error('[quit] stopTeam:', e); }
   try { hive.stopRouter(); } catch (e) { console.error('[quit] stopRouter:', e); }
   try { hookServer.stop(); } catch (e) { console.error('[quit] hookServer.stop:', e); }
