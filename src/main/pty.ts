@@ -34,6 +34,20 @@ export function withHiveRuntimeFallback(path: string, hiveRoot?: string): string
   return [...entries, dir].join(delimiter);
 }
 
+/** Server only (POSIX, running as root): agents run as another user, so the
+ *  secret-store key and the server's own environment are out of their reach.
+ *  MD_AGENT_UID / MD_AGENT_GID pick the user; MD_AGENT_HOME its home (where the
+ *  agent CLIs keep their logins). Unset everywhere else — a no-op on desktops. */
+export function agentIdentity(): { ids: { uid?: number; gid?: number }; env: Record<string, string> } {
+  const uid = Number(process.env.MD_AGENT_UID);
+  const gid = Number(process.env.MD_AGENT_GID);
+  if (process.platform === 'win32' || !process.env.MD_AGENT_UID || !Number.isInteger(uid) || !Number.isInteger(gid) || process.getuid?.() !== 0) {
+    return { ids: {}, env: {} };
+  }
+  const home = process.env.MD_AGENT_HOME;
+  return { ids: { uid, gid }, env: home ? { HOME: home, USER: process.env.MD_AGENT_USER ?? 'agent' } : {} };
+}
+
 /** How much trailing PTY output to retain per session for crash diagnostics.
  *  Big enough for a stack trace or a panic banner, small enough that N idle
  *  agents cost kilobytes, not megabytes. */
@@ -669,7 +683,8 @@ export class PtyManager {
         // Inherited env minus the parent Claude session's identity markers,
         // then the app's defaults and locale, then per-agent values — see
         // ptyEnv.ts for why the strip exists and why it is prefix-based.
-        env: buildPtyEnv(process.env, userPath, opts.env)
+        env: { ...buildPtyEnv(process.env, userPath, opts.env), ...agentIdentity().env },
+        ...agentIdentity().ids
       });
 
       // Capture THIS session object so the proc's callbacks can tell whether the

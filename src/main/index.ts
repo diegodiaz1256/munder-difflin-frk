@@ -1,7 +1,7 @@
 // Demo mode redirects userData — must load before anything else (see demo.ts).
 import { DEMO_HOME } from './demo';
 // Headless (server) mode sets Chromium switches — must load before ready too.
-import { HEADLESS, HEADLESS_SETUP } from './headless';
+import { HEADLESS, HEADLESS_SETUP, SERVER } from './headless';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, powerSaveBlocker, screen, shell, Notification } from 'electron';
 import { spawn } from 'node:child_process';
 import {
@@ -5539,9 +5539,13 @@ function bootstrapHiveServices(): void {
     }
   }
   startTeam();
-  if (HEADLESS_SETUP?.teamJoin && teamNode) {
-    void teamNode.join(HEADLESS_SETUP.teamJoin).then((r) => {
+  // An invite is single-use and MD_TEAM_JOIN stays in a unit file or compose
+  // file across restarts: join each code once, then remember it was used.
+  const joinKey = HEADLESS_SETUP?.teamJoin ? `team.joined.${createHash('sha256').update(HEADLESS_SETUP.teamJoin).digest('hex').slice(0, 16)}` : null;
+  if (joinKey && teamNode && !persist.getKv(joinKey)) {
+    void teamNode.join(HEADLESS_SETUP!.teamJoin!).then((r) => {
       console.log(r.ok ? `[headless] joined the team; ${r.peer?.name} will see this office once both are online` : `[headless] team join failed: ${r.error}`);
+      if (r.ok) { try { persist.setKv(joinKey, Date.now()); } catch { /* DB best-effort */ } }
     });
   }
   void mcpGateway.start().then((r) => {
@@ -5800,6 +5804,9 @@ app.whenReady().then(() => {
       }
     }
   }
+  if (HEADLESS_SETUP?.maxWorkers && HEADLESS_SETUP.maxWorkers !== readConfig().maxConcurrentWorkers) {
+    writeConfig({ maxConcurrentWorkers: Math.max(1, Math.min(64, Math.floor(HEADLESS_SETUP.maxWorkers))) });
+  }
   if (HEADLESS) {
     console.log(`[headless] office: ${readConfig().harnessHome ?? '(none — pass --office <dir>)'}`);
     // systemd stop / Ctrl+C: the same full teardown as closing the window.
@@ -5845,7 +5852,8 @@ app.whenReady().then(() => {
   // `autoUpdate` config flag). Download-in-background + restart-to-apply toast;
   // never restarts on its own. Falls back to a notify-only releases/latest
   // check where native updating isn't possible (win-portable, dev-ish builds).
-  initAutoUpdater(() => liveWebContents());
+  // The server is updated by its package (npm, docker pull), never in place.
+  if (!SERVER) initAutoUpdater(() => liveWebContents());
   // Bootstrap the hive (if harnessHome is configured) and start the message router.
   bootstrapHiveServices();
   // Survive sleep/lock. macOS freezes libuv timers during true system sleep, so a

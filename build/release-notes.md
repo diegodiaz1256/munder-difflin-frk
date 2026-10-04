@@ -1,3 +1,4 @@
+- **Server build:** offices on Ubuntu or Docker, no GUI.
 - **Team:** sealed messages between offices.
 - **Agents never see Connections keys.**
 - **Pro layout:** the office in a sidebar.

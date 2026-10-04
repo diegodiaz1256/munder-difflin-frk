@@ -1,0 +1,35 @@
+# docker compose -f packaging/server/docker-compose.yml up -d
+#
+# Secrets: put a 32-byte hex key in ./secret.key (openssl rand -hex 32 > secret.key)
+# and keep it with your backups. It is mounted as a secret the server reads at
+# start; agents run as another user and cannot read it.
+services:
+  office:
+    build:
+      context: ../..
+      dockerfile: packaging/server/Dockerfile
+    image: munder-difflin-server
+    restart: unless-stopped
+    init: false            # tini is the entrypoint
+    environment:
+      MD_NAME: "Docker office"
+      MD_MAX_WORKERS: "4"
+      MD_SECRET_KEY_FILE: /run/secrets/md_secret_key
+      # MD_TEAM_JOIN: "mdteam1...."   # one-time invite from Pro → Team
+      # ANTHROPIC_API_KEY: ...         # or: docker compose exec -u agent office claude
+    secrets: [md_secret_key]
+    volumes:
+      - data:/data
+      - office:/office
+      - agent-home:/home/agent
+    # The whole office — server and every agent — shares these.
+    cpus: 4
+    mem_limit: 8g
+    pids_limit: 4096
+secrets:
+  md_secret_key:
+    file: ./secret.key
+volumes:
+  data:
+  office:
+  agent-home:

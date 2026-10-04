@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.web.json",
+  "compilerOptions": {
+    "types": ["node", "vite/client"],
+    "noEmit": true
+  },
+  "include": ["src/server/**/*", "src/renderer/src/**/*.d.ts", "src/preload/index.d.ts"]
+}
