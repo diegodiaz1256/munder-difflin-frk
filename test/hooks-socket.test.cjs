@@ -175,6 +175,31 @@ test('the beat never steals a socket another live server owns', posixOnly, async
   assert.equal(await roundTrip(sock), '{}');
 });
 
+test('a probe with no answer in time is "busy", and the beat keeps the listener', async (t) => {
+  // The probe asks our own listener, on our own event loop. A synchronous call
+  // that outlasts the probe timeout (git worktree add, while a temp spawns)
+  // used to read as "another process owns the path": the listener was
+  // abandoned and, on Windows, every re-bind then failed against our own
+  // orphaned pipe for the rest of the session.
+  const { home, make, sock } = await floor(t);
+  const silentPath = process.platform === 'win32'
+    ? `\\\\.\\pipe\\mdh-silent-${process.pid}`
+    : path.join(home, 'silent.sock');
+  const silent = net.createServer(() => { /* accept, never answer */ });
+  await new Promise((r) => silent.listen(silentPath, r));
+  t.after(() => silent.close());
+
+  const a = make();
+  await a.ensureListening();
+  assert.equal(await a.probe(silentPath, 100), 'busy');
+
+  a.probe = async () => 'busy';
+  const h = await a.ensureListening();
+  assert.equal(h.listening, true, JSON.stringify(h));
+  assert.equal(h.orphans, 0);
+  assert.equal(await roundTrip(sock), '{}');
+});
+
 test('a hive with no root yet is not silent, and binds once the root appears', async (t) => {
   const { home } = await floor(t);
   const logs = [];
