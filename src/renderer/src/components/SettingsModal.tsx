@@ -20,7 +20,7 @@ import { Icon } from './Icon';
 import { OfficeThemePicker } from './OfficeThemePicker';
 import { McpDefaultsSettings } from './McpDefaultsSettings';
 import { IntegrationsRegistry } from './IntegrationsRegistry';
-import { PRODUCT_ANALYTICS } from '@shared/fork';
+import { LEGACY_ORG_TRIGGER, PRODUCT_ANALYTICS } from '@shared/fork';
 import { AiEnginesSettings } from './AiEnginesSettings';
 import { REALTIME_MODEL } from '@shared/realtimePricing';
 import { RealtimeDevicePicker } from '@/realtime/DevicePicker';
@@ -1813,6 +1813,8 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                         )}
                       </div>
 
+                      {/* Upstream's org key (no transport) is hidden: Pro → Team is the working version. */}
+                      {LEGACY_ORG_TRIGGER && (<>
                       <div style={sectionRule} />
 
                       {/* Organisation trigger — teammates messaging this clone node.
@@ -1895,6 +1897,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                           {t('settings.connections.orgConfigOnly')}
                         </span>
                       </div>
+                      </>)}
 
                     </>
                   )}
