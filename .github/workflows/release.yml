@@ -108,6 +108,24 @@ jobs:
       - name: Compile (electron-vite → out/)
         run: npm run build
 
+      # Current NSIS for the Windows installers (why: electron-builder.yml, nsis).
+      # The official 3.11 zip, plus elevate.exe from electron-builder's own NSIS
+      # bundle (electron-builder copies it into the app); all three pinned.
+      - name: Current NSIS (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          t="$(cygpath -u "$RUNNER_TEMP")"
+          curl -fsSL --retry 3 -o "$t/nsis.zip" "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.11/nsis-3.11.zip"
+          echo "c7d27f780ddb6cffb4730138cd1591e841f4b7edb155856901cdf5f214394fa1  $t/nsis.zip" | sha256sum -c -
+          unzip -q "$t/nsis.zip" -d "$t"
+          curl -fsSL --retry 3 -o "$t/eb-nsis.7z" "https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-3.0.4.1/nsis-3.0.4.1.7z"
+          echo "9877df902530f96357d13a7a31ae2b9df67f48b11ffc9a1700a7c961574ec5fa  $t/eb-nsis.7z" | sha256sum -c -
+          7z e -y -o"$t/nsis-3.11" "$t/eb-nsis.7z" elevate.exe > /dev/null
+          echo "9b1fbf0c11c520ae714af8aa9af12cfd48503eedecd7398d8992ee94d1b4dc37  $t/nsis-3.11/elevate.exe" | sha256sum -c -
+          echo "ELECTRON_BUILDER_NSIS_DIR=$(cygpath -w "$t/nsis-3.11")" >> "$GITHUB_ENV"
+
       - name: Package installers
         # GH_TOKEN lets electron-builder skip its own publish; we upload via the
         # release step below for full control over the asset set.

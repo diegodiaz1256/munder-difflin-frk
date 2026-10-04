@@ -145,7 +145,15 @@ win:
     - target: portable
       arch: [x64]
 
+# Windows installers are compiled with a current NSIS (3.11), not the 2018
+# 3.0.4.1 electron-builder 25 downloads: that one's System.dll plugin crashes
+# the setup at launch (0xc0000005) on current Windows 11 builds, which only
+# ran in Windows 8 compatibility mode. release.yml points
+# ELECTRON_BUILDER_NSIS_DIR at it. Its stricter makensis warns about language
+# strings electron-builder's templates leave untranslated (e.g. Korean
+# multi-user titles, falling back to English), so warnings are not fatal.
 nsis:
+  warningsAsErrors: false
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
