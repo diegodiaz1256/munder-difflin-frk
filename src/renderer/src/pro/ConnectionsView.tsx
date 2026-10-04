@@ -57,7 +57,8 @@ export function ConnectionsView({ roster }: { roster: Agent[] }) {
         Linear, Jira, Stripe, your own API… Agents call these through a local broker that adds the key for
         them, so they never see it.
       </p>
-      <div className="pro-card pro-embed" style={{ minHeight: 320 }}><IntegrationsRegistry /></div>
+      {/* A plain card that grows with its content: the page scrolls, not the card. */}
+      <div className="pro-card" style={{ flexShrink: 0 }}><IntegrationsRegistry /></div>
     </div>
   );
 }
