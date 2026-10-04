@@ -66,20 +66,24 @@ Agents never see it: they run as another user (`MD_AGENT_UID`/`MD_AGENT_GID`),
 so neither the key nor the server's environment is readable to them. Back the
 key up — stored keys are unreadable without it.
 
-## Limits of the public relay
+## Relays
 
-Team talks through an ntfy relay. The public `https://ntfy.sh` allows an
-anonymous publisher **250 messages a day per IP** and keeps undelivered
-messages for **12 hours**; a message over ~3.6 KB is split and every part
-counts. Listening costs nothing (one streaming connection).
+Team needs no server of ours: messages go through a relay, sealed end to end
+(X25519 + ML-KEM-768 post-quantum hybrid, Ed25519 signatures), so the relay
+only ever sees a random mailbox and opaque bytes. Each team picks its own:
 
-Fine for conversation between offices. For more, run your own relay (one small
-container: `docker run -p 80:80 binwiederhier/ntfy serve`) and set it as the
-team's relay in Pro → Team. A relay that needs an access token (ntfy with
-access control, or a paid ntfy.sh plan) takes it in the team's Edit form on a
-desktop, and in `MD_RELAY_TOKEN=https://relay.example.com=tk_…` (comma-separated
-for several) on a server. Tokens are kept in the encrypted store, sent only to
-their relay, and never reach agents.
+| Relay | | |
+|---|---|---|
+| `mqtts://broker.emqx.io:8883` (default) | public MQTT | sub-second, no daily cap; keeps messages for an offline teammate while the broker keeps the session (not guaranteed for long) |
+| `wss://broker.hivemq.com:8884/mqtt` | public MQTT over WebSocket | same, for networks that only allow HTTPS ports |
+| `https://ntfy.sh` | public ntfy | keeps messages 12 h; **250 messages a day per IP**, a long message counts once per part |
+| your own | `docker run -p 80:80 binwiederhier/ntfy serve`, or any MQTT broker with TLS | no limits but yours |
+
+A relay that needs credentials takes them in the team's Edit form on a desktop
+(MQTT `user:password`, or an ntfy token), and in
+`MD_RELAY_TOKEN=<relay>=<token>` (comma-separated for several) on a server.
+They are kept in the encrypted store, sent only to their relay, and never
+reach agents. Only TLS relays are accepted (`https`, `mqtts`, `wss`).
 
 ## Not on a server
 

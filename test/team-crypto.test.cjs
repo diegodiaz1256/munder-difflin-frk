@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const loadTs = require('./load-ts.cjs');
 
-const { generateIdentity, publicCard, seal, open, encodeInvite, decodeInvite, newInviteSecret } = loadTs('src/main/teamCrypto.ts');
+const { generateIdentity, publicCard, seal, open, encodeInvite, decodeInvite, newInviteSecret, pqEncapsulate } = loadTs('src/main/teamCrypto.ts');
 
 const alice = generateIdentity('Alice');
 const bob = generateIdentity('Bob');
@@ -49,7 +49,7 @@ test('invites round-trip, carry no private key, and reject junk', () => {
 // OpenSSL (it has no chacha20-poly1305 through createCipheriv, which broke the
 // first version in the app while every Node test passed). Seal in Node, open in
 // Electron's runtime, and back.
-test('envelopes open across Node and the Electron runtime the app ships', () => {
+test('hybrid (post-quantum) envelopes open across Node and the Electron runtime the app ships', () => {
   const { execFileSync } = require('node:child_process');
   const path = require('node:path');
   const fs = require('node:fs');
@@ -57,20 +57,37 @@ test('envelopes open across Node and the Electron runtime the app ships', () => 
   const script = path.join(require('node:os').tmpdir(), `md-team-xrt-${process.pid}.cjs`);
   fs.writeFileSync(script, `
     const loadTs = require(${JSON.stringify(path.join(__dirname, 'load-ts.cjs'))});
-    const { open, seal, publicCard } = loadTs('src/main/teamCrypto.ts');
-    const [me, peer, env] = JSON.parse(process.argv[2]);
-    const got = open(env, me, peer.ed);
-    process.stdout.write(JSON.stringify({ got, back: seal('from electron', me, publicCard(peer)) }));
+    const { open, seal, publicCard, pqDecapsulate } = loadTs('src/main/teamCrypto.ts');
+    const [me, peer, env, ct] = JSON.parse(process.argv[2]);
+    const pq = pqDecapsulate(me, peer.id, ct);
+    const got = open(env, me, peer.ed, pq);
+    process.stdout.write(JSON.stringify({ got, back: seal('from electron', me, publicCard(peer), pq) }));
   `);
   try {
-    const env = seal('from node', alice, publicCard(bob));
-    const out = execFileSync(electron, [script, JSON.stringify([bob, alice, env])], {
+    const { ct, secret } = pqEncapsulate(alice, publicCard(bob));
+    const env = seal('from node', alice, publicCard(bob), secret);
+    assert.equal(env.v, 2);
+    const out = execFileSync(electron, [script, JSON.stringify([bob, alice, env, ct])], {
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, cwd: path.join(__dirname, '..'), encoding: 'utf8'
     });
     const { got, back } = JSON.parse(out);
     assert.equal(got, 'from node');
-    assert.equal(open(back, alice, bob.ed), 'from electron');
+    assert.equal(back.v, 2);
+    assert.equal(open(back, alice, bob.ed, secret), 'from electron');
   } finally {
     fs.rmSync(script, { force: true });
   }
+});
+
+test('hybrid envelopes: right pair secret opens, wrong or missing one does not, and v cannot be stripped', () => {
+  const { ct, secret } = pqEncapsulate(alice, publicCard(bob));
+  const { pqDecapsulate } = loadTs('src/main/teamCrypto.ts');
+  assert.equal(pqDecapsulate(bob, alice.id, ct), secret);
+  const env = seal('hybrid', alice, publicCard(bob), secret);
+  assert.equal(env.v, 2);
+  assert.equal(open(env, bob, alice.ed, secret), 'hybrid');
+  assert.throws(() => open(env, bob, alice.ed));
+  assert.throws(() => open(env, bob, alice.ed, pqEncapsulate(alice, publicCard(bob)).secret));
+  assert.throws(() => open({ ...env, v: 1 }, bob, alice.ed, secret), /signature/);
+  assert.throws(() => pqDecapsulate(bob, alice.id, 'short'));
 });

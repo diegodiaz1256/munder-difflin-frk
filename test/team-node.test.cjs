@@ -10,7 +10,7 @@ const http = require('node:http');
 const loadTs = require('./load-ts.cjs');
 
 const { TeamNode } = loadTs('src/main/teamNode.ts');
-const { generateIdentity, seal, publicCard } = loadTs('src/main/teamCrypto.ts');
+const { generateIdentity, generateKem, seal, publicCard } = loadTs('src/main/teamCrypto.ts');
 
 /** Minimal ntfy: POST /:topic stores, GET /:topic/json streams (since=id|all). */
 async function fakeRelay(t, opts = {}) {
@@ -57,11 +57,14 @@ async function fakeRelay(t, opts = {}) {
   return { base, seenBodies, publishRaw: (topic, body) => fetch(`${base}/${topic}`, { method: 'POST', body }) };
 }
 
-function node(name, relay, t, token) {
+function node(name, relay, t, token, opts = {}) {
   // The relay URL must be https in real invites; tests use the plain-http fake,
   // so hellos are posted with an https-looking relay field and mapped back here.
   const r = relay.base.replace('http://', 'https://');
-  let state = { identity: generateIdentity(name), relay: r, teams: [{ id: `t-${name}`, name: `${name}'s team`, relay: r, level: 'message', mode: 'strict' }], peers: [], invites: [] };
+  const identity = generateIdentity(name);
+  // An install from before post-quantum pairing has no ML-KEM keys.
+  if (opts.classical) { delete identity.k; delete identity.kPriv; }
+  let state = { identity, relay: r, teams: [{ id: `t-${name}`, name: `${name}'s team`, relay: r, level: 'message', mode: 'strict' }], peers: [], invites: [] };
   const inbox = [];
   const fetchImpl = (url, opts) => fetch(String(url).replace('https://', 'http://'), opts);
   const n = new TeamNode({ load: () => state, save: (s) => { state = s; }, onMessage: (m) => inbox.push(m), fetch: fetchImpl, relayToken: () => token });
@@ -221,4 +224,76 @@ test('a private relay: the token opens it, and without one the error says what i
   const denied = await eve.n.join(alice.n.createInvite('t-Alice').code);
   assert.equal(denied.ok, false);
   assert.match(denied.error, /access token/);
+});
+
+// ─── post-quantum ────────────────────────────────────────────────────────────
+
+const envelopes = (relay) => relay.seenBodies.map((b) => { try { return JSON.parse(b); } catch { return null; } }).filter(Boolean);
+
+test('a new pair is post-quantum from the start, and its messages are hybrid', async (t) => {
+  const relay = await fakeRelay(t);
+  const alice = node('Alice', relay, t);
+  const bob = node('Bob', relay, t);
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal((await bob.n.join(alice.n.createInvite('t-Alice').code)).ok, true);
+  assert.ok(await until(() => alice.state.peers[0]?.pq === 'on' && bob.state.peers[0]?.pq === 'on'), 'both sides reach "on"');
+  assert.equal(alice.state.pq[bob.state.identity.id], bob.state.pq[alice.state.identity.id], 'one shared pair secret');
+
+  const before = relay.seenBodies.length;
+  assert.equal((await alice.n.send('Bob', 'PQ', 'sealed twice over')).ok, true);
+  assert.ok(await until(() => bob.inbox.length === 1));
+  assert.equal(bob.inbox[0].body, 'sealed twice over');
+  const sent = envelopes({ seenBodies: relay.seenBodies.slice(before) });
+  assert.ok(sent.length >= 1 && sent.every((e) => e.v === 2), 'messages travel as v2 envelopes');
+});
+
+test('pairs made before post-quantum upgrade themselves on the next start', async (t) => {
+  const relay = await fakeRelay(t);
+  const alice = node('Alice', relay, t, undefined, { classical: true });
+  const bob = node('Bob', relay, t, undefined, { classical: true });
+  await new Promise((r) => setTimeout(r, 100));
+  await bob.n.join(alice.n.createInvite('t-Alice').code);
+  assert.ok(await until(() => bob.state.peers[0]?.confirmed));
+  assert.equal(alice.state.peers[0].pq, undefined, 'classical pairing');
+  assert.equal((await alice.n.send('Bob', 'old', 'v1 still works')).ok, true);
+  assert.ok(await until(() => bob.inbox.length === 1));
+
+  // Both installs update: they get ML-KEM keys and restart.
+  for (const x of [alice, bob]) { Object.assign(x.state.identity, generateKem()); x.n.stop(); }
+  alice.n.start(); bob.n.start();
+  assert.ok(await until(() => alice.state.peers[0]?.pq === 'on' && bob.state.peers[0]?.pq === 'on', 5000), 'the pair went post-quantum');
+  assert.equal(alice.state.pq[bob.state.identity.id], bob.state.pq[alice.state.identity.id]);
+  assert.equal((await bob.n.send(bob.state.peers[0].id, 'new', 'now hybrid')).ok, true);
+  assert.ok(await until(() => alice.inbox.some((m) => m.body === 'now hybrid')));
+});
+
+test('a teammate still on an old version keeps talking classically', async (t) => {
+  const relay = await fakeRelay(t);
+  const alice = node('Alice', relay, t);
+  const old = node('Old', relay, t, undefined, { classical: true });
+  // A real old version does not know the post-quantum messages at all.
+  old.n.answerPq = () => {}; old.n.finishPq = () => {}; old.n.offerPq = async () => {};
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal((await old.n.join(alice.n.createInvite('t-Alice').code)).ok, true);
+  assert.ok(await until(() => old.state.peers[0]?.confirmed));
+  assert.equal((await alice.n.send('Old', 'hi', 'classical for you')).ok, true);
+  assert.ok(await until(() => old.inbox.length === 1));
+  assert.equal((await old.n.send(old.state.peers[0].id, 're', 'and back')).ok, true);
+  assert.ok(await until(() => alice.inbox.length === 1));
+  assert.notEqual(alice.state.peers[0].pq, 'on');
+});
+
+test('once post-quantum, a classical envelope from that teammate is refused', async (t) => {
+  const relay = await fakeRelay(t);
+  const alice = node('Alice', relay, t);
+  const bob = node('Bob', relay, t);
+  await new Promise((r) => setTimeout(r, 100));
+  await bob.n.join(alice.n.createInvite('t-Alice').code);
+  assert.ok(await until(() => alice.state.peers[0]?.pq === 'on' && bob.state.peers[0]?.pq === 'on'));
+  // Validly signed by Bob, but v1: a downgrade (or an ancient replay).
+  const env = seal(JSON.stringify({ k: 'msg', id: 'downgrade-1', subject: 's', body: 'classical', at: new Date().toISOString() }), bob.state.identity, publicCard(alice.state.identity));
+  assert.equal(env.v, 1);
+  alice.n.receive(JSON.stringify(env));
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(alice.inbox.length, 0);
 });
