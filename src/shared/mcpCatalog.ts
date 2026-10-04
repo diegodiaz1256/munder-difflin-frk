@@ -24,6 +24,23 @@
 
 export type McpTier = 'safe-readonly' | 'write' | 'secret';
 
+/** One credential a keyed server needs (Pro → Connections). The value lives in
+ *  the encrypted secret store, never in config or in any file the hive writes:
+ *  the per-agent MCP config carries `${ENV}` and the value rides in the agent
+ *  process environment (see HiveManager.buildDefaultMcpServers). */
+export interface McpSecretField {
+  /** The env var the server reads. Also the key in `spec.env`. */
+  env: string;
+  /** Field label, e.g. "Personal access token". */
+  label: string;
+  /** One line: where to get it and which scopes it needs. */
+  help: string;
+  /** Example shape, never a real value. */
+  placeholder?: string;
+  /** Optional fields may stay empty (e.g. a self-hosted Sentry host). */
+  optional?: boolean;
+}
+
 export interface McpCatalogEntry {
   /** Stable catalog id (also the consent key in `config.mcpDefaults`). The merge
    *  step namespaces the written server id (e.g. `munder-<id>`) to avoid clobbering
@@ -45,6 +62,11 @@ export interface McpCatalogEntry {
   tier: McpTier;
   /** Seed for `config.mcpDefaults[id].enabled`. Always === (tier === 'safe-readonly'). */
   defaultEnabled: boolean;
+  /** Credentials, for the keyed servers. A server whose required fields are not
+   *  all stored is left out of an agent's config: it could only fail. */
+  secrets?: McpSecretField[];
+  /** Where the user creates the credential. */
+  docsUrl?: string;
 }
 
 /** The default MCP bundle. Safe/read-only servers are ON; anything that writes
@@ -117,20 +139,35 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
       env: { GITHUB_PERSONAL_ACCESS_TOKEN: '' }
     },
     tier: 'secret',
-    defaultEnabled: false
+    defaultEnabled: false,
+    secrets: [{
+      env: 'GITHUB_PERSONAL_ACCESS_TOKEN',
+      label: 'Personal access token',
+      help: 'A fine-grained token with access to the repos the agents work on (Contents, Issues, Pull requests).',
+      placeholder: 'github_pat_…'
+    }],
+    docsUrl: 'https://github.com/settings/personal-access-tokens/new'
   },
   {
     id: 'db',
     label: 'Database',
-    description: 'Query a SQL database. Requires a connection string.',
-    // TODO-verify exact server package for the user's DB engine (Postgres assumed).
+    description: 'Query a Postgres database, read-only. Requires a connection string.',
+    // crystaldba/postgres-mcp: reads the connection from the environment. The
+    // @modelcontextprotocol server took it as an ARGUMENT, which would have
+    // landed in a config file the hive commits. Restricted mode = read-only.
     spec: {
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-postgres'],
-      env: { DATABASE_URL: '' }
+      command: 'uvx',
+      args: ['postgres-mcp', '--access-mode=restricted'],
+      env: { DATABASE_URI: '' }
     },
     tier: 'secret',
-    defaultEnabled: false
+    defaultEnabled: false,
+    secrets: [{
+      env: 'DATABASE_URI',
+      label: 'Connection string',
+      help: 'Use a read-only database user. Needs uv (uvx) installed.',
+      placeholder: 'postgresql://user:password@host:5432/dbname'
+    }]
   },
   // No Email & Calendar entry: it pointed at @modelcontextprotocol/server-gsuite,
   // which was never published (npm 404), so switching it on could not work.
@@ -144,7 +181,42 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
     // it replaces is deprecated on npm.
     spec: { command: 'npx', args: ['-y', '@brave/brave-search-mcp-server'], env: { BRAVE_API_KEY: '' } },
     tier: 'secret',
-    defaultEnabled: false
+    defaultEnabled: false,
+    secrets: [{ env: 'BRAVE_API_KEY', label: 'API key', help: 'From the Brave Search API dashboard (the free plan works).', placeholder: 'BSA…' }],
+    docsUrl: 'https://api-dashboard.search.brave.com/app/keys'
+  },
+  {
+    id: 'notion',
+    label: 'Notion',
+    description: 'Search, read and edit the Notion pages shared with the integration.',
+    spec: { command: 'npx', args: ['-y', '@notionhq/notion-mcp-server'], env: { NOTION_TOKEN: '' } },
+    tier: 'secret',
+    defaultEnabled: false,
+    secrets: [{
+      env: 'NOTION_TOKEN',
+      label: 'Integration secret',
+      help: 'Create an internal integration, then share the pages it may use with it (••• → Connections).',
+      placeholder: 'ntn_…'
+    }],
+    docsUrl: 'https://www.notion.so/profile/integrations'
+  },
+  {
+    id: 'sentry',
+    label: 'Sentry',
+    description: 'Look up issues, events and releases in Sentry.',
+    spec: { command: 'npx', args: ['-y', '@sentry/mcp-server'], env: { SENTRY_ACCESS_TOKEN: '', SENTRY_HOST: '' } },
+    tier: 'secret',
+    defaultEnabled: false,
+    secrets: [
+      {
+        env: 'SENTRY_ACCESS_TOKEN',
+        label: 'User auth token',
+        help: 'Scopes: org:read, project:read, project:write, team:read, team:write, event:write.',
+        placeholder: 'sntryu_…'
+      },
+      { env: 'SENTRY_HOST', label: 'Host (self-hosted only)', help: 'Leave empty for sentry.io.', placeholder: 'sentry.example.com', optional: true }
+    ],
+    docsUrl: 'https://sentry.io/settings/account/api/auth-tokens/'
   }
 ];
 
