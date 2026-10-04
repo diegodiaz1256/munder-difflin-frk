@@ -33,6 +33,7 @@ import {
   getLogGraph, getCommitFiles, getFileAtRev, compareRefs, listWorktrees, checkoutRef
 } from './git';
 import { linkWorktreeDeps, unlinkWorktreeDeps } from './worktreeDeps';
+import { excludeOfficeFromRepo } from './gitExclude';
 import { HiveManager, type AgentMeta, type HiveMessage, type HiveTask } from './hive';
 import { HookServer } from './hooks';
 import { CircuitBreaker, type BreakerInput } from './breaker';
@@ -5790,6 +5791,9 @@ function bootstrapHiveServices(): void {
   if (!hive.enabled()) return;
   hive.ensureHive();
   hive.refreshGeneratedDocs();
+  // An office inside a project's repo: keep its files out of that repo's git.
+  const officeDir = readConfig().harnessHome;
+  if (officeDir) setTimeout(() => { excludeOfficeFromRepo(officeDir); }, 0);
   // Tell the hive what it is running inside, BEFORE anything spawns: the prompt
   // builder reads this, so an agent spawned earlier would never learn it.
   hive.setRuntimeInfo({ version: app.getVersion(), packaged: app.isPackaged, appPath: app.getAppPath() });
