@@ -414,6 +414,27 @@ export function acquireTerminal(ptyId: string, theme?: ThemeMap, fontSize = 14):
 
 /** Whether queued automation can safely own this terminal's input line. A PTY
  * without a pooled terminal cannot have a user-opened local picker. */
+/** The last `max` lines with text on an agent's terminal, newest last — what a
+ *  card previews. Read straight from the pooled xterm, which keeps buffering
+ *  while no view shows it, so a card never has to mount a terminal to stay live.
+ *  Rows that are only a TUI's box drawing are skipped. Never throws. */
+export function terminalTail(ptyId: string | undefined, max = 3): string[] {
+  const entry = ptyId ? pool.get(ptyId) : undefined;
+  if (!entry) return [];
+  try {
+    const buf = entry.term.buffer.active;
+    const out: string[] = [];
+    const last = buf.baseY + buf.cursorY;
+    for (let y = last; y >= 0 && y > last - 200 && out.length < max; y--) {
+      const text = buf.getLine(y)?.translateToString(true).trimEnd() ?? '';
+      if (text.trim() && !/^[\s─-╿▀-▟>›❯]*$/.test(text)) out.unshift(text);
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 export function isTerminalAutomationSafe(ptyId: string, now = Date.now()): boolean {
   const entry = pool.get(ptyId);
   if (!entry) return true;

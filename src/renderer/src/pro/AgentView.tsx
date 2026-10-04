@@ -4,7 +4,7 @@ import { AgentDetailPanel } from '@/components/AgentDetailPanel';
 import { MCP_CATALOG } from '@shared/mcpCatalog';
 import { mcpLabel } from '@shared/roleBundles';
 import { useProStore } from './proStore';
-import { Avatar, Bar, StateBadge, agentState, fmtTokens, type AgentDirectoryEntry, type KeyedTask } from './data';
+import { Avatar, Bar, StateBadge, agentState, fmtTokens, isActive, type AgentDirectoryEntry, type KeyedTask } from './data';
 import { currentTicket, spendLine } from './AgentsView';
 
 interface Props {
@@ -41,8 +41,9 @@ export function AgentView({ agent, roster, tasks, directory, config, onOpen }: P
       <div className="pro-head">
         <Avatar agent={agent} />
         <h2>{agent.name}</h2>
-        {agent.isGod && <span className="pro-badge" style={{ background: 'var(--cth-lemon-light)' }}>orchestrator</span>}
-        <StateBadge {...st} />
+        {agent.isGod
+          ? <span className="pro-badge" style={{ background: 'var(--cth-lemon-light)' }}>orchestrator</span>
+          : <StateBadge {...st} />}
       </div>
 
       {agent.isGod && <RoutingMap god={agent} roster={roster} tasks={tasks} directory={directory} config={config} onOpen={onOpen} />}
@@ -80,10 +81,11 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-/** God on the left, a dashed line to every agent he has work out with, each
- *  labelled with the ticket it is on; the floor spend under it. */
+/** God on the left, a dashed line to every agent with work in progress (a ticket
+ *  in `doing`, or busy right now), each labelled with that ticket: yellow while
+ *  the agent is at it, light green otherwise. The floor spend under it. */
 function RoutingMap({ god, roster, tasks, directory, config, onOpen }: Omit<Props, 'agent'> & { god: Agent }) {
-  const others = roster.filter((a) => !a.isGod);
+  const others = roster.filter((a) => !a.isGod && (isActive(a) || currentTicket(tasks, a.id)?.status === 'doing'));
   const spend = spendLine(directory, config);
   const breaker = directory[god.id]?.breaker || 'healthy';
   const godTicket = currentTicket(tasks, god.id);
@@ -100,9 +102,9 @@ function RoutingMap({ god, roster, tasks, directory, config, onOpen }: Omit<Prop
         </svg>
         <button className="pro-card" onClick={() => onOpen(god.id)}
           style={{ position: 'absolute', insetInlineStart: '4%', top: h / 2 - 42, width: '18%', minWidth: 110, height: 84, background: 'var(--cth-lemon-light)', borderColor: 'var(--cth-lemon)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+          {godTicket?.key && <TicketChip id={godTicket.key} live={isActive(god)} />}
           <Avatar agent={god} />
           <strong style={{ fontSize: 13 }}>{god.name}</strong>
-          {godTicket?.key && <span className="pro-ticket">{godTicket.key}</span>}
         </button>
         {others.map((a, i) => {
           const t = currentTicket(tasks, a.id);
@@ -111,7 +113,7 @@ function RoutingMap({ god, roster, tasks, directory, config, onOpen }: Omit<Prop
               style={{ position: 'absolute', insetInlineStart: '62%', top: 8 + i * rowH + 2, height: rowH - 6, width: '34%', padding: '0 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Avatar agent={a} />
               <strong style={{ fontSize: 13 }}>{a.name}</strong>
-              {t?.key && <span className="pro-chip pro-chip-on" style={{ marginInlineStart: 'auto' }}>{t.key}</span>}
+              {t?.key && <span style={{ marginInlineStart: 'auto' }}><TicketChip id={t.key} live={isActive(a)} /></span>}
             </button>
           );
         })}
@@ -123,8 +125,20 @@ function RoutingMap({ god, roster, tasks, directory, config, onOpen }: Omit<Prop
             <span className="pro-dot" style={{ background: breaker === 'healthy' ? 'var(--cth-mint)' : 'var(--cth-coral)' }} /> Circuit breaker
           </span>
         </div>
-        <Bar value={spend.ratio} tone={spend.ratio > 0.85 ? 'red' : 'amber'} />
+        <Bar value={spend.ratio} tone={spend.ratio > 0.85 ? 'red' : 'gold'} />
       </div>
+      {others.length === 0 && <p className="pro-sub" style={{ margin: 0 }}>Nobody has work in progress right now.</p>}
     </section>
+  );
+}
+
+/** A ticket key on the map: yellow while its agent is working on it. */
+function TicketChip({ id, live }: { id: string; live: boolean }) {
+  return (
+    <span className="pro-chip" style={{
+      borderColor: live ? 'var(--cth-lemon)' : 'var(--cth-mint)',
+      background: live ? 'var(--cth-lemon-light)' : 'var(--cth-mint-light)',
+      color: 'var(--cth-ink-900)'
+    }}>{id}</span>
   );
 }

@@ -26,6 +26,12 @@ export type {
 /** Renderer-visible integration record: the secretRef handle is redacted to a
  *  presence boolean. Matches main `integrations.listRecordsRedacted()` — the
  *  write-only secret contract (spec §2): a secret value is NEVER returned over IPC. */
+/** A main-initiated agent's floor card (hive:agentSpawned / workers:cards). */
+export interface AgentSpawnCard {
+  id: string; name: string; provider?: string; cwd: string;
+  command?: string; role?: string; worktreePath?: string;
+  character?: string; accent?: string;
+}
 export type IntegrationRecordView = Omit<IntegrationRecord, 'secretRef'> & { hasSecret: boolean };
 /** One keyed MCP server as Pro → Connections shows it (mirrors main/connections.ts). */
 export interface ConnectionStatusView {
@@ -917,12 +923,12 @@ const api = {
   },
   /** A MAIN-initiated agent spawn (e.g. a voice hire via rt-5) — the renderer adds
    *  the floor card from this descriptor since it didn't initiate the hire itself. */
+  /** Live workers' floor cards (the hive:agentSpawned payloads), for a renderer
+   *  that mounted after they spawned. */
+  workerCards: (): Promise<AgentSpawnCard[]> =>
+    ipcRenderer.invoke('workers:cards'),
   onHiveAgentSpawned: (
-    cb: (rec: {
-      id: string; name: string; provider?: string; cwd: string;
-      command?: string; role?: string; worktreePath?: string;
-      character?: string; accent?: string;
-    }) => void
+    cb: (rec: AgentSpawnCard) => void
   ): (() => void) => {
     const listener = (_e: IpcRendererEvent, payload: Parameters<typeof cb>[0]) => cb(payload);
     ipcRenderer.on('hive:agentSpawned', listener);

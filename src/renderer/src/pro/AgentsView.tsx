@@ -3,9 +3,10 @@ import type { HarnessConfig } from '@/store/config';
 import { useStore, type Agent } from '@/store/store';
 import { MessageQueueComposer } from '@/components/MessageQueueComposer';
 import { waitsOnHuman } from '@/components/TasksKanban';
+import { respawnAgent } from '@/hooks/useRestoreTeam';
 import { useProStore } from './proStore';
 import {
-  Avatar, Bar, StateBadge, agentState, fmtTokens, stripAnsi,
+  Avatar, Bar, StateBadge, agentState, fmtTokens, stripAnsi, useTerminalTail,
   type AgentDirectoryEntry, type KeyedTask
 } from './data';
 
@@ -72,7 +73,50 @@ export function AgentsView({ roster, tasks, directory, asking, config, onOpen }:
           + Add an agent
         </button>
       </div>
+
+      <ArchivedAgents config={config} />
     </div>
+  );
+}
+
+/** Agents whose terminal was closed. Their workspace (memory, inbox, session)
+ *  is kept, so Reopen respawns them with the same id, folder and model and
+ *  resumes the conversation where it stopped. */
+function ArchivedAgents({ config }: { config: HarnessConfig }) {
+  const archived = useStore((s) => s.archivedAgents);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  if (archived.length === 0) return null;
+
+  const reopen = async (a: Agent) => {
+    setBusy(a.id);
+    setErrors((e) => ({ ...e, [a.id]: '' }));
+    const r = await respawnAgent(a, config);
+    setBusy(null);
+    if (r.ok) useStore.getState().addAgent(r.agent); // addAgent also drops it from the archive
+    else if (r.alreadyLive) useStore.getState().removeArchivedAgent(a.id);
+    else setErrors((e) => ({ ...e, [a.id]: r.error }));
+  };
+
+  return (
+    <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <button className="pro-btn" style={{ alignSelf: 'flex-start' }} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        {open ? '▾' : '▸'} Archived ({archived.length})
+      </button>
+      {open && archived.map((a) => (
+        <article key={a.id} className="pro-card pro-row" style={{ padding: '10px 14px' }}>
+          <Avatar agent={a} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <p className="pro-title">{a.name}</p>
+            <p className="pro-text" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.description}</p>
+            {errors[a.id] && <p className="pro-text" style={{ color: 'var(--cth-coral)' }}>Could not reopen: {errors[a.id]}</p>}
+          </div>
+          <span className="pro-sub pro-mono" style={{ fontSize: 11 }}>{a.model ?? a.provider ?? ''}</span>
+          <button className="pro-btn" disabled={busy !== null} onClick={() => void reopen(a)}>{busy === a.id ? 'Reopening…' : 'Reopen'}</button>
+        </article>
+      ))}
+    </section>
   );
 }
 
@@ -127,7 +171,11 @@ function AgentTile({ agent, ticket, dir, asksYou, onOpen }: {
 }) {
   const feed = useStore((s) => s.feeds[agent.id]);
   const st = agentState(agent, asksYou);
-  const lines = (feed ?? []).slice(-3).map(stripAnsi);
+  // The live terminal first: the parser feed only fills while Classic shows that
+  // terminal, so on its own the card fell back to `action` and read "idle" while
+  // the agent was busy.
+  const screen = useTerminalTail(agent.ptyId);
+  const lines = screen.length ? screen : (feed ?? []).slice(-3).map(stripAnsi);
   const tail = lines.length ? lines.join('\n') : stripAnsi(agent.recentAssistantText ?? agent.action ?? '').slice(-160);
   const ctxRatio = agent.contextTokens && agent.contextLimit ? agent.contextTokens / agent.contextLimit : 0;
   return (

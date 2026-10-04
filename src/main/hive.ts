@@ -1681,6 +1681,11 @@ export class HiveManager {
     const integrationsLine = integrations && integrations.length
       ? `REST APIs you can call (the harness adds the key; you never see it): ${integrations.map((i) => `${i.id} (${i.label})`).join(', ')}. Run \`"${hiveNode}" "${apiCli}" <api> GET /path\`, or \`"${hiveNode}" "${apiCli}" <api> POST /path '<json body>'\` (also PUT, PATCH, DELETE). The path is relative to that API's base URL, e.g. \`"${hiveNode}" "${apiCli}" ${integrations[0].id} GET /\`. It prints the HTTP status and the response body.`
       : '';
+    // Automations: the orchestrator changes scheduled missions by request file
+    // (main validates and applies them, then answers in its inbox).
+    const scheduleLine = meta.isGod
+      ? `AUTOMATIONS: you can create, change and delete scheduled missions (a prompt sent to an agent on a clock). Read ${inRoot('missions.json')} for the current ones and their ids. To change them, write ONE JSON file per change into ${inDir('schedule')}: {"op":"create","label":"…","to":"<agent id>","body":"<the prompt>","every":"1d"} (every: 30m, 2h, 1d, 1w; or "weekly":{"days":["mon","fri"],"time":"09:00"}), {"op":"update","id":"<id>", …only the fields to change, incl. "enabled":false}, or {"op":"delete","id":"<id>"}. The harness applies it and tells you the result in your inbox. Built-in missions can only be switched on/off or re-timed. Every mission spends tokens each time it fires, so schedule only what the human asked for or clearly needs.`
+      : '';
     const slackLine = meta.isGod
       ? 'SLACK REPLIES: When composing a Slack reply (or writing the `result` field of a Slack-origin kanban card), you MUST: (1) directly address what the user asked — never a bare "done"; (2) include the relevant specifics, outcome, and details; (3) format for Slack mrkdwn — open with a short *bold* headline, use bullet points for multiple items, wrap code/paths in `backtick` blocks, keep it concise (no walls of text). When finishing a Slack-origin task, always write a complete, user-facing, well-formatted `result` on the kanban card — the system posts it verbatim to Slack as the done reply.'
       : `SLACK REPLIES: If god dispatches you a task that came from Slack, it will include an exact \`"${hiveNode}" "<helper>" --channel … --thread … --text "…"\` reply command — when you finish, run it VERBATIM to post your result back to that thread yourself. The reply must be SUBSTANTIVE Slack mrkdwn (a short *bold* headline + the actual outcome/specifics/links), NEVER a bare "done".`;
@@ -1698,6 +1703,7 @@ export class HiveManager {
       knowledgeLine,
       integrationsLine,
       godLine,
+      scheduleLine,
       spawnQueueLine,
       runtimeLine,
       slackLine,
