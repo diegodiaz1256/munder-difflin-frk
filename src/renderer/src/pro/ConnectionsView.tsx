@@ -9,7 +9,8 @@ type TestResult = { ok: boolean; message: string };
 /**
  * Connections — the outside services agents can use. Keyed MCP servers (GitHub,
  * Database, Web Search, Notion, Sentry): paste the key, test it, choose who gets
- * it. Keys go one way into the encrypted store and are never shown again. Below,
+ * it. Keys go one way into the encrypted store, are never shown again and never
+ * reach an agent (main runs the server; see mcpGateway.ts). Below,
  * the REST APIs that agents reach through the key broker without ever seeing the
  * key (the Settings integrations registry, given a full screen).
  */
@@ -29,8 +30,8 @@ export function ConnectionsView({ roster }: { roster: Agent[] }) {
         <span className="pro-sub">{live} of {list.length} on</span>
       </div>
       <p className="pro-text" style={{ marginTop: -6 }}>
-        Agents pick up a change the next time they start. A connection gives its agents the key in their
-        environment, so only connect accounts you would let them use.
+        Agents never see these keys: the app runs each connection itself and agents only get to use it.
+        Changes apply the next time an agent starts.
       </p>
 
       <div className="pro-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' }}>
