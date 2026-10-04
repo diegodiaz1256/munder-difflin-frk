@@ -226,6 +226,9 @@ export interface HarnessConfig {
   /** Pro → Connections "Choose agents": a keyed MCP server listed here reaches
    *  only these agent ids (on their next spawn). Absent → every agent. */
   connectionScopes?: Record<string, string[]>;
+  /** Extra Connections beyond each service's first (two GitHub accounts…):
+   *  id `<service>--<slug>`, the service's catalog id, and a name. */
+  connectionInstances?: Array<{ id: string; service: string; label: string }>;
   /** The user's own role bundles (Pro Capabilities), after the built-ins.
    *  Saved through config:saveRoleBundles, which validates them. */
   customRoleBundles?: Array<{ id: string; label: string; icon: string; servers: string[] }>;

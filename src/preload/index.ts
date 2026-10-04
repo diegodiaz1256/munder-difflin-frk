@@ -50,7 +50,11 @@ export type IntegrationRecordView = Omit<IntegrationRecord, 'secretRef'> & { has
 /** One keyed MCP server as Pro → Connections shows it (mirrors main/connections.ts). */
 export interface ConnectionStatusView {
   id: string;
+  service: string;
+  serviceLabel: string;
   label: string;
+  primary: boolean;
+  examples: string[];
   description: string;
   docsUrl?: string;
   fields: Array<{ env: string; label: string; help: string; placeholder?: string; optional?: boolean; stored: boolean }>;
@@ -1330,6 +1334,12 @@ const api = {
     ipcRenderer.invoke('config:saveRoleBundles', bundles),
   connectionsList: (): Promise<ConnectionStatusView[]> =>
     ipcRenderer.invoke('connections:list'),
+  connectionsAdd: (service: string, label: string): Promise<{ ok: boolean; id?: string; error?: string }> =>
+    ipcRenderer.invoke('connections:add', service, label),
+  connectionsRename: (id: string, label: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('connections:rename', id, label),
+  connectionsRemove: (id: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('connections:remove', id),
   connectionsSetSecret: (id: string, env: string, value: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('connections:setSecret', id, env, value),
   connectionsSetEnabled: (id: string, on: boolean): Promise<{ ok: boolean; error?: string }> =>

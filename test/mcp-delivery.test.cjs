@@ -119,3 +119,25 @@ test('spawn with nothing enabled drops a stale mcp.json', async (t) => {
   assert.equal(second.args.includes('--mcp-config'), false);
   assert.equal(fs.existsSync(mcpPath), false);
 });
+
+test('several connections of one service: each its own server, switch, agents and key', (t) => {
+  const { hive, home } = floor(t);
+  hive.setMcpInstances((service) => (service === 'github-token' ? ['github-token', 'github-token--work'] : [service]));
+  hive.setMcpKeyCheck((id, env) => (id === 'github-token' || id === 'github-token--work') && env === 'GITHUB_PERSONAL_ACCESS_TOKEN');
+  const cfg = { 'github-token': { enabled: true }, 'github-token--work': { enabled: true } };
+  const scopes = { 'github-token--work': ['dwight'] };
+
+  const dwight = hive.buildDefaultMcpServers(home, cfg, undefined, 'dwight', scopes).servers;
+  assert.equal(dwight['munder-github-token'].url, 'http://127.0.0.1:5555/mcp/github-token');
+  assert.equal(dwight['munder-github-token--work'].url, 'http://127.0.0.1:5555/mcp/github-token--work');
+
+  const jim = hive.buildDefaultMcpServers(home, cfg, undefined, 'jim', scopes).servers;
+  assert.ok(jim['munder-github-token']);
+  assert.equal(jim['munder-github-token--work'], undefined, 'the work account is Dwight\'s only');
+
+  const off = hive.buildDefaultMcpServers(home, { 'github-token': { enabled: true } }, undefined, 'dwight', scopes).servers;
+  assert.equal(off['munder-github-token--work'], undefined, 'an instance has its own switch');
+
+  const granted = hive.buildDefaultMcpServers(home, cfg, ['time'], 'dwight', scopes).servers;
+  assert.equal(granted['munder-github-token'], undefined, 'a Capabilities grant without GitHub excludes all its connections');
+});
