@@ -921,6 +921,10 @@ const api = {
   /** Resolve a dropped File's absolute path (Electron 32 removed File.path). */
   pathForFile: (file: File): string => webUtils.getPathForFile(file),
   /** Write the current clipboard image to a temp PNG and return its path (paste-to-attach). */
+  /** Ask yes/no without window.confirm() (which leaves inputs unfocusable on
+   *  Windows). Resolves true for the confirm button. */
+  confirm: (message: string, opts?: { detail?: string; ok?: string }): Promise<boolean> =>
+    ipcRenderer.invoke('app:confirm', message, opts?.detail, opts?.ok),
   saveClipboardImage: (): Promise<
     { ok: true; file: { path: string; name: string } } | { ok: false; error: string }
   > => ipcRenderer.invoke('clipboard:saveImage'),
