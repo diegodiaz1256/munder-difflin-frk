@@ -1,6 +1,6 @@
 appId: io.github.diegodiaz1256.scrantonbranch
 productName: Scranton Branch
-copyright: Copyright © 2026 Chaitanya Giri
+copyright: Copyright © 2026 Chaitanya Giri and the Scranton Branch contributors
 
 # Where electron-updater looks for new versions (latest*.yml + assets on GitHub
 # releases). The release workflow still uploads assets itself (--publish never);

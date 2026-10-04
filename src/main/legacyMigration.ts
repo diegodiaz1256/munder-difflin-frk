@@ -26,6 +26,8 @@ import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { DEMO_HOME } from './demo';
 
+// The old builds named the data folder after package.json's "name"
+// (`munder-difflin`); `Munder Difflin` covers a build that set productName.
 const OLD_NAMES = ['Munder Difflin', 'munder-difflin'];
 const MARKER = 'migrated-from.json';
 /** Chromium's disposable state: caches, locks, crash dumps. */
