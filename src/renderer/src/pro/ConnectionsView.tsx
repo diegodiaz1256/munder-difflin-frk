@@ -133,8 +133,8 @@ function ConnectionCard({ c, roster, onChange }: { c: Connection; roster: Agent[
     setTest(res);
   };
 
-  const remove = () => {
-    if (!window.confirm(`Delete the connection "${c.label}"? Its key is erased.`)) return;
+  const remove = async () => {
+    if (!(await window.cth.confirm(`Delete the connection "${c.label}"?`, { detail: 'Its key is erased.', ok: 'Delete' }))) return;
     void run(() => window.cth.connectionsRemove(c.id));
   };
 

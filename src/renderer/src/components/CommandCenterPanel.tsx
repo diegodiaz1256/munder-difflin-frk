@@ -910,7 +910,7 @@ function FloorTab({ seed }: { seed: { text: string; seq: number } }) {
                   onClick={async () => {
                     const currentProvider = inferAgentProvider(a.command, a.provider);
                     if (engineProvider !== currentProvider) {
-                      if (!window.confirm(t('commandCenter.confirmRestartEngine', { name: a.name }))) return;
+                      if (!(await window.cth.confirm(t('commandCenter.confirmRestartEngine', { name: a.name })))) return;
                     }
                     await window.cth.updateConfig({ godProvider: engineProvider, godModel: engineModel });
                     await restartWithModel(a, engineModel, { provider: engineProvider, resume: false });

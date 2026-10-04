@@ -78,8 +78,8 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
     void saveBundles(next, `Bundle "${edited.label}" saved.`);
   };
 
-  const remove = (b: RoleBundle) => {
-    if (!window.confirm(`Delete the bundle "${b.label}"? Agents that were granted it keep their servers.`)) return;
+  const remove = async (b: RoleBundle) => {
+    if (!(await window.cth.confirm(`Delete the bundle "${b.label}"?`, { detail: 'Agents that were granted it keep their servers.', ok: 'Delete' }))) return;
     void saveBundles(custom.filter((x) => x.id !== b.id).map(({ custom: _c, ...x }) => x), `Bundle "${b.label}" deleted.`);
   };
 

@@ -95,8 +95,8 @@ function FactoryCard({ factory, onOpen, onChanged, onError }: {
     return () => { alive = false; };
   }, [factory.id]);
   const info = status?.ok ? (factory.info ?? null) : null;
-  const remove = () => {
-    if (!window.confirm(`Remove the factory "${factory.name}"? Its token is deleted from this machine.`)) return;
+  const remove = async () => {
+    if (!(await window.cth.confirm(`Remove the factory "${factory.name}"?`, { detail: 'Its token is deleted from this machine.', ok: 'Remove' }))) return;
     onError(null);
     void window.cth.factoriesRemove(factory.id).then(onChanged);
   };
