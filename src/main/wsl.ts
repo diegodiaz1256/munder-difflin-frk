@@ -64,10 +64,20 @@ export function linuxizeText(text: string, distro: string): string {
   return text.replace(re, (_m, rest: string) => (rest ? rest.replace(/\\/g, '/') : '/'));
 }
 
+/** Run before every command inside a distro: a login shell already has
+ *  ~/.local/bin and npm -g on PATH, but node version managers set themselves up
+ *  only in interactive shells (nvm in ~/.bashrc), so load them explicitly. */
+export const WSL_PRELUDE = [
+  '[ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1',
+  '[ -d "$HOME/.volta/bin" ] && PATH="$HOME/.volta/bin:$PATH"',
+  'command -v fnm >/dev/null 2>&1 && eval "$(fnm env)"',
+  'exec "$@"'
+].join('; ');
+
 /**
  * The `wsl.exe` invocation that runs `file args` inside `distro`, in `cwd`
- * (a Linux path), with `env` set. Run through a login shell so tools a user
- * installed the usual way (nvm, ~/.local/bin, npm -g) are on PATH.
+ * (a Linux path), with `env` set: a login shell plus WSL_PRELUDE, so tools a
+ * user installed the usual way (nvm, ~/.local/bin, npm -g) are found.
  */
 export function wslCommand(
   distro: string,
@@ -82,8 +92,8 @@ export function wslCommand(
   return {
     file: 'wsl.exe',
     args: [
-      '-d', distro, '--cd', cwd, '--',
-      'bash', '-lc', 'exec "$@"', 'bash',
+      '-d', distro, '--cd', cwd, '--exec',
+      'bash', '-lc', WSL_PRELUDE, 'bash',
       ...(assignments.length ? ['env', ...assignments] : []),
       file, ...args
     ]

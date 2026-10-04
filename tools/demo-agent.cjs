@@ -60,7 +60,9 @@ function hook(event, extra = {}) {
   if (!SOCK) return;
   const payload = { hook_event_name: event, agent_id: AGENT_ID, session_id: SESSION_ID, cwd: process.cwd(), ...extra };
   try {
-    const conn = net.createConnection(SOCK, () => conn.end(JSON.stringify(payload) + '\n'));
+    // A WSL floor hands agents the bridge's TCP port (tcp://127.0.0.1:<port>).
+    const target = SOCK.startsWith('tcp://') ? { host: '127.0.0.1', port: Number(SOCK.slice(SOCK.lastIndexOf(':') + 1)) } : SOCK;
+    const conn = net.createConnection(target, () => conn.end(JSON.stringify(payload) + '\n'));
     conn.on('data', () => {});
     conn.on('error', () => {});
     conn.setTimeout(3000, () => conn.destroy());

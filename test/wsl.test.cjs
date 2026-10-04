@@ -5,7 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const loadTs = require('./load-ts.cjs');
 
-const { parseWslPath, toWslUnc, toLinuxPath, linuxizeText, wslCommand, parseDistroList } = loadTs('src/main/wsl.ts');
+const { parseWslPath, toWslUnc, toLinuxPath, linuxizeText, wslCommand, parseDistroList, WSL_PRELUDE } = loadTs('src/main/wsl.ts');
 
 test('a \\\\wsl.localhost or \\\\wsl$ path is a WSL floor, a drive path is not', () => {
   assert.deepEqual(parseWslPath('\\\\wsl.localhost\\Ubuntu\\home\\diego\\offices\\shop'), { distro: 'Ubuntu', linuxPath: '/home/diego/offices/shop' });
@@ -40,7 +40,9 @@ test('UNC paths inside text (prompts, settings) become Linux paths', () => {
 test('the wsl.exe command runs through a login shell, in the right folder, with env', () => {
   const c = wslCommand('Ubuntu', '/home/d/o', 'claude', ['--model', 'opus'], { MD_AGENT_ID: 'god', 'BAD-NAME': 'x' });
   assert.equal(c.file, 'wsl.exe');
-  assert.deepEqual(c.args, ['-d', 'Ubuntu', '--cd', '/home/d/o', '--', 'bash', '-lc', 'exec "$@"', 'bash', 'env', 'MD_AGENT_ID=god', 'claude', '--model', 'opus']);
+  assert.deepEqual(c.args, ['-d', 'Ubuntu', '--cd', '/home/d/o', '--exec', 'bash', '-lc', WSL_PRELUDE, 'bash', 'env', 'MD_AGENT_ID=god', 'claude', '--model', 'opus']);
+  assert.match(WSL_PRELUDE, /nvm.sh/);
+  assert.ok(WSL_PRELUDE.endsWith('exec "$@"'), "the prelude ends by running the command");
 });
 
 test('wsl -l -q output (UTF-16LE with a BOM) parses to distro names', () => {
