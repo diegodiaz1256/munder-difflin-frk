@@ -44,6 +44,10 @@ Chromium: a ~3.5 MB Node app for Ubuntu (systemd installer) or Docker, with CPU 
 limits. Pair it with your desktop through Team and its orchestrator becomes one of your
 teammates. See [SERVER.md](./SERVER.md).
 
+**Factories: somewhere to send work.** Point Scranton Branch at a software factory that speaks
+[Factory MCP](./FACTORY-MCP.md), an open profile of MCP, and send it whole tasks. You follow
+them through its pipeline and answer its questions; the orchestrator can delegate to it too.
+
 **Connections whose keys agents never see.** GitHub, Postgres (read-only), web search, Notion
 and Sentry, with as many accounts of each as you need. Keys are encrypted at rest. Keyed MCP
 servers run inside the app, so an agent only holds a capability token. The REST APIs go
