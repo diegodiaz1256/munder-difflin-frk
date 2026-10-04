@@ -156,7 +156,15 @@ export function SetupPanel({ onDone }: { onDone?: () => void } = {}) {
           <div style={{ fontSize: 12, color: 'var(--cth-ink-500)', marginTop: 2 }}>
             {tools === null
               ? t('setupPanel.checking')
-              : t('setupPanel.summary', { ready: readyCount, total: tools.length, missing: missingEssential.length })}
+              : t('setupPanel.summary', {
+                  ready: readyCount,
+                  total: tools.length,
+                  // The slot takes a phrase, not a number: passing the count
+                  // printed "6 of 16 ready0".
+                  missing: missingEssential.length
+                    ? t('setupPanel.summaryMissing', { count: missingEssential.length })
+                    : t('setupPanel.summaryAllReady')
+                })}
           </div>
         </div>
         <PixelButton variant="ghost" size="md" onClick={() => void refresh()} disabled={busy}>
@@ -164,8 +172,7 @@ export function SetupPanel({ onDone }: { onDone?: () => void } = {}) {
         </PixelButton>
       </div>
 
-      {/* The headline action. Present but disabled when nothing is missing, so the
-          page reads the same either way rather than the button vanishing. */}
+      {/* The headline action, shown only while something recommended is missing. */}
       <div style={{
         padding: 10, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
         background: missingEssential.length ? 'var(--cth-lemon-light)' : 'var(--cth-cream-100)',
@@ -176,16 +183,15 @@ export function SetupPanel({ onDone }: { onDone?: () => void } = {}) {
             ? t('setupPanel.askDesc', { count: missingEssential.length })
             : t('setupPanel.allReady')}
         </div>
-        <PixelButton
-          variant="primary"
-          size="md"
-          onClick={askMichael}
-          disabled={missingEssential.length === 0}
-        >
-          <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-            <Icon name="sparkle" /> {t('setupPanel.askMichael')}
-          </span>
-        </PixelButton>
+        {/* Only when there is something to install: a disabled primary button
+            read as clickable and did nothing. */}
+        {missingEssential.length > 0 && (
+          <PixelButton variant="primary" size="md" onClick={askMichael}>
+            <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+              <Icon name="sparkle" /> {t('setupPanel.askMichael')}
+            </span>
+          </PixelButton>
+        )}
       </div>
 
       {SECTIONS.map((section) => {
