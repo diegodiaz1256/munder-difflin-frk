@@ -1,0 +1,39 @@
+# Munder Difflin server — systemd unit (installed by install.sh).
+#
+# The server runs as root ONLY so it can start agents as the unprivileged
+# `agent` user (MD_AGENT_UID/GID): that way agents cannot read the secret key
+# (a systemd credential, readable by this service alone) or this process's
+# environment. Everything else it does stays in /var/lib/munder-difflin and the
+# office.
+[Unit]
+Description=Munder Difflin office (headless)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/munder-difflin/server.env
+LoadCredential=md-secret-key:/etc/munder-difflin/secret.key
+Environment=MD_SECRET_KEY_FILE=%d/md-secret-key
+Environment=MD_DATA_DIR=/var/lib/munder-difflin
+ExecStart=/usr/bin/env node /opt/munder-difflin/index.cjs
+Restart=on-failure
+RestartSec=5
+# SIGTERM runs the app's full teardown (agents, servers, worktrees).
+KillMode=mixed
+TimeoutStopSec=30
+
+# Limits — the whole office (server + every agent) shares these.
+MemoryMax=8G
+CPUQuota=400%
+TasksMax=4096
+
+# Hardening that leaves agents room to work in the office and their home.
+NoNewPrivileges=no
+ProtectSystem=full
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target

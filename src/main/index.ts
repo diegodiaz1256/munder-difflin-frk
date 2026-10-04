@@ -1,5 +1,7 @@
 // Demo mode redirects userData — must load before anything else (see demo.ts).
 import { DEMO_HOME } from './demo';
+// Headless (server) mode sets Chromium switches — must load before ready too.
+import { HEADLESS, HEADLESS_SETUP, SERVER } from './headless';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, powerSaveBlocker, screen, shell, Notification } from 'electron';
 import { spawn } from 'node:child_process';
 import {
@@ -9,7 +11,7 @@ import {
 } from 'node:fs';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { join, resolve, sep, basename, dirname, isAbsolute } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import { request as httpsRequest } from 'node:https';
 import { PtyManager, type SpawnOptions } from './pty';
 import { resolveCommand as resolveCliCommand, isSafeCommandName, userShellPath } from './shellEnv';
@@ -67,7 +69,7 @@ import { cleanCustomBundles } from '../shared/roleBundles';
 import { addConnection, connectionKeyStored, connectionLaunchEnv, instancesOf, listConnections, removeConnection, renameConnection, serviceOf, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
 import { McpGateway } from './mcpGateway';
 import { TeamNode, type TeamInbound } from './teamNode';
-import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, saveTeamState, teamEnabled, teamPublicStatus } from './team';
+import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, relayToken, saveTeamState, setRelayToken, teamEnabled, teamPublicStatus } from './team';
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
@@ -621,7 +623,8 @@ function startTeam(): void {
     save: saveTeamState,
     onMessage: onTeamMessage,
     onChange: () => { writeTeamMirror(); notifyTeam(); },
-    log: (msg) => console.log('[team]', msg)
+    log: (msg) => console.log('[team]', msg),
+    relayToken
   });
   teamNode.start();
   writeTeamMirror();
@@ -707,6 +710,13 @@ ipcMain.handle('team:setMember', (_evt, id: unknown, patch: unknown) => {
 });
 ipcMain.handle('team:join', async (_evt, code: unknown) =>
   teamNode && typeof code === 'string' ? teamNode.join(code) : { ok: false, error: 'Team is off' });
+// Write-only: a token goes into the encrypted store and is never read back out.
+ipcMain.handle('team:setRelayToken', (_evt, arg: unknown) => {
+  const p = (arg ?? {}) as { relay?: unknown; token?: unknown };
+  const r = setRelayToken(p.relay, p.token);
+  if (r.ok) { teamNode?.reconnect(); notifyTeam(); }
+  return r;
+});
 ipcMain.handle('team:removePeer', (_evt, id: unknown) => { if (teamNode && typeof id === 'string') teamNode.removePeer(id); return { ok: true }; });
 ipcMain.handle('team:send', (_evt, arg: unknown) => {
   const p = (arg ?? {}) as { to?: unknown; subject?: unknown; body?: unknown };
@@ -2606,6 +2616,9 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
+      // Tells the preload (and so the renderer) that no one is looking: skip
+      // the launch picker, never pop anything up.
+      ...(HEADLESS ? { additionalArguments: ['--md-headless'] } : {}),
       // Keep Chromium's OS renderer sandbox active; privileged work stays behind
       // the narrow contextBridge/IPC surface owned by the main process.
       sandbox: true,
@@ -2679,7 +2692,8 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
   }
 
 
-  win.once('ready-to-show', () => win.show());
+  // Headless: the window exists (the renderer runs the floor) but is never shown.
+  win.once('ready-to-show', () => { if (!HEADLESS) win.show(); });
 
   // Never opens a window; hands the URL to the OS browser instead.
   //
@@ -5524,7 +5538,32 @@ function bootstrapHiveServices(): void {
   startEphemeralWorkerWatcher(); // poll HIVE_ROOT/spawn-requests → ephemeral workers
   // Phase 2: the loopback secret broker. Bind it BEFORE workers spawn so each spawn can
   // be granted a capability token + the broker URL in its env. Loopback-only, idempotent.
+  // Headless: --team-join pairs this office with yours (an invite made in your
+  // desktop's Pro → Team). Team is switched on first if needed.
+  // Servers: MD_RELAY_TOKEN="https://relay.example.com=tk_…[,…]" stores each
+  // token in the encrypted store (set before joining, which talks to the relay).
+  // headless.ts already took it out of the environment agents inherit.
+  for (const entry of HEADLESS_SETUP?.relayTokens ?? []) {
+    const i = entry.lastIndexOf('=');
+    const r = i > 0 ? setRelayToken(entry.slice(0, i), entry.slice(i + 1)) : { ok: false, error: 'expected <relay>=<token>' };
+    if (!r.ok) console.error('[headless] relay token not stored:', r.error);
+  }
+  if (HEADLESS_SETUP?.teamJoin) {
+    if (!teamEnabled()) {
+      const r = enableTeam(HEADLESS_SETUP.name ?? `${hostname()} (server)`);
+      if (!r.ok) console.error('[headless] could not turn Team on:', r.error);
+    }
+  }
   startTeam();
+  // An invite is single-use and MD_TEAM_JOIN stays in a unit file or compose
+  // file across restarts: join each code once, then remember it was used.
+  const joinKey = HEADLESS_SETUP?.teamJoin ? `team.joined.${createHash('sha256').update(HEADLESS_SETUP.teamJoin).digest('hex').slice(0, 16)}` : null;
+  if (joinKey && teamNode && !persist.getKv(joinKey)) {
+    void teamNode.join(HEADLESS_SETUP!.teamJoin!).then((r) => {
+      console.log(r.ok ? `[headless] joined the team; ${r.peer?.name} will see this office once both are online` : `[headless] team join failed: ${r.error}`);
+      if (r.ok) { try { persist.setKv(joinKey, Date.now()); } catch { /* DB best-effort */ } }
+    });
+  }
   void mcpGateway.start().then((r) => {
     if (!r.ok) console.error('[mcp-gateway] failed to start (keyed MCP servers disabled):', r.error);
   });
@@ -5769,6 +5808,26 @@ function onSystemResume(reason: string): void {
 }
 
 app.whenReady().then(() => {
+  // Headless first run from the command line: --office sets the office and
+  // skips onboarding (an explicit --office always wins over a saved one).
+  if (HEADLESS_SETUP?.office) {
+    const ensured = ensureHarnessHome(HEADLESS_SETUP.office);
+    if (!ensured.ok) console.error('[headless] cannot use --office:', ensured.error);
+    else {
+      const cfg = readConfig();
+      if (!cfg.onboardingComplete || cfg.harnessHome !== HEADLESS_SETUP.office) {
+        writeConfig({ onboardingComplete: true, harnessHome: HEADLESS_SETUP.office, notifications: false });
+      }
+    }
+  }
+  if (HEADLESS_SETUP?.maxWorkers && HEADLESS_SETUP.maxWorkers !== readConfig().maxConcurrentWorkers) {
+    writeConfig({ maxConcurrentWorkers: Math.max(1, Math.min(64, Math.floor(HEADLESS_SETUP.maxWorkers))) });
+  }
+  if (HEADLESS) {
+    console.log(`[headless] office: ${readConfig().harnessHome ?? '(none — pass --office <dir>)'}`);
+    // systemd stop / Ctrl+C: the same full teardown as closing the window.
+    for (const sig of ['SIGTERM', 'SIGINT'] as const) process.once(sig, () => { console.log(`[headless] ${sig}, shutting down`); teardownAndQuit(); });
+  }
   // Realtime Michael mic-gate hygiene (rt-8 / Pam rt-10 nit): the voice session
   // opens the mic permission gate by persisting realtimeVoiceEnabled=true and
   // closes it on disconnect — but a hard crash/reload mid-session skips that
@@ -5809,7 +5868,8 @@ app.whenReady().then(() => {
   // `autoUpdate` config flag). Download-in-background + restart-to-apply toast;
   // never restarts on its own. Falls back to a notify-only releases/latest
   // check where native updating isn't possible (win-portable, dev-ish builds).
-  initAutoUpdater(() => liveWebContents());
+  // The server is updated by its package (npm, docker pull), never in place.
+  if (!SERVER) initAutoUpdater(() => liveWebContents());
   // Bootstrap the hive (if harnessHome is configured) and start the message router.
   bootstrapHiveServices();
   // Survive sleep/lock. macOS freezes libuv timers during true system sleep, so a
