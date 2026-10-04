@@ -11,17 +11,24 @@
 import { app } from 'electron';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { generateIdentity, type Identity } from './teamCrypto';
+import { generateIdentity, generateKem, isRelayUrl, type Identity } from './teamCrypto';
 import { randomBytes } from 'node:crypto';
 import type { Peer, TeamGroup, TeamState } from './teamNode';
 import { deleteSecret, getSecret, hasSecret, setSecret } from './integrations';
 
 const SECRET_REF = 'team:identity-keys';
-export const DEFAULT_RELAY = 'https://ntfy.sh';
+/** Post-quantum pair secrets, by peer id (JSON). */
+const PQ_REF = 'team:pq-secrets';
+
+type Keys = { xPriv: string; edPriv: string; kPriv?: string };
+/** New teams default to a public MQTT broker: no daily cap and sub-second
+ *  delivery (ntfy.sh allows an office 250 messages a day). Envelopes are sealed
+ *  end to end, so the broker is not trusted with anything. */
+export const DEFAULT_RELAY = 'mqtts://broker.emqx.io:8883';
 
 interface StoredTeam {
   enabled: boolean;
-  identity: Omit<Identity, 'xPriv' | 'edPriv'>;
+  identity: Omit<Identity, 'xPriv' | 'edPriv' | 'kPriv'>;
   relay: string;
   teams: TeamGroup[];
   peers: Peer[];
@@ -71,15 +78,15 @@ export function teamEnabled(): boolean {
 export function enableTeam(name: string, relay?: string): { ok: boolean; error?: string } {
   const prev = readStored();
   const r = (relay?.trim() || prev?.relay || DEFAULT_RELAY).replace(/\/+$/, '');
-  if (!/^https:\/\//.test(r)) return { ok: false, error: 'the relay must be an https:// address' };
+  if (!isRelayUrl(r)) return { ok: false, error: 'the relay must be an https:// (ntfy), mqtts:// or wss:// (MQTT) address' };
   if (prev && getSecret(SECRET_REF)) {
     writeAtomic(statePath(), { ...prev, enabled: true, relay: r, identity: { ...prev.identity, name: name.trim().slice(0, 60) || prev.identity.name } });
     return { ok: true };
   }
   const id = generateIdentity(name);
-  const saved = setSecret(SECRET_REF, JSON.stringify({ xPriv: id.xPriv, edPriv: id.edPriv }));
+  const saved = setSecret(SECRET_REF, JSON.stringify({ xPriv: id.xPriv, edPriv: id.edPriv, kPriv: id.kPriv } satisfies Keys));
   if (!saved.ok) return { ok: false, error: saved.error ?? 'could not store the team keys securely' };
-  const { xPriv: _x, edPriv: _e, ...pub } = id;
+  const { xPriv: _x, edPriv: _e, kPriv: _k, ...pub } = id;
   // A first team to invite people into; more can be added, each on its own relay.
   const first: TeamGroup = { id: randomBytes(9).toString('base64url'), name: 'My team', relay: r, level: 'message', mode: 'strict' };
   writeAtomic(statePath(), { enabled: true, identity: pub, relay: r, teams: [first], peers: [], invites: [] } satisfies StoredTeam);
@@ -94,21 +101,48 @@ export function disableTeam(): void {
 /** Forget the identity and every teammate (a fresh identity next time). */
 export function resetTeam(): void {
   deleteSecret(SECRET_REF);
+  deleteSecret(PQ_REF);
+  lastPq = null;
   writeAtomic(statePath(), { enabled: false });
 }
 
-/** The TeamNode's view: stored state plus the decrypted private keys. */
+/** Last pair-secrets JSON written, so a save that did not change them (most
+ *  saves: relay cursors) does not re-encrypt and rewrite the store. */
+let lastPq: string | null = null;
+
+/** The TeamNode's view: stored state plus the decrypted private keys and
+ *  pair secrets. An identity from before post-quantum pairing gets its ML-KEM
+ *  keypair here, once. */
 export function loadTeamState(): TeamState {
   const s = readStored();
-  const keys = JSON.parse(getSecret(SECRET_REF) ?? 'null') as { xPriv: string; edPriv: string } | null;
+  const keys = JSON.parse(getSecret(SECRET_REF) ?? 'null') as Keys | null;
   if (!s || !keys) throw new Error('team is not set up');
-  return { identity: { ...s.identity, ...keys }, relay: s.relay, teams: s.teams ?? [], peers: s.peers ?? [], invites: s.invites ?? [], cursors: s.cursors, seen: s.seen };
+  if (!keys.kPriv || !s.identity.k) {
+    const kem = generateKem();
+    if (setSecret(SECRET_REF, JSON.stringify({ ...keys, kPriv: kem.kPriv } satisfies Keys)).ok) {
+      keys.kPriv = kem.kPriv;
+      s.identity = { ...s.identity, k: kem.k };
+      writeAtomic(statePath(), s);
+    }
+  }
+  const pqJson = getSecret(PQ_REF) ?? '{}';
+  lastPq = pqJson;
+  let pq: Record<string, string> = {};
+  try { pq = JSON.parse(pqJson) as Record<string, string>; } catch { /* unreadable: pairs fall back to classical and re-pair */ }
+  return { identity: { ...s.identity, ...keys }, relay: s.relay, teams: s.teams ?? [], peers: s.peers ?? [], invites: s.invites ?? [], cursors: s.cursors, seen: s.seen, pq };
 }
 
-/** Persist the TeamNode's state, private keys stripped. */
+/** Persist the TeamNode's state: private keys and pair secrets go to the
+ *  encrypted store, the rest to team.json. */
 export function saveTeamState(st: TeamState): void {
   const prev = readStored();
-  const { xPriv: _x, edPriv: _e, ...pub } = st.identity;
+  const pqJson = JSON.stringify(st.pq ?? {});
+  if (pqJson !== lastPq) {
+    const r = setSecret(PQ_REF, pqJson);
+    if (!r.ok) throw new Error(r.error ?? 'could not store the post-quantum secrets');
+    lastPq = pqJson;
+  }
+  const { xPriv: _x, edPriv: _e, kPriv: _k, ...pub } = st.identity;
   writeAtomic(statePath(), { enabled: prev?.enabled ?? true, identity: pub, relay: st.relay, teams: st.teams, peers: st.peers, invites: st.invites, cursors: st.cursors, seen: st.seen } satisfies StoredTeam);
 }
 
@@ -121,7 +155,8 @@ export function saveTeamState(st: TeamState): void {
 function relayKey(relay: string): string | null {
   try {
     const u = new URL(relay.trim().replace(/\/+$/, ''));
-    return u.protocol === 'https:' ? `team:relay-token:${u.origin}${u.pathname === '/' ? '' : u.pathname}` : null;
+    // Not u.origin: it is "null" for mqtts:/wss: style URLs.
+    return isRelayUrl(relay) ? `team:relay-token:${u.protocol}//${u.host.toLowerCase()}${u.pathname === '/' ? '' : u.pathname}` : null;
   } catch { return null; }
 }
 
@@ -138,7 +173,7 @@ export function hasRelayToken(relay: string): boolean {
 /** Store (or, with an empty token, forget) a relay's access token. */
 export function setRelayToken(relay: unknown, token: unknown): { ok: boolean; error?: string } {
   const k = typeof relay === 'string' ? relayKey(relay) : null;
-  if (!k) return { ok: false, error: 'the relay must be an https:// address' };
+  if (!k) return { ok: false, error: 'the relay must be an https:// (ntfy), mqtts:// or wss:// (MQTT) address' };
   const t = typeof token === 'string' ? token.trim() : '';
   if (!t) { deleteSecret(k); return { ok: true }; }
   if (t.length > 512 || /\s/.test(t)) return { ok: false, error: 'that does not look like an access token' };
@@ -149,7 +184,7 @@ export function teamPublicStatus(): {
   enabled: boolean;
   me: { id: string; name: string; relay: string } | null;
   teams: Array<TeamGroup & { relayAuth: boolean }>;
-  peers: Array<Pick<Peer, 'id' | 'name' | 'confirmed' | 'addedAt' | 'teamId' | 'level' | 'mode'>>;
+  peers: Array<Pick<Peer, 'id' | 'name' | 'confirmed' | 'addedAt' | 'teamId' | 'level' | 'mode' | 'pq'>>;
 } {
   const s = readStored();
   return {
@@ -157,7 +192,7 @@ export function teamPublicStatus(): {
     me: s?.identity?.id ? { id: s.identity.id, name: s.identity.name, relay: s.relay } : null,
     teams: (s?.teams ?? []).map((t) => ({ ...t, relayAuth: hasRelayToken(t.relay) })),
     // Overrides as stored (absent = inherits the team default); never keys or topics.
-    peers: (s?.peers ?? []).map((p) => ({ id: p.id, name: p.name, confirmed: p.confirmed, addedAt: p.addedAt, teamId: p.teamId, level: p.level, mode: p.mode }))
+    peers: (s?.peers ?? []).map((p) => ({ id: p.id, name: p.name, confirmed: p.confirmed, addedAt: p.addedAt, teamId: p.teamId, level: p.level, mode: p.mode, pq: p.pq }))
   };
 }
 

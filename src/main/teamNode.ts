@@ -1,7 +1,8 @@
 /**
  * Team node — paired installs message each other through public relays, sealed
  * end to end (teamCrypto.ts). No server of our own: a relay is an ntfy server
- * (https://ntfy.sh by default, or a self-hosted one) used as a dumb mailbox.
+ * (https://ntfy.sh by default, or a self-hosted one) or any MQTT broker
+ * (mqtts://, wss://; see teamMqtt.ts), used as a dumb mailbox.
  * Each install listens on its own unguessable topic; a message to a teammate is
  * POSTed to the teammate's topic on their team's relay as one sealed envelope,
  * and ntfy keeps it for hours, so a teammate who was offline still gets it.
@@ -19,14 +20,25 @@
  * `welcome`. Anything else from an unpaired sender is dropped, so learning a
  * topic is not enough to talk.
  *
+ * Post-quantum: pairing also agrees an ML-KEM secret (teamCrypto.ts). The
+ * inviter encapsulates to the joiner's ML-KEM key and sends the ciphertext in
+ * `welcome`; pairs made before that upgrade themselves with pq-offer →
+ * pq-accept. A pair's `pq` status: 'sent' (we encapsulated; they may not have
+ * the secret yet, so we keep sending v1), 'ready' (we decapsulated, so they
+ * surely have it: we send v2), 'on' (a v2 arrived from them: from then on v1
+ * from them is refused, so nobody can downgrade the pair).
+ *
  * Plaintext kinds: msg {id, subject, body, at} · part {id, i, n, d} (a msg too
- * big for one relay message) · hello {card, relay, secret, team} · welcome {}.
+ * big for one relay message) · hello {card, relay, secret, team} · welcome
+ * {kem?} · pq-offer {kem} · pq-accept {ct} · pq-ok {}.
  *
  * Electron-free: state storage, fetch and the inbound handler are injected.
  */
 import { createHash, randomBytes } from 'node:crypto';
+import { MqttRelays, isMqttRelay } from './teamMqtt';
 import {
-  decodeInvite, encodeInvite, isEnvelope, newInviteSecret, open, openHello, publicCard, sameSecret, seal, verifyEnvelope,
+  decodeInvite, encodeInvite, isEnvelope, isKemPublicKey, isRelayUrl, newInviteSecret, open, openHello, pqDecapsulate, pqEncapsulate,
+  publicCard, sameSecret, seal, verifyEnvelope,
   type Envelope, type Identity, type PublicCard
 } from './teamCrypto';
 
@@ -56,6 +68,8 @@ export interface Peer extends PublicCard {
    *  never by the teammate. */
   level?: TeamLevel;
   mode?: TrustMode;
+  /** Post-quantum status of the pair (see the header). Absent: classical only. */
+  pq?: 'sent' | 'ready' | 'on';
 }
 
 export interface TeamState {
@@ -70,6 +84,8 @@ export interface TeamState {
   cursors?: Record<string, string>;
   /** Recently delivered message ids (replay guard). */
   seen?: string[];
+  /** Post-quantum pair secrets by peer id. SECRET: kept in the encrypted store. */
+  pq?: Record<string, string>;
 }
 
 export interface TeamInbound {
@@ -94,6 +110,8 @@ export interface TeamNodeDeps {
   /** Access token for a relay that requires one (a paid ntfy.sh plan, a
    *  self-hosted ntfy with access control), by relay URL. Main-only. */
   relayToken?: (relay: string) => string | undefined;
+  /** Tests: where to connect for an MQTT relay URL. */
+  mqttConnectUrl?: (relay: string) => string;
 }
 
 /** ntfy rejects bodies over 4096 bytes; stay well under with the envelope overhead. */
@@ -121,10 +139,22 @@ export class TeamNode {
   private stopped = true;
   private listeners = new Map<string, AbortController>();
   private parts = new Map<string, { n: number; got: Map<number, string>; at: number }>();
+  /** Peers we sent a pq-offer to this run (collision tie-break, no repeats). */
+  private offered = new Set<string>();
+  private readonly mqtt: MqttRelays;
   private readonly fetchImpl: typeof fetch;
 
   constructor(private readonly deps: TeamNodeDeps) {
     this.fetchImpl = deps.fetch ?? fetch;
+    this.mqtt = new MqttRelays({
+      installId: () => this.state().identity.id,
+      token: (relay) => deps.relayToken?.(relay),
+      onMessage: (_relay, payload) => {
+        try { this.receive(payload); } catch (e) { this.log(`dropped a relay message: ${e instanceof Error ? e.message : String(e)}`); }
+      },
+      log: (m) => this.log(m),
+      connectUrl: deps.mqttConnectUrl
+    });
   }
 
   private state(): TeamState { return this.deps.load(); }
@@ -141,18 +171,22 @@ export class TeamNode {
     if (!this.stopped) return;
     this.stopped = false;
     this.syncListeners();
+    // Pairs from before post-quantum pairing upgrade themselves.
+    for (const p of this.state().peers) if (p.confirmed && !p.pq) void this.offerPq(p);
   }
 
   /** Reconnect every listener (a relay's token changed). */
   reconnect(): void {
     for (const c of this.listeners.values()) c.abort();
     this.listeners.clear();
+    this.mqtt.stopAll();
     this.syncListeners();
   }
 
   stop(): void {
     this.stopped = true;
     for (const c of this.listeners.values()) c.abort();
+    this.mqtt.stopAll();
     this.listeners.clear();
   }
 
@@ -160,12 +194,13 @@ export class TeamNode {
   private syncListeners(): void {
     if (this.stopped) return;
     const want = new Set(this.state().teams.map((t) => trimRelay(t.relay)));
-    for (const [relay, c] of this.listeners) if (!want.has(relay)) { c.abort(); this.listeners.delete(relay); }
+    for (const [relay, c] of this.listeners) if (!want.has(relay)) { c.abort(); this.listeners.delete(relay); if (isMqttRelay(relay)) this.mqtt.close(relay); }
     for (const relay of want) {
       if (this.listeners.has(relay)) continue;
       const c = new AbortController();
       this.listeners.set(relay, c);
-      void this.listen(relay, c);
+      if (isMqttRelay(relay)) this.mqtt.listen(relay, this.state().identity.topic);
+      else void this.listen(relay, c);
     }
   }
 
@@ -222,10 +257,72 @@ export class TeamNode {
     if (env.t !== s.identity.id) return;
     const peer = s.peers.find((p) => p.id === env.f);
     if (!peer) { this.receiveHello(env, s); return; }
-    const plain = JSON.parse(open(env, s.identity, peer.ed)) as Record<string, unknown>;
-    if (!peer.confirmed) { peer.confirmed = true; this.persist(s); }
+    // Once a pair has gone post-quantum, a classical envelope from that peer is
+    // a downgrade (or a very old resend): refuse it.
+    if (env.v === 1 && peer.pq === 'on') { this.log(`refused a non-post-quantum message from ${peer.name}`); return; }
+    const plain = JSON.parse(open(env, s.identity, peer.ed, s.pq?.[peer.id])) as Record<string, unknown>;
+    let changed = false;
+    if (!peer.confirmed) { peer.confirmed = true; changed = true; }
+    const firstV2 = env.v === 2 && peer.pq !== 'on';
+    if (firstV2) { peer.pq = 'on'; changed = true; }
+    if (changed) this.persist(s);
     if (plain.k === 'msg') this.deliver(peer, plain);
     else if (plain.k === 'part') this.collect(peer, plain);
+    else if (plain.k === 'welcome' || plain.k === 'pq-accept') this.finishPq(peer, plain.k === 'welcome' ? plain.kem : plain.ct);
+    else if (plain.k === 'pq-offer') this.answerPq(peer, plain.kem);
+    // A classical pair that just talked to us (e.g. one paired before this
+    // version): offer the upgrade, once per run.
+    if (!peer.pq && plain.k !== 'pq-offer') void this.offerPq(peer);
+    // Both sides learn the pair is post-quantum by receiving a v2 envelope;
+    // answer the first one so the other side gets there too (stops after one
+    // round: by then both are 'on').
+    if (firstV2 && plain.k === 'pq-ok') void this.publish(peer, { k: 'pq-ok' }).catch(() => {});
+  }
+
+  // ─── post-quantum upgrade ──────────────────────────────────────────────────
+
+  private secretFor(peerId: string): string | undefined { return this.state().pq?.[peerId]; }
+
+  private setPq(peerId: string, secret: string, status: 'sent' | 'ready', k?: string): void {
+    const s = this.state();
+    const peer = s.peers.find((p) => p.id === peerId);
+    if (!peer) return;
+    s.pq = { ...(s.pq ?? {}), [peerId]: secret };
+    peer.pq = status;
+    if (k) peer.k = k;
+    this.persist(s);
+  }
+
+  /** Ask a classical pair to go post-quantum: here is our ML-KEM key. */
+  private async offerPq(peer: Peer): Promise<void> {
+    const me = this.state().identity;
+    if (!me.k || this.secretFor(peer.id) || this.offered.has(peer.id)) return;
+    this.offered.add(peer.id);
+    try { await this.publish(peer, { k: 'pq-offer', kem: me.k }, { classical: true }); }
+    catch (e) { this.offered.delete(peer.id); this.log(`post-quantum offer to ${peer.name} not sent: ${e instanceof Error ? e.message : e}`); }
+  }
+
+  /** They offered: encapsulate to their key, keep the secret, send the ciphertext. */
+  private answerPq(peer: Peer, kem: unknown): void {
+    if (!isKemPublicKey(kem) || this.secretFor(peer.id)) return;
+    const me = this.state().identity;
+    // Both offered at once: the larger id's offer wins, so only one secret is made.
+    if (this.offered.has(peer.id) && me.id > peer.id) return;
+    const { ct, secret } = pqEncapsulate(me, { id: peer.id, k: kem });
+    this.setPq(peer.id, secret, 'sent', kem);
+    void this.publish(peer, { k: 'pq-accept', ct }, { classical: true })
+      .catch((e) => this.log(`post-quantum answer to ${peer.name} failed: ${e instanceof Error ? e.message : e}`));
+  }
+
+  /** Our key was encapsulated to (welcome or pq-accept): take the secret and
+   *  prove it with a first v2 envelope. */
+  private finishPq(peer: Peer, ct: unknown): void {
+    if (ct === undefined || this.secretFor(peer.id)) return;
+    let secret: string;
+    try { secret = pqDecapsulate(this.state().identity, peer.id, ct); }
+    catch (e) { this.log(`post-quantum pairing with ${peer.name} failed: ${e instanceof Error ? e.message : e}`); return; }
+    this.setPq(peer.id, secret, 'ready');
+    void this.publish(peer, { k: 'pq-ok' }).catch(() => {});
   }
 
   /** The one thing an unpaired sender may send: a hello carrying a pending invite secret. */
@@ -240,7 +337,7 @@ export class TeamNode {
     if (!verifyEnvelope(env, card.ed)) { this.log('ignored a hello with a bad signature'); return; }
     const live = s.invites.filter((i) => i.expiresAt > now());
     const match = live.find((i) => sameSecret(i.hash, sha(plain.secret as string)));
-    if (!match || !/^https:\/\//.test(plain.relay)) { this.log(`ignored a hello from "${String(card.name).slice(0, 60)}": no matching live invite`); return; }
+    if (!match || !isRelayUrl(plain.relay)) { this.log(`ignored a hello from "${String(card.name).slice(0, 60)}": no matching live invite`); return; }
     if (!s.teams.some((t) => t.id === match.teamId)) { this.log('ignored a hello for a team that no longer exists'); return; }
     s.invites = live.filter((i) => i !== match); // one-time
     s.peers = s.peers.filter((p) => p.id !== card.id);
@@ -248,9 +345,20 @@ export class TeamNode {
       id: card.id, name: String(card.name).slice(0, 60), x: card.x, ed: card.ed, topic: card.topic,
       teamId: match.teamId, relay: trimRelay(plain.relay), addedAt: now(), confirmed: true
     };
+    // Post-quantum from the first message: encapsulate to the joiner's ML-KEM
+    // key and send the ciphertext in the welcome.
+    let kem: string | undefined;
+    if (isKemPublicKey(card.k) && s.identity.k) {
+      const pq = pqEncapsulate(s.identity, card);
+      peer.k = card.k;
+      peer.pq = 'sent';
+      s.pq = { ...(s.pq ?? {}), [peer.id]: pq.secret };
+      kem = pq.ct;
+    }
     s.peers.push(peer);
     this.persist(s);
-    void this.publish(peer, { k: 'welcome', at: new Date().toISOString() }).catch((e) => this.log(`welcome to ${peer.name} failed: ${e instanceof Error ? e.message : e}`));
+    void this.publish(peer, { k: 'welcome', ...(kem ? { kem } : {}), at: new Date().toISOString() }, { classical: true })
+      .catch((e) => this.log(`welcome to ${peer.name} failed: ${e instanceof Error ? e.message : e}`));
   }
 
   private deliver(peer: Peer, m: Record<string, unknown>): void {
@@ -290,8 +398,17 @@ export class TeamNode {
 
   // ─── outbound ──────────────────────────────────────────────────────────────
 
-  private async publish(peer: Peer, plain: Record<string, unknown>): Promise<void> {
-    const env = seal(JSON.stringify(plain), this.state().identity, peer);
+  /** v2 once the pair's secret is known to be on both sides ('ready'/'on');
+   *  `classical` for the pairing messages that set it up. */
+  private pqFor(peer: Peer, classical = false): string | undefined {
+    const s = this.state();
+    const live = s.peers.find((p) => p.id === peer.id) ?? peer;
+    return !classical && (live.pq === 'ready' || live.pq === 'on') ? s.pq?.[peer.id] : undefined;
+  }
+
+  private async publish(peer: Peer, plain: Record<string, unknown>, opts: { classical?: boolean } = {}): Promise<void> {
+    const env = seal(JSON.stringify(plain), this.state().identity, peer, this.pqFor(peer, opts.classical));
+    if (isMqttRelay(peer.relay)) { await this.mqtt.publish(trimRelay(peer.relay), peer.topic, JSON.stringify(env)); return; }
     const res = await this.fetchImpl(`${trimRelay(peer.relay)}/${peer.topic}`, {
       method: 'POST',
       body: JSON.stringify(env),
@@ -308,7 +425,7 @@ export class TeamNode {
     const msg = { k: 'msg', id: randomBytes(12).toString('base64url'), subject: subject.slice(0, 200), body: body.slice(0, 100_000), at: new Date().toISOString() };
     try {
       const json = JSON.stringify(msg);
-      const whole = JSON.stringify(seal(json, this.state().identity, peer));
+      const whole = JSON.stringify(seal(json, this.state().identity, peer, this.pqFor(peer)));
       if (whole.length <= MAX_ENVELOPE) {
         await this.publish(peer, msg);
       } else {
@@ -328,7 +445,7 @@ export class TeamNode {
   createTeam(name: string, relay?: string): { ok: boolean; team?: TeamGroup; error?: string } {
     const s = this.state();
     const r = trimRelay((relay ?? '').trim() || s.relay);
-    if (!/^https:\/\//.test(r)) return { ok: false, error: 'the relay must be an https:// address' };
+    if (!isRelayUrl(r)) return { ok: false, error: 'the relay must be an https:// (ntfy), mqtts:// or wss:// (MQTT) address' };
     const team: TeamGroup = { id: randomBytes(9).toString('base64url'), name: name.trim().slice(0, 60) || 'Team', relay: r, level: 'message', mode: 'strict' };
     s.teams = [...s.teams, team];
     this.persist(s);
@@ -343,7 +460,7 @@ export class TeamNode {
     if (!t) return { ok: false, error: 'no such team' };
     if (patch.relay !== undefined) {
       const r = trimRelay(patch.relay.trim());
-      if (!/^https:\/\//.test(r)) return { ok: false, error: 'the relay must be an https:// address' };
+      if (!isRelayUrl(r)) return { ok: false, error: 'the relay must be an https:// (ntfy), mqtts:// or wss:// (MQTT) address' };
       t.relay = r;
     }
     if (patch.name !== undefined) t.name = patch.name.trim().slice(0, 60) || t.name;
@@ -357,7 +474,9 @@ export class TeamNode {
   removeTeam(teamId: string): void {
     const s = this.state();
     s.teams = s.teams.filter((t) => t.id !== teamId);
+    const gone = new Set(s.peers.filter((p) => p.teamId === teamId).map((p) => p.id));
     s.peers = s.peers.filter((p) => p.teamId !== teamId);
+    if (s.pq) s.pq = Object.fromEntries(Object.entries(s.pq).filter(([id]) => !gone.has(id)));
     s.invites = s.invites.filter((i) => i.teamId !== teamId);
     this.persist(s);
   }
@@ -375,6 +494,7 @@ export class TeamNode {
   removePeer(peerId: string): void {
     const s = this.state();
     s.peers = s.peers.filter((p) => p.id !== peerId);
+    if (s.pq?.[peerId]) { const { [peerId]: _gone, ...rest } = s.pq; s.pq = rest; }
     this.persist(s);
   }
 
