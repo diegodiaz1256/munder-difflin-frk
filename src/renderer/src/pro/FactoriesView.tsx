@@ -185,10 +185,10 @@ function FactoryFloor({ factory, onBack, onChanged }: { factory: FactoryView; on
   const [events, setEvents] = useState<FactoryEventView[]>([]);
   /** The latest batch of events, for the pixel floor to animate. */
   const [fresh, setFresh] = useState<FactoryEventView[]>([]);
-  const [view, setView] = useState<'floor' | 'desks'>(() => {
-    try { return window.localStorage.getItem('cth.factory.view') === 'desks' ? 'desks' : 'floor'; } catch { return 'floor'; }
+  const [view, setView] = useState<'floor' | 'desks' | 'line'>(() => {
+    try { const v = window.localStorage.getItem('cth.factory.view'); return v === 'desks' || v === 'line' ? v : 'floor'; } catch { return 'floor'; }
   });
-  const pickView = (v: 'floor' | 'desks') => { setView(v); try { window.localStorage.setItem('cth.factory.view', v); } catch { /* storage unavailable */ } };
+  const pickView = (v: 'floor' | 'desks' | 'line') => { setView(v); try { window.localStorage.setItem('cth.factory.view', v); } catch { /* storage unavailable */ } };
   const [projects, setProjects] = useState<Array<{ id: string; name: string; state?: string }>>([]);
   const [only, setOnly] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -336,6 +336,7 @@ function FactoryFloor({ factory, onBack, onChanged }: { factory: FactoryView; on
           <div className="pro-switch" role="group" aria-label="Floor view">
             <button aria-pressed={view === 'floor'} onClick={() => pickView('floor')}>Map</button>
             <button aria-pressed={view === 'desks'} onClick={() => pickView('desks')}>Desks</button>
+            <button aria-pressed={view === 'line'} onClick={() => pickView('line')}>Line</button>
           </div>
           {projectList.length > 1 && projectList.map((p) => {
             const c = perProject.get(p.id);
@@ -362,6 +363,9 @@ function FactoryFloor({ factory, onBack, onChanged }: { factory: FactoryView; on
       )}
       {floor && view === 'floor' && (
         <FactoryScene floor={floor} events={fresh} dimmed={dimmed} onPick={(id) => setPicked(picked === id ? null : id)} />
+      )}
+      {floor && view === 'line' && (
+        <LineView floor={floor} dimmed={dimmed} projectOf={projectOf} picked={picked} onPick={(id) => setPicked(picked === id ? null : id)} />
       )}
       {floor && view === 'desks' && (
         <div ref={stage} className="pro-card" style={{ position: 'relative', display: 'flex', gap: 12, overflowX: 'auto', flexShrink: 0, alignItems: 'flex-start' }}>
@@ -404,7 +408,9 @@ function Desk({ agent, project, dim, picked, onPick, deskRef }: {
       aria-pressed={picked}
       title={[agent.role, agent.waiting_for, agent.state === 'away' && agent.at ? `at the ${agent.at.replace('_', ' ')}` : null].filter(Boolean).join(' · ')}
       style={{
-        width: 150, textAlign: 'start', padding: 8, display: 'flex', flexDirection: 'column', gap: 4,
+        // Everything inside is clipped to the desk: long task titles wrap to two
+        // lines and end in "…" instead of running into the next desk.
+        width: 150, minWidth: 0, overflow: 'hidden', textAlign: 'start', padding: 8, display: 'flex', flexDirection: 'column', gap: 4,
         border: `1px solid ${picked ? 'var(--cth-ink-900)' : 'var(--cth-ink-100)'}`, borderRadius: 8,
         background: gone ? 'transparent' : agent.kind === 'automation' ? 'var(--cth-cream-200)' : 'var(--cth-paper-100)',
         opacity: dim ? 0.35 : gone || agent.state === 'away' ? 0.55 : 1, cursor: 'pointer', position: 'relative'
@@ -415,13 +421,13 @@ function Desk({ agent, project, dim, picked, onPick, deskRef }: {
           {gone ? <span style={{ width: 32, height: 32, display: 'inline-block' }} /> : <Avatar agent={{ character: faceFor(agent.name) }} scale={2} />}
         </span>
         <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          <strong style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.display_name ?? agent.name}</strong>
+          <strong title={agent.display_name ?? agent.name} style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{agent.display_name ?? agent.name}</strong>
           <span className="pro-sub" style={{ fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.display_name ? agent.name : agent.role}</span>
         </span>
       </div>
       <StateBadge label={agent.state === 'away' && agent.at ? `Away · ${agent.at.replace('_', ' ')}` : STATE_LABEL[agent.state]} tone={STATE_TONE[agent.state]} />
       {agent.task && (
-        <span className="pro-sub" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span className="pro-sub" title={agent.task.title} style={{ fontSize: 11, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word', maxWidth: '100%' }}>
           {project ? `[${project}] ` : ''}{agent.task.title}{agent.task.stage ? ` · ${agent.task.stage}` : ''}
         </span>
       )}
@@ -624,6 +630,72 @@ function EventLog({ events }: { events: FactoryEventView[] }) {
           {e.type.replace('task.', '')}{e.from || e.to ? ` ${e.from ?? ''}→${e.to ?? ''}` : ''}{e.task ? ` ${e.task}` : ''}{e.text ? `: ${e.text}` : ''}
         </span>
       ))}
+    </section>
+  );
+}
+
+/** The Line: one row per worker, in pipeline order, reading left to right —
+ *  what they finished, what they are on now, what is lined up for them. */
+function LineView({ floor, dimmed, projectOf, picked, onPick }: {
+  floor: FactoryFloorView; dimmed: Set<string>; projectOf: Map<string, string>; picked: string | null; onPick: (id: string) => void;
+}) {
+  const rows = [...floor.agents].sort((x, y) =>
+    ((ROLE_ORDER as readonly string[]).indexOf(x.role_kind ?? '') + 1 || 99) - ((ROLE_ORDER as readonly string[]).indexOf(y.role_kind ?? '') + 1 || 99)
+    || (x.instance_of ?? x.name).localeCompare(y.instance_of ?? y.name) || x.name.localeCompare(y.name));
+  const titleOf = new Map(floor.board.map((b) => [b.id, b.title]));
+  let lastKind = '';
+  return (
+    <section className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0, padding: '8px 10px' }}>
+      {rows.map((a) => {
+        const kind = a.role_kind ?? 'other';
+        const head = kind !== lastKind ? (lastKind = kind, <span key={`h-${kind}`} className="pro-col-head" style={{ padding: '8px 2px 2px' }}>{ROLE_LABEL[kind]}</span>) : null;
+        const project = a.task ? projectOf.get(a.task.id) : undefined;
+        return (
+          <div key={a.id} style={{ display: 'contents' }}>
+            {head}
+            <button onClick={() => onPick(a.id)} aria-pressed={picked === a.id} style={{
+              display: 'grid', gridTemplateColumns: '190px minmax(120px, 1fr) minmax(200px, 2fr) minmax(120px, 1fr)', gap: 10, alignItems: 'center',
+              padding: '6px 8px', border: 'none', borderRadius: 6, textAlign: 'start', cursor: 'pointer', font: 'inherit', color: 'inherit',
+              background: picked === a.id ? 'var(--cth-lemon-light)' : 'transparent', opacity: dimmed.has(a.id) ? 0.35 : a.state === 'offline' ? 0.5 : 1
+            }}>
+              {/* who */}
+              <span className="pro-row" style={{ gap: 8, minWidth: 0 }}>
+                <Avatar agent={{ character: faceFor(a.name) }} scale={1.5} />
+                <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                  <strong style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.display_name ?? a.name}</strong>
+                  <StateBadge label={a.state === 'away' && a.at ? `Away · ${a.at.replace('_', ' ')}` : STATE_LABEL[a.state]} tone={STATE_TONE[a.state]} />
+                </span>
+              </span>
+              {/* done: the last steps, oldest first */}
+              <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap', minWidth: 0 }}>
+                {(a.history ?? []).slice(-4).map((h, i) => (
+                  <span key={i} className="pro-chip" title={`${titleOf.get(h.task) ?? h.task} · ${h.step}`}
+                    style={{ fontSize: 10, color: h.result === 'ok' ? 'var(--cth-ink-700)' : 'var(--cth-coral)' }}>
+                    {h.result === 'ok' ? '✓' : '✗'} {h.step}
+                  </span>
+                ))}
+              </span>
+              {/* now */}
+              <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {a.task ? (
+                  <>
+                    <span style={{ fontSize: 12, fontWeight: 600 }}>{a.task.title}</span>
+                    <span className="pro-ticket">{project ? `${project} · ` : ''}{a.task.id}{a.task.stage ? ` · ${a.task.stage}` : ''}</span>
+                  </>
+                ) : <span className="pro-sub" style={{ fontSize: 12 }}>—</span>}
+                {a.waiting_for && <span style={{ fontSize: 11, fontStyle: 'italic', color: 'var(--cth-ink-700)' }}>{a.waiting_for}</span>}
+              </span>
+              {/* next */}
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                {(a.queue ?? []).slice(0, 3).map((q) => (
+                  <span key={q.id} className="pro-ticket" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>→ {q.title}</span>
+                ))}
+                {(a.queue?.length ?? 0) > 3 && <span className="pro-ticket">+{a.queue!.length - 3} more</span>}
+              </span>
+            </button>
+          </div>
+        );
+      })}
     </section>
   );
 }
