@@ -314,6 +314,8 @@ export interface HarnessConfig {
   costCapUsd?: number;
   costCapTokens?: number;
   agentTokenCaps?: Record<string, number>;
+  /** Per-agent MCP grants (Pro Capabilities): agent id → catalog ids. */
+  agentMcpGrants?: Record<string, string[]>;
   autoDeliveryPausedAgents?: string[];
   maxTurns?: number;
   circuitBreaker?: CircuitBreakerConfig;
@@ -660,6 +662,10 @@ const api = {
   updateConfig: (patch: Partial<HarnessConfig>): Promise<HarnessConfig> =>
     ipcRenderer.invoke('config:update', patch),
   /** Set or clear one per-agent token ceiling against main's latest config. */
+  /** Grant an agent exactly these MCP catalog servers (undefined clears the
+   *  grant). Takes effect on the agent's next restart. */
+  setAgentMcpGrant: (agentId: string, servers?: string[]): Promise<HarnessConfig> =>
+    ipcRenderer.invoke('config:setAgentMcpGrant', agentId, servers),
   setAgentTokenCap: (agentId: string, tokenCap?: number): Promise<HarnessConfig> =>
     ipcRenderer.invoke('config:setAgentTokenCap', agentId, tokenCap),
   ensureHarnessHome: (path: string): Promise<{ ok: boolean; error?: string }> =>
@@ -761,6 +767,8 @@ const api = {
     ipcRenderer.invoke('hive:setAgentHold', id, hold),
   hiveBoard: (): Promise<string> => ipcRenderer.invoke('hive:board'),
   hiveTasks: (): Promise<unknown> => ipcRenderer.invoke('hive:tasks'),
+  /** Stable ticket keys for the board: prefix + task id → number. */
+  hiveTaskKeys: (): Promise<{ prefix: string; keys: Record<string, number> }> => ipcRenderer.invoke('hive:taskKeys'),
   hiveLog: (n?: number): Promise<unknown[]> => ipcRenderer.invoke('hive:log', n ?? 200),
   hiveMemory: (id: string): Promise<string> => ipcRenderer.invoke('hive:memory', id),
   hiveInbox: (id: string): Promise<HiveMessage[]> => ipcRenderer.invoke('hive:inbox', id),
@@ -781,6 +789,9 @@ const api = {
   /** Manually stop a live ephemeral worker (safety-gated teardown; work preserved). */
   stopWorker: (workerId: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('workers:stop', workerId),
+  /** Hire a temp: one ephemeral worker for one job, started by the human. */
+  hireTemp: (req: { objective: string; cwd: string; name?: string }): Promise<{ ok: boolean; workerId?: string; error?: string }> =>
+    ipcRenderer.invoke('workers:hire', req),
 
   // ─── Semantic memory (MemPalace CLI) ─────────────────────────────────────
   memoryStatus: (): Promise<MemoryStatus> => ipcRenderer.invoke('hive:memoryStatus'),

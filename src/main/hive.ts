@@ -43,6 +43,8 @@ import { preferredAgentRole } from '../shared/agentRole';
 import { mergeTaskLedger } from '../shared/taskLedger';
 import { expandTilde } from './fs';
 import { resolveGodName } from '../shared/godIdentity';
+import { assignTaskKeys, normalizeTaskKeyLedger, taskKeyPrefix } from '../shared/taskKeys';
+import { cleanServerList } from '../shared/roleBundles';
 
 /** The subset of HarnessConfig the hive consumes for the default-MCP merge.
  *  Kept as a local shape so hive.ts never imports the foundation-owned config
@@ -725,6 +727,10 @@ export class HiveManager {
       /** Consent state for the default-MCP bundle (W3). Threaded from the live
        *  HarnessConfig by the caller; undefined → catalog defaults apply. */
       mcpDefaults?: { [id: string]: { enabled: boolean } };
+      /** This agent's own MCP grant (Pro Capabilities), catalog ids. When set it
+       *  REPLACES the default set for this agent; write/secret servers in it still
+       *  need the user's consent in mcpDefaults. Undefined → the defaults. */
+      mcpGrant?: string[];
       /** App-resources `skills/` source dir (W3). The bundled read-only skills are
        *  copied into the agent's `.claude/skills/` per spawn; undefined or missing
        *  is a no-op (tolerated until Kevin populates the resource dir). */
@@ -1000,7 +1006,7 @@ export class HiveManager {
     if (sock && shim) {
       env.HIVE_SOCK = sock;
       const settingsPath = join(dir, 'settings.json');
-      this.writeJson(settingsPath, this.hookSettings(shim, meta.cwd, opts.mcpDefaults, opts.theme, this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs)));
+      this.writeJson(settingsPath, this.hookSettings(shim, meta.cwd, opts.mcpDefaults, opts.mcpGrant, opts.theme, this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs)));
       args.push('--settings', settingsPath);
     }
     return { args, env };
@@ -1242,7 +1248,7 @@ export class HiveManager {
     return Array.from(new Set(out));
   }
 
-  private hookSettings(shim: string, cwd: string, cfg: McpDefaultsMap, theme?: 'light' | 'dark', writableDirs: string[] = []): unknown {
+  private hookSettings(shim: string, cwd: string, cfg: McpDefaultsMap, grant: string[] | undefined, theme?: 'light' | 'dark', writableDirs: string[] = []): unknown {
     // Bundled node, NOT bare `node` — see nodeLauncherPath(). Claude runs each of
     // these through `sh -c` with a stripped PATH, where `node` is often absent.
     const cmd = this.nodeRun(shim);
@@ -1250,7 +1256,7 @@ export class HiveManager {
       ...(matcher ? { matcher } : {}),
       hooks: [{ type: 'command', command: cmd }]
     });
-    const mcpServers = this.buildDefaultMcpServers(cwd, cfg);
+    const mcpServers = this.buildDefaultMcpServers(cwd, cfg, grant);
     return {
       // Match the TUI's truecolor palette to the harness terminal theme —
       // PER SESSION, so the user's global Claude theme (their own terminals
@@ -1314,15 +1320,21 @@ export class HiveManager {
    * of the same name in the user's own ~/.claude is never clobbered. A write/secret
    * server is included ONLY on an explicit `enabled:true` consent — never via a
    * default — so a malformed/partial config can't silently arm a keyed server.
+   *
+   * A per-agent `grant` (Pro Capabilities) replaces the default membership: the
+   * agent gets exactly the granted servers. It never replaces consent, so a
+   * granted write/secret server the user has not switched on is still left out.
    */
   private buildDefaultMcpServers(
     cwd: string,
-    cfg: McpDefaultsMap
+    cfg: McpDefaultsMap,
+    grant?: string[]
   ): Record<string, { command: string; args: string[]; env?: Record<string, string> }> {
     const out: Record<string, { command: string; args: string[]; env?: Record<string, string> }> = {};
+    const granted = grant ? new Set(cleanServerList(grant)) : null;
     for (const e of MCP_CATALOG) {
       const consented = cfg?.[e.id]?.enabled;
-      const enabled = consented ?? e.defaultEnabled;
+      const enabled = granted ? granted.has(e.id) : (consented ?? e.defaultEnabled);
       if (!enabled) continue;
       // Defense-in-depth: a write/secret server requires an EXPLICIT opt-in; it can
       // never ride in on a default (the catalog already ships these OFF, but this
@@ -1906,6 +1918,22 @@ export class HiveManager {
   tasks(): unknown {
     const root = this.root();
     return root ? this.readJson(join(root, 'tasks.json'), { tasks: [] }) : { tasks: [] };
+  }
+
+  /** Ticket keys for every card (`bmt-12`), assigned on first sight and kept in
+   *  taskKeys.json, a ledger only the harness writes (see shared/taskKeys.ts).
+   *  The prefix comes from the hive's parent folder name. */
+  taskKeys(): { prefix: string; keys: Record<string, number> } {
+    const root = this.root();
+    if (!root) return { prefix: taskKeyPrefix(null), keys: {} };
+    const prefix = taskKeyPrefix(basename(dirname(root)));
+    const ledger = this.tasks() as { tasks?: HiveTask[] };
+    const tasks = Array.isArray(ledger?.tasks) ? ledger.tasks.filter((t) => t && typeof t.id === 'string') : [];
+    const path = join(root, 'taskKeys.json');
+    const current = normalizeTaskKeyLedger(this.readJson<unknown>(path, null));
+    const { ledger: next, changed } = assignTaskKeys(current, tasks);
+    if (changed) this.writeJson(path, next);
+    return { prefix, keys: next.keys };
   }
 
   /** Persist the task ledger to hive/tasks.json and commit it. Mirrors the

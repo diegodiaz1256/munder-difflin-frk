@@ -14,7 +14,7 @@ import { resolveCommand as resolveCliCommand, isSafeCommandName } from './shellE
 import { initAutoUpdater, abortPendingRestart } from './updater';
 import { RealtimeFloorWatcher } from './realtimeFloorWatcher';
 import {
-  readConfig, writeConfig, setAgentTokenCap, resetConfig, onConfigWritten, ensureHarnessHome, ensureClaudePermissionsAccepted,
+  readConfig, writeConfig, setAgentTokenCap, setAgentMcpGrant, resetConfig, onConfigWritten, ensureHarnessHome, ensureClaudePermissionsAccepted,
   modelForRole, OPS_STANDUP_MISSION, HEARTBEAT_MISSION, COMPACT_MAINTENANCE_MISSION, type HarnessConfig, type ScheduledMission
 } from './config';
 import { listDir, readFileText, readFileBinary, writeFileText, statAbs, expandTilde } from './fs';
@@ -2790,6 +2790,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           theme: readConfig().terminalTheme ?? 'light',
           // W3 — default-MCP consent state + the bundled skills source dir.
           mcpDefaults: readConfig().mcpDefaults,
+          mcpGrant: readConfig().agentMcpGrants?.[opts.hive.id],
           skillsDir: skillsResourceDir(),
           // The shared palace is mutated by the agent's own `mempalace` calls, so
           // the OS sandbox must let it through (empty when memory is off).
@@ -3236,6 +3237,10 @@ ipcMain.handle('config:update', (_evt, patch: Partial<HarnessConfig>) => {
   }
   return next;
 });
+ipcMain.handle('config:setAgentMcpGrant', (_evt, agentId: unknown, servers: unknown) =>
+  setAgentMcpGrant(agentId, servers)
+);
+ipcMain.handle('hive:taskKeys', () => hive.taskKeys());
 ipcMain.handle('config:setAgentTokenCap', (_evt, agentId: unknown, tokenCap: unknown) =>
   setAgentTokenCap(agentId, tokenCap)
 );
@@ -5100,6 +5105,41 @@ ipcMain.handle('workers:stop', (_evt, workerId: string): { ok: boolean; error?: 
   try { ptyManager.kill(workerId); } catch (e) { return { ok: false, error: String(e) }; }
   teardownPty(workerId);
   return { ok: true };
+});
+
+/** Pro Temps: the HUMAN hires a temp for one job. Same path as a god
+ *  spawn-request (fresh worktree, objective through the inbox, released on
+ *  `done`), minus the orchestratorMaySpawn gate: that toggle governs god spending
+ *  unprompted, and here the human is the one asking. The concurrency cap still
+ *  holds. Human requests sit in their own subfolder so the god queue's intake
+ *  never picks them up a second time. */
+ipcMain.handle('workers:hire', async (_evt, req: unknown): Promise<{ ok: boolean; workerId?: string; error?: string }> => {
+  const r = (req && typeof req === 'object' ? req : {}) as { objective?: unknown; cwd?: unknown; name?: unknown };
+  const objective = typeof r.objective === 'string' ? r.objective.trim() : '';
+  const cwd = typeof r.cwd === 'string' ? r.cwd.trim() : '';
+  const name = typeof r.name === 'string' ? r.name.trim().slice(0, 40) : '';
+  if (!objective) return { ok: false, error: 'Say what the job is.' };
+  if (!cwd) return { ok: false, error: 'Pick the folder the temp works in.' };
+  const queue = spawnRequestsDir();
+  if (!queue) return { ok: false, error: 'No hive is open.' };
+  const cfg = readConfig();
+  if (liveWorkers.size >= Math.max(1, cfg.maxConcurrentWorkers ?? 4)) {
+    return { ok: false, error: 'Every temp desk is taken. Wait for one to finish or stop one.' };
+  }
+  const id = `temp-${Date.now().toString(36)}-${randomBytes(2).toString('hex')}`;
+  const dir = join(queue, 'human');
+  const file = join(dir, `${id}.json`);
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(file, JSON.stringify({ id, objective, cwd, ...(name ? { name } : {}) }, null, 2), 'utf8');
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+  await processSpawnRequest(file);
+  const workerId = `worker-${id}`;
+  return liveWorkers.has(workerId)
+    ? { ok: true, workerId }
+    : { ok: false, error: 'The temp did not start; the orchestrator has the details in its inbox.' };
 });
 
 /** Start every hive-bound background service against the current harnessHome.
