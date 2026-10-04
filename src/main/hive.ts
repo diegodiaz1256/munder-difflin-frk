@@ -1388,6 +1388,23 @@ export class HiveManager {
     const keyed: string[] = [];
     const granted = grant ? new Set(cleanServerList(grant)) : null;
     for (const e of MCP_CATALOG) {
+      // Keyed servers never run under the agent: their key would be in its
+      // environment. They go through main's MCP gateway (mcpGateway.ts), which
+      // holds the key; the agent only gets a capability token. A service can
+      // have several connections (two GitHub accounts…): a Capabilities grant
+      // names the service, and each connection is then switched on, scoped to
+      // agents and keyed on its own. A connection missing a required key is
+      // left out: it could only fail.
+      if ((e.secrets ?? []).length > 0) {
+        if (granted && !granted.has(e.id)) continue;
+        for (const inst of this.mcpInstances(e.id)) {
+          if (cfg?.[inst]?.enabled !== true) continue;
+          const scope = scopes?.[inst];
+          if (Array.isArray(scope) && !(agentId && scope.includes(agentId))) continue;
+          if ((e.secrets ?? []).every((f) => f.optional || this.mcpKeyStored(inst, f.env))) keyed.push(inst);
+        }
+        continue;
+      }
       const consented = cfg?.[e.id]?.enabled;
       const enabled = granted ? granted.has(e.id) : (consented ?? e.defaultEnabled);
       if (!enabled) continue;
@@ -1398,14 +1415,6 @@ export class HiveManager {
       // "Choose agents" (Connections): a scoped server reaches only its list.
       const scope = scopes?.[e.id];
       if (Array.isArray(scope) && !(agentId && scope.includes(agentId))) continue;
-      // Keyed servers never run under the agent: their key would be in its
-      // environment. They go through main's MCP gateway (mcpGateway.ts), which
-      // holds the key; the agent only gets a capability token. Every required
-      // key must be stored, or the server could only fail.
-      if ((e.secrets ?? []).length > 0) {
-        if ((e.secrets ?? []).every((f) => f.optional || this.mcpKeyStored(e.id, f.env))) keyed.push(e.id);
-        continue;
-      }
       // Replace the `<cwd>` placeholder (filesystem/git) with the agent cwd at merge
       // time so these stay strictly workspace-scoped.
       const args = e.spec.args.map((a) => (a === '<cwd>' ? cwd : a));
@@ -1430,6 +1439,13 @@ export class HiveManager {
   private mcpKeyStored: (serverId: string, envName: string) => boolean = () => false;
   setMcpKeyCheck(check: (serverId: string, envName: string) => boolean): void {
     this.mcpKeyStored = check;
+  }
+
+  /** Every connection id of a keyed service (its own id first). Injected by
+   *  main from Connections; unset means one connection per service. */
+  private mcpInstances: (serviceId: string) => string[] = (serviceId) => [serviceId];
+  setMcpInstances(list: (serviceId: string) => string[]): void {
+    this.mcpInstances = list;
   }
 
   /** Grants an agent a gateway capability over its keyed servers. Injected by

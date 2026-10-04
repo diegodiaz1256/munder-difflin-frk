@@ -24,8 +24,19 @@ export interface ConnectionField {
 }
 
 export interface ConnectionStatus {
+  /** Instance id: the service id for a service's first connection (so
+   *  connections made before instances existed keep working), else
+   *  `<service>--<slug>`. */
   id: string;
+  /** Catalog id of the service this connection is an instance of. */
+  service: string;
+  serviceLabel: string;
+  /** The name you gave it (the service's name for the first one). */
   label: string;
+  /** The first connection of its service; it cannot be deleted, only emptied. */
+  primary: boolean;
+  /** Example requests to make of an agent that has it (the guide). */
+  examples: string[];
   description: string;
   docsUrl?: string;
   fields: ConnectionField[];
@@ -51,8 +62,33 @@ function keyed(): McpCatalogEntry[] {
   return MCP_CATALOG.filter((e) => (e.secrets ?? []).length > 0);
 }
 
-function field(serverId: string, env: string): NonNullable<McpCatalogEntry['secrets']>[number] | undefined {
-  return mcpCatalogEntry(serverId)?.secrets?.find((f) => f.env === env);
+// ─── instances ───────────────────────────────────────────────────────────────
+// Several connections of one service (two GitHub accounts, prod and staging
+// databases). Every per-connection setting is already keyed by id — consent in
+// mcpDefaults, agents in connectionScopes, keys in the store as mcp:<id>:<ENV> —
+// so an instance only needs its id → service mapping and a name.
+
+interface Instance { id: string; service: string; label: string }
+
+function extraInstances(): Instance[] {
+  const raw = readConfig().connectionInstances;
+  return Array.isArray(raw) ? raw.filter((i) => i && typeof i.id === 'string' && typeof i.service === 'string') : [];
+}
+
+/** The service a connection id belongs to (its own id for a primary one). */
+export function serviceOf(id: string): string | undefined {
+  if (keyed().some((e) => e.id === id)) return id;
+  return extraInstances().find((i) => i.id === id)?.service;
+}
+
+/** Every connection id of a service, primary first (the hive's view). */
+export function instancesOf(service: string): string[] {
+  return [service, ...extraInstances().filter((i) => i.service === service).map((i) => i.id)];
+}
+
+function field(id: string, env: string): NonNullable<McpCatalogEntry['secrets']>[number] | undefined {
+  const service = serviceOf(id);
+  return service ? mcpCatalogEntry(service)?.secrets?.find((f) => f.env === env) : undefined;
 }
 
 /** The value for one server credential. MAIN-ONLY: read by the MCP gateway
@@ -69,7 +105,7 @@ export function connectionKeyStored(serverId: string, env: string): boolean {
 /** How the MCP gateway launches a keyed server: the catalog spec plus the
  *  decrypted keys, or null when a required key is missing. MAIN-ONLY. */
 export function connectionLaunchEnv(serverId: string): Record<string, string> | null {
-  const entry = mcpCatalogEntry(serverId);
+  const entry = mcpCatalogEntry(serviceOf(serverId) ?? '');
   if (!entry || !(entry.secrets ?? []).length) return null;
   const env: Record<string, string> = {};
   for (const f of entry.secrets ?? []) {
@@ -82,21 +118,62 @@ export function connectionLaunchEnv(serverId: string): Record<string, string> | 
 
 export function listConnections(): ConnectionStatus[] {
   const cfg = readConfig();
-  return keyed().map((e) => {
-    const fields = (e.secrets ?? []).map((f) => ({ ...f, stored: hasSecret(refFor(e.id, f.env)) }));
-    const scope = cfg.connectionScopes?.[e.id];
+  const extra = extraInstances();
+  return keyed().flatMap((e) => [{ id: e.id, service: e.id, label: e.label }, ...extra.filter((i) => i.service === e.id)].map((inst) => {
+    const fields = (e.secrets ?? []).map((f) => ({ ...f, stored: hasSecret(refFor(inst.id, f.env)) }));
+    const scope = cfg.connectionScopes?.[inst.id];
     return {
-      id: e.id,
-      label: e.label,
+      id: inst.id,
+      service: e.id,
+      serviceLabel: e.label,
+      label: inst.label,
+      primary: inst.id === e.id,
+      examples: e.examples ?? [],
       description: e.description,
       docsUrl: e.docsUrl,
       fields,
-      enabled: cfg.mcpDefaults?.[e.id]?.enabled === true,
+      enabled: cfg.mcpDefaults?.[inst.id]?.enabled === true,
       ready: fields.every((f) => f.optional || f.stored),
       scope: Array.isArray(scope) ? scope : null,
       testable: e.id in TESTS
     };
-  });
+  }));
+}
+
+/** Add another connection of a service, e.g. a second GitHub account. */
+export function addConnection(service: unknown, label: unknown): { ok: boolean; id?: string; error?: string } {
+  const entry = typeof service === 'string' ? keyed().find((e) => e.id === service) : undefined;
+  if (!entry) return { ok: false, error: 'unknown service' };
+  const name = typeof label === 'string' ? label.trim().slice(0, 40) : '';
+  if (!name) return { ok: false, error: 'give it a name' };
+  const extra = extraInstances();
+  if (extra.length >= 50) return { ok: false, error: 'too many connections' };
+  const base = `${entry.id}--${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'more'}`;
+  let id = base;
+  for (let i = 2; extra.some((x) => x.id === id); i++) id = `${base}-${i}`;
+  writeConfig({ connectionInstances: [...extra, { id, service: entry.id, label: name }] });
+  return { ok: true, id };
+}
+
+export function renameConnection(id: unknown, label: unknown): { ok: boolean; error?: string } {
+  const name = typeof label === 'string' ? label.trim().slice(0, 40) : '';
+  const extra = extraInstances();
+  if (!name || !extra.some((x) => x.id === id)) return { ok: false, error: 'only an added connection can be renamed' };
+  writeConfig({ connectionInstances: extra.map((x) => (x.id === id ? { ...x, label: name } : x)) });
+  return { ok: true };
+}
+
+/** Delete an added connection: its keys, its switch and its agent list go too. */
+export function removeConnection(id: unknown): { ok: boolean; error?: string } {
+  const extra = extraInstances();
+  const inst = extra.find((x) => x.id === id);
+  if (!inst) return { ok: false, error: 'only an added connection can be deleted' };
+  for (const f of mcpCatalogEntry(inst.service)?.secrets ?? []) deleteSecret(refFor(inst.id, f.env));
+  const cfg = readConfig();
+  const mcpDefaults = { ...(cfg.mcpDefaults ?? {}) }; delete mcpDefaults[inst.id];
+  const connectionScopes = { ...(cfg.connectionScopes ?? {}) }; delete connectionScopes[inst.id];
+  writeConfig({ connectionInstances: extra.filter((x) => x.id !== inst.id), mcpDefaults, connectionScopes });
+  return { ok: true };
 }
 
 /** Store (or, with an empty value, remove) one credential. */
@@ -113,7 +190,7 @@ export function setConnectionSecret(serverId: unknown, env: unknown, value: unkn
 
 /** Switch a connection on or off (the same consent the MCP settings toggle writes). */
 export function setConnectionEnabled(serverId: unknown, on: unknown): { ok: boolean; error?: string } {
-  if (typeof serverId !== 'string' || !keyed().some((e) => e.id === serverId)) return { ok: false, error: 'unknown connection' };
+  if (typeof serverId !== 'string' || !serviceOf(serverId)) return { ok: false, error: 'unknown connection' };
   const cfg = readConfig();
   writeConfig({ mcpDefaults: { ...(cfg.mcpDefaults ?? {}), [serverId]: { enabled: on === true } } });
   return { ok: true };
@@ -121,7 +198,7 @@ export function setConnectionEnabled(serverId: unknown, on: unknown): { ok: bool
 
 /** Limit a connection to some agents, or (null) give it to every agent. */
 export function setConnectionScope(serverId: unknown, agentIds: unknown): { ok: boolean; error?: string } {
-  if (typeof serverId !== 'string' || !keyed().some((e) => e.id === serverId)) return { ok: false, error: 'unknown connection' };
+  if (typeof serverId !== 'string' || !serviceOf(serverId)) return { ok: false, error: 'unknown connection' };
   const scopes = { ...(readConfig().connectionScopes ?? {}) };
   if (agentIds === null) {
     delete scopes[serverId];
@@ -188,8 +265,9 @@ const TESTS: Record<string, Tester> = {
 
 export async function testConnection(serverId: unknown): Promise<ConnectionTestResult> {
   if (typeof serverId !== 'string') return { ok: false, message: 'Unknown connection.' };
-  const entry = mcpCatalogEntry(serverId);
-  const tester = TESTS[serverId];
+  const service = serviceOf(serverId) ?? '';
+  const entry = mcpCatalogEntry(service);
+  const tester = TESTS[service];
   if (!entry || !tester) return { ok: false, message: 'No test for this connection.' };
   const value = (env: string) => connectionSecret(serverId, env);
   const missing = (entry.secrets ?? []).filter((f) => !f.optional && !value(f.env));
