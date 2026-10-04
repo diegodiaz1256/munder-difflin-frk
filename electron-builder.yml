@@ -8,8 +8,9 @@ copyright: Copyright © 2026 Chaitanya Giri
 # knows which repo to poll.
 publish:
   provider: github
-  owner: chaitanyagiri
-  repo: munder-difflin
+  # Must match REPO in src/shared/updateState.ts.
+  owner: diegodiaz1256
+  repo: munder-difflin-frk
 
 # Bake the update toast's "What's new" list straight into latest*.yml.
 #
