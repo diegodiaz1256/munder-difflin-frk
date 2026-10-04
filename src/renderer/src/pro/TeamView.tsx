@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MarkdownPreview } from '@/markdown/MarkdownPreview';
 import { TRIGGER_MODES } from '@shared/triggers';
 import { StateBadge } from './data';
+import { Guide, useGuide } from './Guide';
 
 type Status = Awaited<ReturnType<typeof window.cth.teamStatus>>;
 type Team = Status['teams'][number];
@@ -15,6 +16,15 @@ const LEVELS: { value: Level; label: string; blurb: string; soon?: boolean }[] =
   { value: 'view', label: 'View', blurb: 'Also sees your floor (coming next).', soon: true },
   { value: 'manage', label: 'Manage', blurb: 'Also acts on your office (coming next).', soon: true }
 ];
+const TEAM_STEPS: Array<[string, string]> = [
+  ['Your office gets an identity', 'Turning Team on gives this office a name and a pair of keys. The keys never leave this machine; teammates only ever see your name.'],
+  ['Teams group people, each on its own relay', 'Make a team per group you work with (“Barcelona branch”, “Partners”) with “+ New team”. Each team has a relay: an ntfy server that passes messages along. ntfy.sh works out of the box; a company can run its own and put that team on it.'],
+  ['Invite, or join', '“Invite to <team>” makes a code that works once, for 24 hours. Send it over a channel you trust (Slack, Signal…). They paste it into “Got an invite?” and both offices appear in that team. You can join other people’s teams the same way, so one office can be in many teams.'],
+  ['Decide what each person may do', 'Each team sets a default for its members. “May”: Messages lets them write to your orchestrator (View and Manage, to see and run your floor from their office, come next). “Messages”: strict holds every message for you in Inbox → Outside; communication only lets information through and holds requests for action; allow all sends everything straight to your orchestrator. Open a person to give them their own setting instead of the team’s.'],
+  ['Talk', 'Write from a person’s conversation, or just ask your orchestrator (“tell Barcelona the release moves to Monday”): it writes to them itself, and their replies land in its inbox.'],
+  ['What is protected', 'Every message is encrypted on the sending machine and opened only on the receiving one, and signed so nobody can pose as a teammate. A relay sees a random mailbox name and unreadable bytes. Without a valid invite nobody can get in, even if they know your mailbox. Remove a person or delete a team at any time.']
+];
+
 const levelLabel = (l: Level): string => LEVELS.find((x) => x.value === l)?.label ?? l;
 const modeLabel = (m: Mode): string => TRIGGER_MODES.find((x) => x.value === m)?.label ?? m;
 
@@ -31,6 +41,7 @@ export function TeamView() {
   const [log, setLog] = useState<LogEntry[]>([]);
   const [openPeer, setOpenPeer] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [guide, toggleGuide] = useGuide('cth.teamGuide');
 
   const reload = useCallback(() => {
     void window.cth.teamStatus().then(setSt).catch(() => { /* keep last */ });
@@ -50,9 +61,11 @@ export function TeamView() {
         <h2>Team</h2>
         <span className="pro-sub">You are <strong>{st.me?.name}</strong> · {st.teams.length} team{st.teams.length === 1 ? '' : 's'} · {st.peers.length} teammate{st.peers.length === 1 ? '' : 's'}</span>
         <div className="pro-head-end">
+          <button className="pro-btn" onClick={toggleGuide}>{guide ? 'Hide guide' : 'How teams work'}</button>
           <button className="pro-btn" onClick={() => { void window.cth.teamDisable().then(reload); }}>Turn off</button>
         </div>
       </div>
+      {guide && <Guide title="How teams work" steps={TEAM_STEPS} onClose={toggleGuide} />}
       <p className="pro-text" style={{ marginTop: -6 }}>
         Messages are sealed on this machine and opened only on your teammate&rsquo;s; relays carry encrypted bytes they cannot read.
       </p>
@@ -113,6 +126,7 @@ function TeamSetup({ current, onDone }: { current: Status; onDone: () => void })
           {busy ? 'Turning on…' : 'Turn on Team'}
         </button>
       </section>
+      <div style={{ maxWidth: 820 }}><Guide title="How teams work" steps={TEAM_STEPS} /></div>
     </div>
   );
 }
