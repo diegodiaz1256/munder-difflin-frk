@@ -110,3 +110,21 @@ test('the key broker serves runners to a token holder only, masked output and al
   const anon = await fetch(`${base}/run/${id}`, { method: 'POST' });
   assert.equal(anon.status, 401, 'no token, no run');
 });
+
+test('on a WSL floor a runner runs inside the distro, secrets over stdin, output masked', { skip: process.platform !== 'win32' }, async (t) => {
+  const { execFileSync } = require('node:child_process');
+  let distro = null;
+  try {
+    const raw = execFileSync('wsl.exe', ['-l', '-q'], { timeout: 15000 });
+    distro = raw.toString('utf16le').replace(/\0/g, '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean)[0] ?? null;
+  } catch { /* no WSL */ }
+  if (!distro) { t.skip('no WSL distribution'); return; }
+  const { v } = vault();
+  v.setVar({ name: 'TOKEN', kind: 'secret' }, 'wsl_secret_value=with spaces & "quotes"');
+  const { id } = v.setRunner({ name: 'where', command: 'echo "kernel=$(uname -s) pwd=$PWD"; echo "value=$TOKEN"; env | grep -c wsl_secret_value', secrets: ['TOKEN'], approval: 'never' });
+  const out = await v.run(id, { agentName: 'Pam', cwd: `\\\\wsl.localhost\\${distro}\\tmp`, fingerprint: 'x' });
+  assert.equal(out.ok, true, out.error);
+  assert.match(out.output, /kernel=Linux pwd=\/tmp/);
+  assert.match(out.output, /value=\*\*\*/);
+  assert.ok(!out.output.includes('wsl_secret_value'), out.output);
+});

@@ -91,7 +91,19 @@ interface PtySession {
   /** True after the child has emitted at least one frame. Automation waits for
    *  this before typing, so startup prompts cannot outrun the TUI subscription. */
   hasOutput: boolean;
+  /** WSL floors: when the agent first printed visible text (0 = not yet).
+   *  wsl.exe paints escape sequences long before the agent starts. */
+  wslVisibleAt?: number;
 }
+
+/** Visible text once escape sequences are removed. */
+const ESCAPES = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]/g;
+export function hasVisibleText(data: string): boolean {
+  return /[^\s\x00-\x1f\x7f]/.test(data.replace(ESCAPES, ''));
+}
+/** How long a WSL agent's first visible frame must settle before automation
+ *  types into it (its TUI turns on raw input a moment after painting). */
+const WSL_READY_MS = 1500;
 
 export interface SpawnOptions {
   id: string;
@@ -729,7 +741,8 @@ export class PtyManager {
         lastOutputAt: Date.now(),
         hasOutput: false,
         tail: '',
-        owner
+        owner,
+        ...(wsl ? { wslVisibleAt: 0 } : {})
       };
       this.sessions.set(opts.id, session);
 
@@ -739,6 +752,7 @@ export class PtyManager {
         if (this.sessions.get(opts.id) !== session) return;
         session.hasOutput = true;
         session.lastOutputAt = Date.now();
+        if (session.wslVisibleAt === 0 && hasVisibleText(data)) session.wslVisibleAt = Date.now();
         // Keep only the trailing window; slice AFTER appending so a single
         // oversized write still leaves us its end (the part that explains a death).
         session.tail = (session.tail + data).slice(-TAIL_MAX);
@@ -833,7 +847,7 @@ export class PtyManager {
       command: s.command,
       pid: s.proc.pid,
       lastOutputAt: s.lastOutputAt,
-      hasOutput: s.hasOutput
+      hasOutput: s.wslVisibleAt === undefined ? s.hasOutput : s.wslVisibleAt > 0 && Date.now() - s.wslVisibleAt >= WSL_READY_MS
     }));
   }
 

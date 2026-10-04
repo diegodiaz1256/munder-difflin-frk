@@ -71,7 +71,7 @@ import * as integrations from './integrations';
 import { applyMissionRequest, type MissionLike } from '../shared/missionRequests';
 import { cleanCustomBundles } from '../shared/roleBundles';
 import { Factories } from './factories';
-import { createWslOffice, listDistros, mirroredNetworking, parseWslPath } from './wsl';
+import { createWslOffice, listDistros, mirroredNetworking, parseWslPath, probeInDistro, WSL_INSTALL } from './wsl';
 import { WslBridge } from './wslBridge';
 import { McpServers } from './mcpServers';
 import { EnvVault, fingerprintOf } from './envVault';
@@ -4172,9 +4172,24 @@ ipcMain.handle('skills:reveal', (_evt, path: unknown) => {
  * Finder-launched app) and knows whether the palace is initialised, so it is
  * authoritative and reused rather than re-probed differently here.
  */
-ipcMain.handle('tools:status', (): ToolStatus[] => {
+ipcMain.handle('tools:status', async (): Promise<ToolStatus[]> => {
   const win = process.platform === 'win32';
   const mem = (() => { try { memory.resetBinCache(); return memory.status(); } catch { return null; } })();
+  // A WSL floor: its agents and tools run inside the distro, so look there and
+  // give Linux install commands (memory stays on Windows, with the app).
+  const wslLoc = win ? parseWslPath(readConfig().harnessHome) : null;
+  if (wslLoc) {
+    const specs = toolCatalog();
+    const found = await probeInDistro(wslLoc.distro, specs.map((s) => s.bin).filter((b): b is string => !!b));
+    return specs.map((spec): ToolStatus => {
+      if (spec.id === 'mempalace') {
+        return { ...spec, installCommand: spec.install.win32, found: !!mem?.available, path: mem?.bin ?? null };
+      }
+      const installCommand = WSL_INSTALL[spec.id] ?? spec.install.posix.replace(/^xcode-select --install\s+# macOS · or: /, '');
+      const path = spec.bin ? found[spec.bin] ?? null : null;
+      return { ...spec, installCommand, found: !!path, path, detail: `inside WSL (${wslLoc.distro})` };
+    });
+  }
   return toolCatalog().map((spec): ToolStatus => {
     const installCommand = win ? spec.install.win32 : spec.install.posix;
     if (spec.id === 'mempalace') {

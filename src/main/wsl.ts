@@ -67,12 +67,75 @@ export function linuxizeText(text: string, distro: string): string {
 /** Run before every command inside a distro: a login shell already has
  *  ~/.local/bin and npm -g on PATH, but node version managers set themselves up
  *  only in interactive shells (nvm in ~/.bashrc), so load them explicitly. */
-export const WSL_PRELUDE = [
+const WSL_SETUP = [
   '[ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1',
   '[ -d "$HOME/.volta/bin" ] && PATH="$HOME/.volta/bin:$PATH"',
-  'command -v fnm >/dev/null 2>&1 && eval "$(fnm env)"',
-  'exec "$@"'
-].join('; ');
+  'command -v fnm >/dev/null 2>&1 && eval "$(fnm env)"'
+];
+export const WSL_PRELUDE = [...WSL_SETUP, 'exec "$@"'].join('; ');
+
+/**
+ * Run a shell `command` inside `distro` with secrets in its environment, for
+ * runners (envVault.ts). The values never go on a command line (other
+ * processes can read those): they arrive on stdin as NAME=base64 lines ended
+ * by a blank one, are exported, and stdin is then closed for the command.
+ */
+export function wslSecretRun(distro: string, cwd: string, command: string): { file: string; args: string[] } {
+  const script = [
+    ...WSL_SETUP,
+    'while IFS= read -r l && [ -n "$l" ]; do export "${l%%=*}=$(printf %s "${l#*=}" | base64 -d)"; done',
+    'exec bash -c "$1" </dev/null'
+  ].join('; ');
+  return { file: 'wsl.exe', args: ['-d', distro, '--cd', cwd, '--exec', 'bash', '-lc', script, 'bash', command] };
+}
+
+/** Where each of `bins` resolves inside `distro` (null when missing), with
+ *  the same login shell + version managers agents get. One wsl.exe call. */
+export function probeInDistro(distro: string, bins: string[]): Promise<Record<string, string | null>> {
+  const safe = bins.filter((b) => /^[A-Za-z0-9._-]+$/.test(b));
+  const script = [...WSL_SETUP, 'for b in "$@"; do printf "%s\\t%s\\n" "$b" "$(command -v "$b" 2>/dev/null)"; done'].join('; ');
+  return new Promise((resolve) => {
+    execFile('wsl.exe', ['-d', distro, '--exec', 'bash', '-lc', script, 'bash', ...safe], { timeout: 20000, windowsHide: true }, (err, stdout) => {
+      const out: Record<string, string | null> = Object.fromEntries(safe.map((b) => [b, null]));
+      if (!err) for (const line of String(stdout).split(/\r?\n/)) {
+        const [b, p] = line.split('\t');
+        if (b && b in out) out[b] = p?.trim() || null;
+      }
+      resolve(out);
+    });
+  });
+}
+
+/** How to install a tool inside a WSL distro (Ubuntu/Debian), when that
+ *  differs from the generic Linux hint. Node comes through nvm: installing it
+ *  with apt gives an old version, and npm -g then needs sudo. */
+export const WSL_INSTALL: Record<string, string> = {
+  git: 'sudo apt update && sudo apt install -y git',
+  node: 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && . ~/.nvm/nvm.sh && nvm install --lts',
+  uv: 'curl -LsSf https://astral.sh/uv/install.sh | sh'
+};
+
+const homes = new Map<string, string>();
+/** The user's home in `distro` as a Windows UNC path (cached), or null when
+ *  WSL does not answer. */
+export function distroHomeUnc(distro: string): string | null {
+  const cached = homes.get(distro);
+  if (cached) return cached;
+  try {
+    const home = runInDistro(distro, 'sh', ['-c', 'printf %s "$HOME"']);
+    if (!home.startsWith('/')) return null;
+    const unc = toWslUnc(distro, home);
+    homes.set(distro, unc);
+    return unc;
+  } catch { return null; }
+}
+
+/** The stdin wslSecretRun reads its secrets from. */
+export function secretStdin(secrets: Record<string, string>): string {
+  return Object.entries(secrets)
+    .filter(([k]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(k))
+    .map(([k, v]) => `${k}=${Buffer.from(v, 'utf8').toString('base64')}\n`).join('') + '\n';
+}
 
 /**
  * The `wsl.exe` invocation that runs `file args` inside `distro`, in `cwd`
