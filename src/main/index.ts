@@ -1,3 +1,5 @@
+// Demo mode redirects userData — must load before anything else (see demo.ts).
+import { DEMO_HOME } from './demo';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, powerSaveBlocker, screen, shell, Notification } from 'electron';
 import { spawn } from 'node:child_process';
 import {
@@ -5197,7 +5199,13 @@ function bootstrapHiveServices(): void {
   // failure just leaves telemetry off (transcript reconciler stays). No breaker.start():
   // the breaker is POLICY-only, ticked by the heartbeat beat (#1, ships disabled).
   void telemetry.start().then((r) => {
-    if (r.ok && r.endpoint) { hive.setOtelEndpoint(r.endpoint); console.log('[telemetry] collector listening', r.endpoint); }
+    if (r.ok && r.endpoint) {
+      hive.setOtelEndpoint(r.endpoint);
+      // Demo agents are hookless `custom` CLIs, so the hive never hands them the
+      // OTel endpoint; they find it here (PTYs inherit process.env).
+      if (DEMO_HOME) process.env.MD_DEMO_OTEL = r.endpoint;
+      console.log('[telemetry] collector listening', r.endpoint);
+    }
     else console.error('[telemetry] collector failed to start:', r.error);
   });
   memory.start(); // init shared palace + mine loop (no-op without mempalace)
