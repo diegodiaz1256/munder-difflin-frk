@@ -51,6 +51,7 @@ where it is in this factory's own pipeline.
 {
   "task_id": "string",
   "project": "string",            // a projects_list id
+  "project_name": "string?",      // its display name, to save a lookup
   "title": "string",
   "state": "queued | working | waiting | done | failed | cancelled",
   "stage": "string?",             // factory-specific, for display only
@@ -70,6 +71,9 @@ where it is in this factory's own pipeline.
     "pr_url": "string?",
     "deploy_url": "string?"
   },
+  "created_at": "ISO-8601?",
+  "state_since": "ISO-8601?",     // entered its current state
+  "stage_since": "ISO-8601?",     // entered its current stage
   "updated_at": "ISO-8601"
 }
 ```
@@ -87,7 +91,7 @@ Clients re-read the task when they are notified rather than treat `done` as fina
 |---|---|---|---|
 | `task_create` | write | `project`, `title`, `detail`, `priority?` (`normal`\|`urgent`), `depends_on?` (task ids), `client_ref?` | `{ task_id, state }` |
 | `task_get` | read | `task_id` | Task |
-| `task_list` | read | `project?`, `state?`, `limit?`, `include_parts?` | `{ tasks: Task[] }` (may be summarised) |
+| `task_list` | read | `project?`, `state?`, `agent?` (exact worker name), `limit?`, `include_parts?` | `{ tasks: Task[], total? }` (may be summarised) |
 | `task_answer` | write | `task_id`, `ask_id`, `text?`, `approve?` (bool, for `approval` asks) | `{ ok }` |
 | `task_comment` | write | `task_id`, `text` | `{ ok }` |
 | `task_cancel` | admin | `task_id`, `reason?` | `{ ok }` |
@@ -146,7 +150,12 @@ are doing, and work moving between them. Two resources, both `read` scope:
   "org": [{ "name": "string", "role": "string", "reports_to": "string?" }],  // for layout
   "board": [{ "id": "string", "title": "string", "project": "string", "state": "string",
               "stage": "string?", "assignee": "string?", "depends_on": ["task_id"] }],
-  "pacing": { "mode": "string", "window_5h_pct": 0, "window_7d_pct": 0, "reason": "string?" }
+  "pacing": {
+    "mode": "string", "reason": "string?", "running": 0, "capacity": 0,
+    "window_5h_pct": 0, "window_7d_pct": 0,      // the whole account behind the factory
+    "own_5h_pct": 0, "own_7d_pct": 0,            // what the factory itself used
+    "ceiling_5h_pct": 0, "ceiling_7d_pct": 0     // where the factory stops (applies to own_*)
+  }
 }
 ```
 

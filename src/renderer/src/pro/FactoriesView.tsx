@@ -388,7 +388,7 @@ function FactoryFloor({ factory, onBack, onChanged }: { factory: FactoryView; on
       {pickedAgent && <AgentDetail agent={pickedAgent} />}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(220px, 1fr)', gap: 14, alignItems: 'start' }}>
-        <Board factory={withInfo} floor={floor} only={only} onChanged={onChanged} />
+        <Board factory={withInfo} floor={floor} only={only} events={events} onChanged={onChanged} />
         <EventLog events={events} />
       </div>
     </div>
@@ -486,10 +486,39 @@ function AgentDetail({ agent }: { agent: FactoryAgentView }) {
 function Pacing({ pacing }: { pacing: NonNullable<FactoryFloorView['pacing']> }) {
   const paused = pacing.mode === 'paused';
   return (
-    <span className="pro-row" style={{ gap: 8, marginInlineStart: 'auto' }} title={pacing.reason}>
+    <span className="pro-row" style={{ gap: 12, marginInlineStart: 'auto' }} title={pacing.reason}>
       {paused && <StateBadge label="Paused" tone="amber" />}
-      {pacing.window_5h_pct !== undefined && <span className="pro-sub pro-mono" style={{ fontSize: 11 }}>5 h {Math.round(pacing.window_5h_pct)}%</span>}
-      {pacing.window_7d_pct !== undefined && <span className="pro-sub pro-mono" style={{ fontSize: 11 }}>7 d {Math.round(pacing.window_7d_pct)}%</span>}
+      {pacing.running !== undefined && <span className="pro-sub pro-mono" style={{ fontSize: 11 }}>{pacing.running}{pacing.capacity ? `/${pacing.capacity}` : ''} running</span>}
+      <UsageWindow label="5 h" own={pacing.own_5h_pct} account={pacing.window_5h_pct} ceiling={pacing.ceiling_5h_pct} />
+      <UsageWindow label="7 d" own={pacing.own_7d_pct} account={pacing.window_7d_pct} ceiling={pacing.ceiling_7d_pct} />
+    </span>
+  );
+}
+
+/** One usage window: the factory's own use (strong), the rest of the account
+ *  behind it (light), and the factory's ceiling (tick). Without the split it
+ *  shows the account total alone. */
+function UsageWindow({ label, own, account, ceiling }: { label: string; own?: number; account?: number; ceiling?: number }) {
+  if (own === undefined && account === undefined) return null;
+  const clamp = (v: number) => Math.max(0, Math.min(100, v));
+  const total = account ?? own ?? 0;
+  const tip = [
+    own !== undefined ? `factory ${Math.round(own)}%` : null,
+    account !== undefined ? `whole account ${Math.round(account)}%` : null,
+    ceiling !== undefined ? `factory stops at ${Math.round(ceiling)}%` : null
+  ].filter(Boolean).join(' · ');
+  const near = ceiling !== undefined && own !== undefined ? own >= ceiling - 5 : total >= 90;
+  return (
+    <span className="pro-row" style={{ gap: 6 }} title={tip}>
+      <span className="pro-sub pro-mono" style={{ fontSize: 11 }}>{label}</span>
+      <span style={{ position: 'relative', width: 90, height: 7, borderRadius: 4, background: 'var(--pro-line)', overflow: 'hidden', display: 'inline-block' }}>
+        <span style={{ position: 'absolute', insetBlock: 0, insetInlineStart: 0, width: `${clamp(total)}%`, background: near ? 'var(--cth-coral-light)' : 'var(--cth-sky-light)' }} />
+        {own !== undefined && <span style={{ position: 'absolute', insetBlock: 0, insetInlineStart: 0, width: `${clamp(own)}%`, background: near ? 'var(--cth-coral)' : 'var(--cth-sky)' }} />}
+        {ceiling !== undefined && <span style={{ position: 'absolute', insetBlock: -1, insetInlineStart: `calc(${clamp(ceiling)}% - 1px)`, width: 2, background: 'var(--cth-ink-900)' }} />}
+      </span>
+      <span className="pro-sub pro-mono" style={{ fontSize: 11 }}>
+        {own !== undefined ? `${Math.round(own)}%` : `${Math.round(total)}%`}{ceiling !== undefined ? ` of ${Math.round(ceiling)}%` : ''}
+      </span>
     </span>
   );
 }
@@ -497,83 +526,254 @@ function Pacing({ pacing }: { pacing: NonNullable<FactoryFloorView['pacing']> })
 // ─── board, asks, sending work ──────────────────────────────────────────────
 
 interface TaskView {
-  task_id: string; project: string; title: string; state: string; stage?: string; agent?: string;
+  task_id: string; project: string; project_name?: string; title: string; state: string; stage?: string; agent?: string;
+  attempts?: number; parent_id?: string; parts?: string[];
+  state_since?: string; stage_since?: string; created_at?: string; updated_at?: string;
   ask?: { id: string; kind: 'question' | 'approval'; question: string; options?: string[] };
-  output?: { summary?: string; pr_url?: string; deploy_url?: string };
+  output?: { summary?: string; repo?: string; pr_url?: string; deploy_url?: string };
 }
 const COLUMNS: Array<{ id: string; label: string; match: (s: string) => boolean }> = [
   { id: 'queued', label: 'Queued', match: (s) => s === 'queued' },
   { id: 'working', label: 'In the line', match: (s) => s === 'working' },
   { id: 'waiting', label: 'Waiting on a human', match: (s) => s === 'waiting' },
-  { id: 'done', label: 'Done', match: (s) => s === 'done' || s === 'failed' }
+  { id: 'done', label: 'Done', match: (s) => s === 'done' || s === 'failed' || s === 'cancelled' }
 ];
+const FIRST = 5;
+const MORE = 10;
 
-function Board({ factory, floor, only, onChanged }: { factory: FactoryView; floor: FactoryFloorView | null; only: Set<string>; onChanged: () => void }) {
+/** "3 h", "2 d", "40 min" since an ISO time. */
+function since(iso?: string): string | null {
+  const t = iso ? Date.parse(iso) : NaN;
+  if (!Number.isFinite(t)) return null;
+  const m = Math.max(0, Math.round((Date.now() - t) / 60_000));
+  if (m < 60) return `${m} min`;
+  const h = Math.round(m / 60);
+  return h < 48 ? `${h} h` : `${Math.round(h / 24)} d`;
+}
+/** When the task entered where it is now: the factory's own field when it
+ *  sends one, else its last update (an approximation). */
+function inStateFor(t: TaskView): { text: string; exact: boolean } | null {
+  const exact = t.stage_since ?? t.state_since;
+  const s = since(exact ?? t.updated_at);
+  return s ? { text: s, exact: !!exact } : null;
+}
+
+function Board({ factory, floor, only, events, onChanged }: {
+  factory: FactoryView; floor: FactoryFloorView | null; only: Set<string>; events: FactoryEventView[]; onChanged: () => void;
+}) {
   const [tasks, setTasks] = useState<TaskView[]>([]);
+  const [query, setQuery] = useState('');
+  const [shown, setShown] = useState<Record<string, number>>({});
+  const [open, setOpen] = useState<string | null>(null);
   const info = factory.info;
   const load = useCallback(() => {
     if (!info?.tools.includes('task_list')) return;
-    void window.cth.factoriesCall(factory.id, 'task_list', { limit: 60 }).then((r) => {
+    void window.cth.factoriesCall(factory.id, 'task_list', { limit: 1000, include_parts: true }).then((r) => {
       if (r.ok) setTasks(((r.result as { tasks?: TaskView[] })?.tasks ?? []));
     });
   }, [factory.id, info]);
-  useEffect(() => { load(); const iv = setInterval(load, 5000); return () => clearInterval(iv); }, [load]);
+  useEffect(() => { load(); const iv = setInterval(load, 8000); return () => clearInterval(iv); }, [load]);
+
   // No task_list: fall back to the floor's board.
-  const rows: TaskView[] = tasks.length || !floor ? tasks
+  const all: TaskView[] = tasks.length || !floor ? tasks
     : floor.board.map((b) => ({ task_id: b.id, project: b.project, title: b.title, state: b.state, stage: b.stage, agent: b.assignee }));
+  const byId = useMemo(() => new Map(all.map((t) => [t.task_id, t])), [all]);
+  // Parts are listed under their parent, not as cards of their own.
+  const top = all.filter((t) => !t.parent_id || !byId.has(t.parent_id));
+  const q = query.trim().toLowerCase();
+  const match = (t: TaskView) => !q || [t.title, t.task_id, t.agent, t.project, t.project_name, t.stage]
+    .some((v) => v?.toLowerCase().includes(q))
+    || (t.parts ?? []).some((p) => byId.get(p)?.title.toLowerCase().includes(q));
+  const newestFirst = (a: TaskView, b: TaskView) => (b.updated_at ?? '').localeCompare(a.updated_at ?? '');
+  const openTask = open ? byId.get(open) ?? null : null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
       {info?.canSend && <SendTask factory={factory} onSent={load} />}
+      <div className="pro-row" style={{ gap: 8 }}>
+        <input className="pro-input" type="search" placeholder="Search tasks: title, id, worker, project…" value={query}
+          onChange={(e) => { setQuery(e.target.value); setShown({}); }} style={{ flex: 1 }} />
+        {tasks.length > 0 && <span className="pro-sub" style={{ fontSize: 12 }}>{top.length} tasks</span>}
+      </div>
       <div className="pro-board">
         {COLUMNS.map((c) => {
-          const items = rows.filter((t) => c.match(t.state) && (!only.size || only.has(t.project))).slice(-12);
+          const items = top.filter((t) => c.match(t.state) && (!only.size || only.has(t.project)) && match(t)).sort(newestFirst);
+          const n = shown[c.id] ?? FIRST;
           return (
             <div key={c.id} className="pro-col">
               <span className="pro-col-head">{c.label} <span className="pro-sub">{items.length}</span></span>
-              {items.map((t) => <TaskCard key={t.task_id} factory={factory} task={t} onChanged={() => { load(); onChanged(); }} />)}
+              {items.slice(0, n).map((t) => (
+                <TaskCard key={t.task_id} task={t} parts={(t.parts ?? []).map((p) => byId.get(p)).filter((p): p is TaskView => !!p)}
+                  onOpen={setOpen} />
+              ))}
+              {items.length > n && (
+                <button className="pro-btn" onClick={() => setShown((s) => ({ ...s, [c.id]: n + MORE }))}>
+                  Show {Math.min(MORE, items.length - n)} more ({items.length - n} left)
+                </button>
+              )}
             </div>
           );
         })}
       </div>
+      {openTask && (
+        <TaskDetail factory={factory} task={openTask} parent={openTask.parent_id ? byId.get(openTask.parent_id) : undefined}
+          parts={(openTask.parts ?? []).map((p) => byId.get(p)).filter((p): p is TaskView => !!p)}
+          events={events.filter((e) => e.task === openTask.task_id || (openTask.parts ?? []).includes(e.task ?? ''))}
+          onOpen={setOpen} onClose={() => setOpen(null)} onChanged={() => { load(); onChanged(); }} />
+      )}
     </div>
   );
 }
 
-function TaskCard({ factory, task, onChanged }: { factory: FactoryView; task: TaskView; onChanged: () => void }) {
+function TaskCard({ task, parts, onOpen }: { task: TaskView; parts: TaskView[]; onOpen: (id: string) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const inState = inStateFor(task);
+  const doneParts = parts.filter((p) => p.state === 'done').length;
+  return (
+    <div className="pro-card" style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+      <button onClick={() => onOpen(task.task_id)} title="Open the task"
+        style={{ all: 'unset', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>{task.title}</span>
+        <span className="pro-ticket" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {task.task_id} · {task.project_name ?? task.project}{task.stage ? ` · ${task.stage}` : ''}{task.agent ? ` · ${task.agent}` : ''}
+        </span>
+        <span className="pro-row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {task.state === 'failed' && <StateBadge label="Failed" tone="red" />}
+          {task.state === 'cancelled' && <StateBadge label="Cancelled" tone="grey" />}
+          {task.ask && <StateBadge label={task.ask.kind === 'approval' ? 'Needs approval' : 'Question'} tone="amber" />}
+          {inState && <span className="pro-ticket" title={inState.exact ? 'Time in this state' : 'Since its last update'}>{inState.exact ? '' : '~'}{inState.text}{task.stage ? ` in ${task.stage}` : ''}</span>}
+        </span>
+      </button>
+      {parts.length > 0 && (
+        <>
+          <button className="pro-ticket" onClick={() => setExpanded(!expanded)} style={{ all: 'unset', cursor: 'pointer', fontFamily: 'var(--cth-font-mono)', fontSize: 11, color: 'var(--cth-ink-700)' }}>
+            {expanded ? '▾' : '▸'} {parts.length} part{parts.length === 1 ? '' : 's'} · {doneParts} done
+          </button>
+          {expanded && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingInlineStart: 10, borderInlineStart: '2px solid var(--cth-ink-100)' }}>
+              {parts.map((p) => (
+                <button key={p.task_id} onClick={() => onOpen(p.task_id)} style={{ all: 'unset', cursor: 'pointer', fontSize: 11, display: 'flex', gap: 6, minWidth: 0 }}>
+                  <span style={{ color: p.state === 'done' ? 'var(--cth-mint)' : p.state === 'failed' ? 'var(--cth-coral)' : 'var(--cth-ink-500)' }}>
+                    {p.state === 'done' ? '✓' : p.state === 'failed' ? '✗' : '•'}
+                  </span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** One task in full: where it is, who has it, how long, its parts and parent,
+ *  what came out of it, and what happened to it. */
+function TaskDetail({ factory, task, parent, parts, events, onOpen, onClose, onChanged }: {
+  factory: FactoryView; task: TaskView; parent?: TaskView; parts: TaskView[]; events: FactoryEventView[];
+  onOpen: (id: string) => void; onClose: () => void; onChanged: () => void;
+}) {
+  const [full, setFull] = useState<TaskView>(task);
   const [text, setText] = useState('');
-  const canAnswer = factory.info?.canAnswer;
+  useEffect(() => {
+    setFull(task);
+    if (!factory.info?.tools.includes('task_get')) return;
+    void window.cth.factoriesCall(factory.id, 'task_get', { task_id: task.task_id }).then((r) => { if (r.ok && r.result) setFull({ ...task, ...(r.result as TaskView) }); });
+  }, [factory.id, factory.info, task]);
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const t = full;
+  const inState = inStateFor(t);
   const answer = async (approve?: boolean) => {
-    if (!task.ask) return;
-    await window.cth.factoriesCall(factory.id, 'task_answer', { task_id: task.task_id, ask_id: task.ask.id, ...(text ? { text } : {}), ...(approve !== undefined ? { approve } : {}) });
+    if (!t.ask) return;
+    await window.cth.factoriesCall(factory.id, 'task_answer', { task_id: t.task_id, ask_id: t.ask.id, ...(text ? { text } : {}), ...(approve !== undefined ? { approve } : {}) });
     setText('');
     onChanged();
   };
+  const link = (url: string, label: string) => (
+    <a className="pro-mono" href={url} onClick={(e) => { e.preventDefault(); void window.cth.openExternal(url); }}>{label}</a>
+  );
   return (
-    <div className="pro-card" style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <span style={{ fontSize: 12, fontWeight: 600 }}>{task.title}</span>
-      <span className="pro-ticket">{task.task_id} · {task.project}{task.stage ? ` · ${task.stage}` : ''}{task.agent ? ` · ${task.agent}` : ''}</span>
-      {task.state === 'failed' && <StateBadge label="Failed" tone="red" />}
-      {task.output?.pr_url && <a className="pro-mono" href={task.output.pr_url} onClick={(e) => { e.preventDefault(); void window.cth.openExternal(task.output!.pr_url!); }}>pull request</a>}
-      {task.output?.deploy_url && <a className="pro-mono" href={task.output.deploy_url} onClick={(e) => { e.preventDefault(); void window.cth.openExternal(task.output!.deploy_url!); }}>deployed</a>}
-      {task.ask && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid var(--cth-ink-100)', paddingTop: 4 }}>
-          <span style={{ fontSize: 12 }}>{task.ask.question}</span>
-          {canAnswer ? (
-            task.ask.kind === 'approval' ? (
-              <div className="pro-row" style={{ gap: 6 }}>
-                <button className="pro-btn pro-btn-primary" onClick={() => void answer(true)}>Approve</button>
-                <button className="pro-btn" onClick={() => void answer(false)}>Reject</button>
-              </div>
-            ) : (
-              <div className="pro-row" style={{ gap: 6 }}>
-                <input className="pro-input" value={text} onChange={(e) => setText(e.target.value)} placeholder="Your answer" />
-                <button className="pro-btn" disabled={!text.trim()} onClick={() => void answer()}>Send</button>
-              </div>
-            )
-          ) : <span className="pro-sub" style={{ fontSize: 11 }}>Answer it in the factory’s own channel.</span>}
+    <div role="dialog" aria-label={t.title} onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 900, background: 'rgba(20, 16, 12, 0.35)', display: 'flex', justifyContent: 'flex-end'
+    }}>
+      <aside onClick={(e) => e.stopPropagation()} className="pro-card" style={{
+        width: 'min(520px, 92vw)', height: '100%', borderRadius: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12
+      }}>
+        <div className="pro-row">
+          <span className="pro-ticket">{t.task_id}</span>
+          <button className="pro-btn" style={{ marginInlineStart: 'auto' }} onClick={onClose}>Close</button>
         </div>
-      )}
+        <h2 style={{ margin: 0, fontSize: 16, lineHeight: 1.35 }}>{t.title}</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', fontSize: 13 }}>
+          <span className="pro-sub">State</span><span>{t.state}{t.stage ? ` · ${t.stage}` : ''}{inState ? ` · ${inState.exact ? '' : '~'}${inState.text}` : ''}</span>
+          <span className="pro-sub">Project</span><span>{t.project_name ?? t.project}</span>
+          {t.agent && <><span className="pro-sub">Worker</span><span>{t.agent}</span></>}
+          {t.attempts !== undefined && <><span className="pro-sub">Attempts</span><span>{t.attempts}</span></>}
+          {t.created_at && <><span className="pro-sub">Created</span><span>{new Date(t.created_at).toLocaleString()}</span></>}
+          {t.updated_at && <><span className="pro-sub">Updated</span><span>{new Date(t.updated_at).toLocaleString()}</span></>}
+        </div>
+        {parent && (
+          <div className="pro-row" style={{ gap: 6, fontSize: 12 }}>
+            <span className="pro-sub">Part of</span>
+            <button className="pro-btn" onClick={() => onOpen(parent.task_id)}>{parent.title}</button>
+          </div>
+        )}
+        {(t.output?.summary || t.output?.pr_url || t.output?.deploy_url || t.output?.repo) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span className="pro-col-head" style={{ padding: 0 }}>Output</span>
+            {t.output.summary && <span className="pro-text">{t.output.summary}</span>}
+            <span className="pro-row" style={{ gap: 10 }}>
+              {t.output.pr_url && link(t.output.pr_url, 'pull request')}
+              {t.output.deploy_url && link(t.output.deploy_url, 'deployed')}
+              {t.output.repo && link(t.output.repo, 'repository')}
+            </span>
+          </div>
+        )}
+        {t.ask && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 10, background: 'var(--cth-lemon-light)', borderRadius: 6 }}>
+            <strong style={{ fontSize: 13 }}>{t.ask.kind === 'approval' ? 'Needs approval' : 'Question'}</strong>
+            <span style={{ fontSize: 13 }}>{t.ask.question}</span>
+            {factory.info?.canAnswer ? (
+              t.ask.kind === 'approval' ? (
+                <div className="pro-row" style={{ gap: 6 }}>
+                  <button className="pro-btn pro-btn-primary" onClick={() => void answer(true)}>Approve</button>
+                  <button className="pro-btn" onClick={() => void answer(false)}>Reject</button>
+                </div>
+              ) : (
+                <div className="pro-row" style={{ gap: 6 }}>
+                  <input className="pro-input" value={text} onChange={(e) => setText(e.target.value)} placeholder="Your answer" style={{ flex: 1 }} />
+                  <button className="pro-btn" disabled={!text.trim()} onClick={() => void answer()}>Send</button>
+                </div>
+              )
+            ) : <span className="pro-sub" style={{ fontSize: 12 }}>Answer it in the factory’s own channel.</span>}
+          </div>
+        )}
+        {parts.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span className="pro-col-head" style={{ padding: 0 }}>Parts · {parts.filter((p) => p.state === 'done').length}/{parts.length} done</span>
+            {parts.map((p) => (
+              <button key={p.task_id} onClick={() => onOpen(p.task_id)} className="pro-card" style={{ padding: '6px 8px', display: 'flex', gap: 8, alignItems: 'center', textAlign: 'start' }}>
+                <StateBadge label={p.state} tone={p.state === 'done' ? 'green' : p.state === 'failed' ? 'red' : p.state === 'waiting' ? 'amber' : p.state === 'working' ? 'blue' : 'grey'} />
+                <span style={{ fontSize: 12, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</span>
+                {p.agent && <span className="pro-ticket">{p.agent}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span className="pro-col-head" style={{ padding: 0 }}>What happened{events.length ? '' : ' (since this screen opened: nothing yet)'}</span>
+          {[...events].reverse().map((e) => (
+            <span key={e.id} className="pro-mono" style={{ color: e.ok === false ? 'var(--cth-coral)' : 'var(--cth-ink-700)' }}>
+              {new Date(e.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} {e.type.replace('task.', '')}
+              {e.from || e.to ? ` ${e.from ?? ''}→${e.to ?? ''}` : ''}{e.text ? `: ${e.text}` : ''}
+            </span>
+          ))}
+        </div>
+      </aside>
     </div>
   );
 }
