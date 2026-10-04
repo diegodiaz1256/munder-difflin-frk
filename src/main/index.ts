@@ -71,6 +71,7 @@ import * as integrations from './integrations';
 import { applyMissionRequest, type MissionLike } from '../shared/missionRequests';
 import { cleanCustomBundles } from '../shared/roleBundles';
 import { Factories } from './factories';
+import { McpServers } from './mcpServers';
 import { EnvVault, fingerprintOf } from './envVault';
 import { addConnection, connectionKeyStored, connectionLaunchEnv, instancesOf, listConnections, removeConnection, renameConnection, serviceOf, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
 import { McpGateway } from './mcpGateway';
@@ -410,6 +411,12 @@ const liveWorkers = new Map<string, WorkerRec>();
  *  granted a per-worker capability token at spawn (revoked in teardownPty). */
 const mcpGateway = new McpGateway({
   resolveSpec: (serverId) => {
+    if (serverId.startsWith('custom--')) {
+      const spec = mcpServers.launchSpec(serverId);
+      if (!spec) return null;
+      const path = process.platform === 'win32' ? (process.env.PATH ?? '') : userShellPath();
+      return { command: spec.command, args: spec.args, env: { ...spec.env, PATH: path } };
+    }
     // A connection id may be an added instance (github-token--work): launch
     // its service's server with that instance's keys.
     const entry = mcpCatalogEntry(serviceOf(serverId) ?? '');
@@ -419,6 +426,18 @@ const mcpGateway = new McpGateway({
     const path = process.platform === 'win32' ? (process.env.PATH ?? '') : userShellPath();
     return { command: entry.spec.command, args: entry.spec.args, env: { ...keys, PATH: path } };
   }
+});
+
+// Your own MCP servers + the ones set up for other tools (mcpServers.ts).
+const mcpServers = new McpServers({
+  readFile: (p) => { try { return readFileSync(p, 'utf8'); } catch { return null; } },
+  home: homedir(),
+  appData: () => app.getPath('appData'),
+  readCustom: () => readConfig().customMcp ?? [],
+  writeCustom: (list) => writeConfig({ customMcp: list }),
+  getSecret: (ref) => integrations.getSecret(ref),
+  setSecret: (ref, v) => integrations.setSecret(ref, v),
+  deleteSecret: (ref) => integrations.deleteSecret(ref)
 });
 
 // Environment & secrets (envVault.ts): agents use secrets, never see them.
@@ -3622,6 +3641,7 @@ ipcMain.handle('config:setAgentMcpGrant', (_evt, agentId: unknown, servers: unkn
 // Keyed MCP servers run under MAIN, never under an agent: the gateway holds
 // the key and an agent gets a capability token (mcpGateway.ts).
 hive.setMcpKeyCheck(connectionKeyStored);
+hive.setCustomMcp((agentId) => mcpServers.forAgent(agentId));
 hive.setMcpInstances(instancesOf);
 hive.setMcpGateway((agentId, serverIds) =>
   mcpGateway.running() ? { url: mcpGateway.url(), token: mcpGateway.grant(agentId, serverIds) } : null);
@@ -3655,6 +3675,35 @@ ipcMain.handle('env:opStatus', () => new Promise((resolve) => {
   p.on('error', () => resolve({ installed: false }));
   p.on('close', (code) => resolve({ installed: code === 0, version: out.trim() || undefined }));
 }));
+
+// Manager → MCP: your own servers and the ones set up for other tools. Keys
+// go one way into the encrypted store (mcpServers.ts).
+const mcpErr = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) });
+ipcMain.handle('mcp:list', () => ({ mine: mcpServers.listCustom(), found: mcpServers.scanForUi() }));
+ipcMain.handle('mcp:import', (_evt, source: unknown, name: unknown, secretNames: unknown) => {
+  if (typeof source !== 'string' || typeof name !== 'string') return mcpErr('bad request');
+  try {
+    return mcpServers.import(source, name, Array.isArray(secretNames) ? secretNames.filter((x): x is string => typeof x === 'string') : undefined);
+  } catch (e) { return mcpErr(e); }
+});
+ipcMain.handle('mcp:save', (_evt, input: unknown, secretNames: unknown) => {
+  const i = (input ?? {}) as { id?: unknown; name?: unknown; transport?: unknown; env?: unknown };
+  const t = (i.transport ?? {}) as { kind?: unknown; command?: unknown; args?: unknown; url?: unknown };
+  const transport = t.kind === 'http'
+    ? { kind: 'http' as const, url: String(t.url ?? '').trim() }
+    : { kind: 'stdio' as const, command: String(t.command ?? '').trim(), args: Array.isArray(t.args) ? t.args.map(String) : [] };
+  const env = i.env && typeof i.env === 'object' ? Object.fromEntries(Object.entries(i.env as Record<string, unknown>).map(([k, v]) => [k, String(v ?? '')])) : {};
+  try {
+    return mcpServers.save({ id: typeof i.id === 'string' && i.id.startsWith('custom--') ? i.id : undefined, name: String(i.name ?? ''), transport, env },
+      Array.isArray(secretNames) ? secretNames.filter((x): x is string => typeof x === 'string') : []);
+  } catch (e) { return mcpErr(e); }
+});
+ipcMain.handle('mcp:setEnabled', (_evt, id: unknown, on: unknown) => { if (typeof id === 'string') mcpServers.setEnabled(id, on === true); return { ok: true }; });
+ipcMain.handle('mcp:setAgents', (_evt, id: unknown, agents: unknown) => {
+  if (typeof id === 'string') mcpServers.setAgents(id, Array.isArray(agents) ? agents.filter((x): x is string => typeof x === 'string') : null);
+  return { ok: true };
+});
+ipcMain.handle('mcp:remove', (_evt, id: unknown) => { if (typeof id === 'string') mcpServers.remove(id); return { ok: true }; });
 
 ipcMain.handle('factories:list', () => factories.list());
 ipcMain.handle('factories:add', (_evt, arg: unknown) => {
