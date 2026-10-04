@@ -4,15 +4,11 @@
  *
  * Values go into the SAME encrypted store as the REST integrations
  * (integrations.ts, Electron safeStorage, fail-closed), under `mcp:<server>:<ENV>`.
- * They are never returned to the renderer (only "stored: yes/no"), never written
- * into config.json or the hive: the per-agent MCP config carries `${ENV}` and
- * HiveManager puts the value in that agent's process environment at spawn, for
- * the agents the server reaches (consent in `mcpDefaults`, optional per-server
- * agent list in `connectionScopes`).
- *
- * Unlike a REST integration behind the broker, an MCP server reads its key from
- * its environment, so the agents a connection reaches can read that key too.
- * The UI says so.
+ * They are never returned to the renderer (only "stored: yes/no") and never
+ * reach an agent: the MAIN process runs each keyed server through its MCP
+ * gateway (mcpGateway.ts) with the key in that server's environment only, and
+ * an agent the server is granted to (consent in `mcpDefaults`, optional
+ * per-server agent list in `connectionScopes`) gets a capability token.
  */
 import { MCP_CATALOG, mcpCatalogEntry, type McpCatalogEntry } from '../shared/mcpCatalog';
 import { readConfig, writeConfig } from './config';
@@ -59,9 +55,29 @@ function field(serverId: string, env: string): NonNullable<McpCatalogEntry['secr
   return mcpCatalogEntry(serverId)?.secrets?.find((f) => f.env === env);
 }
 
-/** The value for one server credential. MAIN-ONLY — the hive's resolver. */
+/** The value for one server credential. MAIN-ONLY: read by the MCP gateway
+ *  when it starts that server, never handed to an agent. */
 export function connectionSecret(serverId: string, env: string): string | undefined {
   return field(serverId, env) ? getSecret(refFor(serverId, env)) : undefined;
+}
+
+/** Whether a credential is stored, without decrypting it (the hive's check). */
+export function connectionKeyStored(serverId: string, env: string): boolean {
+  return !!field(serverId, env) && hasSecret(refFor(serverId, env));
+}
+
+/** How the MCP gateway launches a keyed server: the catalog spec plus the
+ *  decrypted keys, or null when a required key is missing. MAIN-ONLY. */
+export function connectionLaunchEnv(serverId: string): Record<string, string> | null {
+  const entry = mcpCatalogEntry(serverId);
+  if (!entry || !(entry.secrets ?? []).length) return null;
+  const env: Record<string, string> = {};
+  for (const f of entry.secrets ?? []) {
+    const v = connectionSecret(serverId, f.env);
+    if (v) env[f.env] = v;
+    else if (!f.optional) return null;
+  }
+  return env;
 }
 
 export function listConnections(): ConnectionStatus[] {
