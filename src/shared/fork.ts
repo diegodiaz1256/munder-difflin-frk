@@ -8,3 +8,10 @@
  * "share usage stats" switch that would do nothing.
  */
 export const PRODUCT_ANALYTICS = false;
+
+/**
+ * LEGACY_ORG_TRIGGER: upstream's "organisation key / clone node" settings saved
+ * a key that no transport ever read. This fork's Team (Pro → Team; main/team.ts)
+ * is the working version, so the old controls are hidden.
+ */
+export const LEGACY_ORG_TRIGGER = false;
