@@ -1310,6 +1310,8 @@
     "clearAllTitle": "Clear all queued messages",
     "clearAll": "clear all",
     "removeAttachment": "Remove attachment",
+    "previewAttachment": "Show {{name}}",
+    "closePreview": "Close preview",
     "messagePlaceholder": "Message {{name}}",
     "busyPlaceholder": "{{name}} is busy — queue a message",
     "files": "files",

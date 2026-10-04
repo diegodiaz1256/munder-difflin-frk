@@ -77,6 +77,8 @@ export function MessageQueueComposer({ agent }: MessageQueueComposerProps) {
   // remounts this component, so attachments are cleared on tab switch (drafts
   // persist in the store, attachments deliberately don't carry over).
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  /** The attachment shown large, if any. */
+  const [previewing, setPreviewing] = useState<Attachment | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
   const addAttachments = (incoming: Attachment[]) =>
@@ -305,7 +307,8 @@ export function MessageQueueComposer({ agent }: MessageQueueComposerProps) {
         }}>{ffHint}</span>
       )}
 
-      {/* Attached files/images — chips with a remove 'x', above the textarea. */}
+      {/* Attached files/images — chips with a remove 'x', above the textarea.
+          An image shows what it is: a thumbnail, and a click opens it large. */}
       {attachments.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
           {attachments.map((a) => (
@@ -322,7 +325,7 @@ export function MessageQueueComposer({ agent }: MessageQueueComposerProps) {
                 color: 'var(--cth-ink-900)'
               }}
             >
-              <Icon name="folder" />
+              <AttachmentThumb path={a.path} name={a.name} onOpen={setPreviewing} />
               <span style={{
                 overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', maxWidth: 180
               }}>{a.name}</span>
@@ -341,6 +344,8 @@ export function MessageQueueComposer({ agent }: MessageQueueComposerProps) {
           ))}
         </div>
       )}
+
+      {previewing && <AttachmentPreview attachment={previewing} onClose={() => setPreviewing(null)} />}
 
       {/* Composer — full-width input above a single tidy control bar (cc-ui-polish),
           with file/image attachment chips + paste-to-attach (rich-composer). */}
@@ -729,5 +734,64 @@ function FreeFlowButton({ agentId, hasGroqKey }: { agentId: string; hasGroqKey: 
         </span>
       )}
     </span>
+  );
+}
+
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp)$/i;
+
+/** A small preview on an image attachment's chip; the folder icon for other
+ *  files, or while the preview loads. Clicking it opens the image large. */
+function AttachmentThumb({ path, name, onOpen }: { path: string; name: string; onOpen: (a: Attachment) => void }) {
+  const { t } = useTranslation();
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (!IMAGE_EXT.test(path)) return;
+    let alive = true;
+    void window.cth.attachmentPreview(path, 96).then((url) => { if (alive) setSrc(url); }).catch(() => {});
+    return () => { alive = false; };
+  }, [path]);
+  if (!src) return <Icon name="folder" />;
+  return (
+    <button
+      onClick={() => onOpen({ path, name })}
+      title={t('queueComposer.previewAttachment', { name })}
+      style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'zoom-in', display: 'inline-flex' }}
+    >
+      <img src={src} alt={name} style={{
+        height: 40, width: 'auto', maxWidth: 72, objectFit: 'cover', display: 'block',
+        boxShadow: 'inset 0 0 0 1px var(--cth-ink-100)', background: 'var(--cth-cream-100)'
+      }} />
+    </button>
+  );
+}
+
+/** An attached image shown large over the app; click or Escape closes it. */
+function AttachmentPreview({ attachment, onClose }: { attachment: Attachment; onClose: () => void }) {
+  const { t } = useTranslation();
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void window.cth.attachmentPreview(attachment.path, 1600).then((url) => { if (alive) setSrc(url); }).catch(() => {});
+    const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => { alive = false; window.removeEventListener('keydown', onKey); };
+  }, [attachment.path, onClose]);
+  return createPortal(
+    <div
+      role="dialog"
+      aria-label={attachment.name}
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000, cursor: 'zoom-out',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
+        background: 'rgba(20, 16, 12, 0.72)', padding: 24
+      }}
+    >
+      {src && <img src={src} alt={attachment.name} style={{ maxWidth: '100%', maxHeight: 'calc(100% - 40px)', objectFit: 'contain', boxShadow: '0 0 0 2px var(--cth-ink-900)' }} />}
+      <span style={{ color: 'var(--cth-cream-100)', fontFamily: 'var(--cth-font-mono)', fontSize: 12 }}>
+        {attachment.name} · {t('queueComposer.closePreview')}
+      </span>
+    </div>,
+    document.body
   );
 }

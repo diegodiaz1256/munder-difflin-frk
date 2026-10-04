@@ -898,6 +898,10 @@ const api = {
   saveClipboardImage: (): Promise<
     { ok: true; file: { path: string; name: string } } | { ok: false; error: string }
   > => ipcRenderer.invoke('clipboard:saveImage'),
+  /** A scaled-down preview of an attached image (data URL), or null when the
+   *  file is not an image the app can show. `size`: longest side in px. */
+  attachmentPreview: (path: string, size?: number): Promise<string | null> =>
+    ipcRenderer.invoke('attachments:preview', path, size),
 
   // ─── Command history (SQLite — every prompt submitted to an agent) ─────────
   /** Record one submitted prompt. Fire-and-forget from the prompt-detection hook. */
