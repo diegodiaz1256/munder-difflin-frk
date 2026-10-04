@@ -5,7 +5,7 @@ import type {
 } from '../../../preload/index';
 import { Avatar, Bar, StateBadge, type Tone } from './data';
 import { Guide, useGuide } from './Guide';
-import { FactoryScene } from '@/scene/office/FactoryScene';
+import { FactoryScene, ROLE_GLOW } from '@/scene/office/FactoryScene';
 
 /**
  * Factories: software factories this office sends work to, or just watches
@@ -289,15 +289,28 @@ function FactoryFloor({ factory, onBack, onChanged }: { factory: FactoryView; on
     return out;
   }, [floor]);
   /** Workers outside the picked projects (none picked = everyone shows). */
+  const [roleOnly, setRoleOnly] = useState<string | null>(null);
+  const roleCounts = useMemo(() => {
+    const out = new Map<string, { total: number; working: number }>();
+    for (const a of floor?.agents ?? []) {
+      if (a.state === 'offline') continue;
+      const k = a.role_kind ?? 'other';
+      const c = out.get(k) ?? { total: 0, working: 0 };
+      c.total++;
+      if (a.state === 'working' || a.state === 'away') c.working++;
+      out.set(k, c);
+    }
+    return [...ROLE_ORDER, 'other'].filter((k) => out.has(k)).map((k) => [k, out.get(k)!] as const);
+  }, [floor]);
   const dimmed = useMemo(() => {
     const out = new Set<string>();
-    if (!only.size) return out;
     for (const a of floor?.agents ?? []) {
       const p = a.task ? projectOf.get(a.task.id) : undefined;
-      if (!p || !only.has(p)) out.add(a.id);
+      if (only.size && (!p || !only.has(p))) out.add(a.id);
+      if (roleOnly && (a.role_kind ?? 'other') !== roleOnly) out.add(a.id);
     }
     return out;
-  }, [floor, only, projectOf]);
+  }, [floor, only, projectOf, roleOnly]);
   const toggleProject = (id: string) => setOnly((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   return (
@@ -327,6 +340,17 @@ function FactoryFloor({ factory, onBack, onChanged }: { factory: FactoryView; on
             );
           })}
           {only.size > 0 && <button className="pro-btn" onClick={() => setOnly(new Set())}>All projects</button>}
+        </div>
+      )}
+      {floor && roleCounts.length > 0 && (
+        <div className="pro-row" style={{ flexWrap: 'wrap', gap: 6 }} aria-label="Roles">
+          {roleCounts.map(([k, c]) => (
+            <button key={k} className={`pro-chip${roleOnly === k ? ' pro-chip-on' : ''}`} onClick={() => setRoleOnly(roleOnly === k ? null : k)}
+              title={`${c.working} of ${c.total} at work`}>
+              <span className="pro-dot" style={{ background: `#${(ROLE_GLOW[k] ?? 0x9a9a9a).toString(16).padStart(6, '0')}`, marginInlineEnd: 4 }} />
+              {ROLE_LABEL[k]} · {c.working}/{c.total}
+            </button>
+          ))}
         </div>
       )}
       {floor && view === 'floor' && (
@@ -395,7 +419,7 @@ function Desk({ agent, project, dim, picked, onPick, deskRef }: {
         </span>
       )}
       {agent.state === 'waiting' && agent.waiting_for && (
-        <span style={{ fontSize: 11, color: 'var(--cth-ink-700)', fontStyle: 'italic', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>Waiting {agent.waiting_for}</span>
+        <span style={{ fontSize: 11, color: 'var(--cth-ink-700)', fontStyle: 'italic', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{agent.waiting_for}</span>
       )}
       {(agent.queue?.length ?? 0) > 0 && <span className="pro-ticket">{agent.queue!.length} in tray</span>}
     </button>
@@ -431,7 +455,7 @@ function AgentDetail({ agent }: { agent: FactoryAgentView }) {
         <span className="pro-sub">{agent.role}{agent.kind === 'automation' ? ' · automation' : ''}</span>
         {agent.spent_usd !== undefined && <span className="pro-sub pro-mono" style={{ marginInlineStart: 'auto' }}>${agent.spent_usd.toFixed(2)} (notional)</span>}
       </div>
-      {agent.waiting_for && <span className="pro-text">Waiting {agent.waiting_for}</span>}
+      {agent.waiting_for && <span className="pro-text">{agent.waiting_for}</span>}
       {(agent.queue?.length ?? 0) > 0 && <span className="pro-text">Next: {agent.queue!.map((q) => q.title).join(', ')}</span>}
       {(agent.history?.length ?? 0) > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
