@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
 import type { HarnessConfig } from '@/store/config';
 import { useStore } from '@/store/store';
-import { Icon, type IconName } from '@/components/Icon';
+import { ProIcon, type ProIconName } from './ProIcon';
 import { waitsOnHuman } from '@/components/TasksKanban';
 import { useRestoreTeam } from '@/hooks/useRestoreTeam';
 import { useProStore, type ProSection } from './proStore';
-import { Avatar, TONE_COLOR, agentState, askingAgents, useDirectory, useRoster, useTasks } from './data';
+import { Avatar, TONE_COLOR, askingAgents, isActive, useDirectory, useRoster, useTasks } from './data';
 import { TasksView } from './TasksView';
 import { InboxView } from './InboxView';
 import { AutomationsView } from './AutomationsView';
@@ -17,13 +17,13 @@ import { TempsView } from './TempsView';
 import { ConnectionsView } from './ConnectionsView';
 import './pro.css';
 
-const TOP: { id: ProSection; label: string; icon: IconName }[] = [
-  { id: 'tasks', label: 'Tasks', icon: 'ledger' },
-  { id: 'inbox', label: 'Inbox', icon: 'bell' },
-  { id: 'automations', label: 'Automations', icon: 'play' },
-  { id: 'memory', label: 'Memory', icon: 'sparkle' },
-  { id: 'capabilities', label: 'Capabilities', icon: 'mcp' },
-  { id: 'connections', label: 'Connections', icon: 'web' }
+const TOP: { id: ProSection; label: string; icon: ProIconName }[] = [
+  { id: 'tasks', label: 'Tasks', icon: 'tasks' },
+  { id: 'inbox', label: 'Inbox', icon: 'inbox' },
+  { id: 'automations', label: 'Automations', icon: 'automations' },
+  { id: 'memory', label: 'Memory', icon: 'memory' },
+  { id: 'capabilities', label: 'Capabilities', icon: 'capabilities' },
+  { id: 'connections', label: 'Connections', icon: 'connections' }
 ];
 
 /**
@@ -78,20 +78,20 @@ export function ProShell({ config }: { config: HarnessConfig }) {
         </div>
         {TOP.map((item) => (
           <button key={item.id} className="pro-nav" aria-current={section === item.id} onClick={() => go(item.id)}>
-            <Icon name={item.icon} /> {item.label}
+            <ProIcon name={item.icon} /> {item.label}
             {item.id === 'inbox' && openAsks > 0 && <span className="pro-nav-end"><span className="pro-count">{openAsks}</span></span>}
           </button>
         ))}
 
         <div className="pro-side-label">Agents</div>
         <button className="pro-nav" aria-current={section === 'agents'} onClick={() => go('agents')}>
-          <Icon name="terminal" /> Agents
+          <ProIcon name="agents" /> Agents
           <span className="pro-nav-end pro-sub" style={{ fontSize: 11 }}>
-            {roster.filter((a) => a.status !== 'idle').length} live
+            {roster.filter(isActive).length} active
           </span>
         </button>
         {roster.map((a) => {
-          const st = agentState(a, asking.has(a.id));
+          const active = isActive(a);
           const ctx = a.contextTokens && a.contextLimit ? Math.round((a.contextTokens / a.contextLimit) * 100) : null;
           return (
             <button
@@ -110,13 +110,13 @@ export function ProShell({ config }: { config: HarnessConfig }) {
                 </span>
               </span>
               <span className="pro-nav-end">
-                <span className="pro-dot" style={{ background: TONE_COLOR[st.tone] }} title={st.label} />
+                <span className="pro-dot" style={{ background: TONE_COLOR[active ? 'green' : 'grey'] }} title={active ? 'Active' : 'Idle'} />
               </span>
             </button>
           );
         })}
         <button className="pro-nav" style={{ marginTop: 4 }} aria-current={section === 'temps'} onClick={() => go('temps')}>
-          <Icon name="clock" /> Temps
+          <ProIcon name="temps" /> Temps
         </button>
       </nav>
       <main className="pro-main">{page}</main>

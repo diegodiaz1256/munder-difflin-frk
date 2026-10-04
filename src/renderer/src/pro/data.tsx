@@ -3,6 +3,7 @@ import { useStore, type Agent } from '@/store/store';
 import { SpritePortrait } from '@/components/SpritePortrait';
 import { parseTasks, waitsOnHuman, type HiveTask } from '@/components/TasksKanban';
 import { formatTaskKey } from '@shared/taskKeys';
+import { terminalTail } from '@/components/terminalPool';
 
 /**
  * Pro's read layer. Every screen polls the same main-process sources the
@@ -25,6 +26,11 @@ export function usePoll<T>(load: () => Promise<T>, ms: number, initial: T): T {
     return () => { alive = false; clearInterval(t); };
   }, [ms]);
   return value;
+}
+
+/** An agent's last terminal lines, re-read every 1.5 s. */
+export function useTerminalTail(ptyId: string | undefined, max = 3): string[] {
+  return usePoll(() => Promise.resolve(terminalTail(ptyId, max)), 1500, [] as string[]);
 }
 
 export interface KeyedTask extends HiveTask {
@@ -68,12 +74,13 @@ export function useRoster(): Agent[] {
     .sort((a, b) => Number(!!b.isGod) - Number(!!a.isGod));
 }
 
-export type Tone = 'green' | 'blue' | 'amber' | 'red' | 'grey';
+export type Tone = 'green' | 'blue' | 'amber' | 'gold' | 'red' | 'grey';
 
 export const TONE_COLOR: Record<Tone, string> = {
   green: 'var(--cth-mint)',
   blue: 'var(--cth-sky)',
   amber: 'var(--cth-peach)',
+  gold: 'var(--cth-lemon)',
   red: 'var(--cth-coral)',
   grey: 'var(--cth-status-idle)'
 };
@@ -82,6 +89,7 @@ const TONE_BG: Record<Tone, string> = {
   green: 'var(--cth-mint-light)',
   blue: 'var(--cth-sky-light)',
   amber: 'var(--cth-peach-light)',
+  gold: 'var(--cth-lemon-light)',
   red: 'var(--cth-coral-light)',
   grey: 'var(--cth-cream-200)'
 };
@@ -103,6 +111,12 @@ export function agentState(a: Agent, asksYou: boolean): { label: string; tone: T
     default:
       return { label: 'Idle', tone: 'grey' };
   }
+}
+
+/** Is the agent doing something right now (vs idle / done / gone)? Drives the
+ *  sidebar's green-or-grey dot and who appears on the orchestrator's map. */
+export function isActive(a: Agent): boolean {
+  return ['working', 'typing', 'thinking', 'compacting', 'looping'].includes(a.status);
 }
 
 /** Agent ids with an open question on the board (the "Asked you" marker). */
