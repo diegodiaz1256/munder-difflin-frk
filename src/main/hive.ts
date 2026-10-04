@@ -603,11 +603,35 @@ export class HiveManager {
     return [launcher ? `"${launcher}"` : 'node', `"${script}"`, ...args].join(' ');
   }
 
-  /** Same, but UNQUOTED — only for configs or platforms that cannot preserve
-   *  embedded quotes. POSIX JSON hook configs must use nodeRun() because the
-   *  user-selected hive path may legitimately contain spaces. */
-  private nodeRunUnquoted(script: string, ...args: string[]): string {
-    return [this.nodeLauncher() ?? 'node', script, ...args].join(' ');
+  /** A hook command for a CLI that runs it through cmd.exe on Windows (agy,
+   *  Gemini, Codex). Those CLIs cannot be handed quotes: they escape embedded
+   *  quotes the C-runtime way (`\"`), which cmd.exe does not understand (#350).
+   *  But unquoted, a hive under a path with a space (`D:\Dunder Mifflin\…`)
+   *  splits at the space and every hook dies, so the agent never reports a
+   *  state again.
+   *
+   *  So the command carries no path at all once a path has a space in it: a
+   *  `<name>.cmd` wrapper (which may quote freely — it is a batch file, not an
+   *  argument) goes into `bin/runtime`, which pty.spawn appends to every hive
+   *  agent's PATH, and the hook command is just the wrapper's name. Short 8.3
+   *  names would be the other way out, but volumes routinely have them turned
+   *  off. Without a space nothing changes. */
+  private windowsHookCommand(name: string, script: string, ...args: string[]): string {
+    const launcher = this.nodeLauncher() ?? 'node';
+    if (!/\s/.test(launcher) && !/\s/.test(script)) return [launcher, script, ...args].join(' ');
+    const dir = this.runtimeBinDir();
+    if (dir) {
+      try {
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, `${name}.cmd`), `@echo off
+"${launcher}" "${script}" %*
+`, 'utf8');
+        return [name, ...args].join(' ');
+      } catch (e) {
+        console.error('[hive] could not write hook wrapper:', e);
+      }
+    }
+    return [launcher, script, ...args].join(' ');
   }
 
   /** One proxy sidecar per live proxy-tier agent, keyed by agentId. Spawned in
@@ -2116,7 +2140,8 @@ export class HiveManager {
    *  Two agy-isms handled: (1) antigravity-cli#49 — agy LOADS hooks from
    *  `~/.gemini/antigravity-cli/hooks.json` but TRIGGERS from `~/.gemini/config/
    *  hooks.json`, so we write BOTH; (2) on Windows commands go to cmd.exe and
-   *  agy mangles embedded quotes, so that platform retains the legacy form.
+   *  agy mangles embedded quotes, so that platform gets a quote-free command
+   *  (windowsHookCommand).
    *  Runtime-scoped by AGENT_ID (the shim no-ops for non-hive agy sessions), so
    *  this global config never disturbs the user's own `agy` usage. Best-effort,
    *  idempotent (only our own group is overwritten). */
@@ -2128,7 +2153,7 @@ export class HiveManager {
     writeFileSync(shim, AGY_HOOK_SHIM, 'utf8');
     // Bundled node, not bare `node` — agy's hooks run with a stripped PATH too.
     const command = (event: string) => process.platform === 'win32'
-      ? this.nodeRunUnquoted(shim, event)
+      ? this.windowsHookCommand('md-agy-hook', shim, event)
       : this.nodeRun(shim, event);
     const tool = (event: string) => ({
       matcher: '*',
@@ -2179,7 +2204,7 @@ export class HiveManager {
           name: `munder-hive-${name}`,
           type: 'command',
           command: process.platform === 'win32'
-            ? this.nodeRunUnquoted(shim)
+            ? this.windowsHookCommand(`md-gemini-hook-${basename(dir).replace(/[^A-Za-z0-9_-]/g, '-')}`, shim)
             : this.nodeRun(shim),
           timeout: 30000
         }]
@@ -2277,11 +2302,10 @@ export class HiveManager {
       if (shim) {
         const events = ['PreToolUse', 'PostToolUse', 'Stop', 'SubagentStop',
           'SessionStart', 'UserPromptSubmit', 'PreCompact', 'PostCompact'];
-        // Preserve the existing Windows .cmd shape: nested command quotes pass
-        // through a different shell stack there (#350). The reported Codex bug
-        // is POSIX, where ordinary shell quoting is both necessary and verified.
+        // Windows: no nested quotes (#350), and no path with a space either —
+        // see windowsHookCommand. POSIX: ordinary shell quoting, verified.
         const command = process.platform === 'win32'
-          ? this.nodeRunUnquoted(shim)
+          ? this.windowsHookCommand('md-codex-hook', shim)
           : this.nodeRun(shim);
         config += '\n# --- munder-hive lifecycle hooks (auto-generated; do not edit) ---\n';
         for (const ev of events) {
