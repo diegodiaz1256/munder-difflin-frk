@@ -67,6 +67,8 @@ export interface McpCatalogEntry {
   secrets?: McpSecretField[];
   /** Where the user creates the credential. */
   docsUrl?: string;
+  /** Things to ask an agent that has this server (Connections guide). */
+  examples?: string[];
 }
 
 /** The default MCP bundle. Safe/read-only servers are ON; anything that writes
@@ -146,7 +148,12 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
       help: 'A fine-grained token with access to the repos the agents work on (Contents, Issues, Pull requests).',
       placeholder: 'github_pat_…'
     }],
-    docsUrl: 'https://github.com/settings/personal-access-tokens/new'
+    docsUrl: 'https://github.com/settings/personal-access-tokens/new',
+    examples: [
+      'List the open issues in <owner>/<repo> labelled bug, newest first.',
+      'Open a pull request from this branch to main with a summary of the changes.',
+      'Review PR #12 in <owner>/<repo> and leave comments on anything risky.'
+    ]
   },
   {
     id: 'db',
@@ -167,7 +174,12 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
       label: 'Connection string',
       help: 'Use a read-only database user. Needs uv (uvx) installed.',
       placeholder: 'postgresql://user:password@host:5432/dbname'
-    }]
+    }],
+    examples: [
+      'Which tables are there, and how many rows does each have?',
+      'How many invoices were created last month, per customer?',
+      'Explain the query plan of our slowest report query and suggest an index.'
+    ]
   },
   // No Email & Calendar entry: it pointed at @modelcontextprotocol/server-gsuite,
   // which was never published (npm 404), so switching it on could not work.
@@ -183,7 +195,11 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
     tier: 'secret',
     defaultEnabled: false,
     secrets: [{ env: 'BRAVE_API_KEY', label: 'API key', help: 'From the Brave Search API dashboard (the free plan works).', placeholder: 'BSA…' }],
-    docsUrl: 'https://api-dashboard.search.brave.com/app/keys'
+    docsUrl: 'https://api-dashboard.search.brave.com/app/keys',
+    examples: [
+      'Search the web for the latest release notes of Electron and summarise what changed.',
+      'Find three recent articles comparing Postgres and SQLite for desktop apps.'
+    ]
   },
   {
     id: 'notion',
@@ -198,7 +214,11 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
       help: 'Create an internal integration, then share the pages it may use with it (••• → Connections).',
       placeholder: 'ntn_…'
     }],
-    docsUrl: 'https://www.notion.so/profile/integrations'
+    docsUrl: 'https://www.notion.so/profile/integrations',
+    examples: [
+      'Find our Notion page about the release process and follow its checklist.',
+      'Add today’s standup summary to the "Team notes" page in Notion.'
+    ]
   },
   {
     id: 'sentry',
@@ -216,7 +236,11 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
       },
       { env: 'SENTRY_HOST', label: 'Host (self-hosted only)', help: 'Leave empty for sentry.io.', placeholder: 'sentry.example.com', optional: true }
     ],
-    docsUrl: 'https://sentry.io/settings/account/api/auth-tokens/'
+    docsUrl: 'https://sentry.io/settings/account/api/auth-tokens/',
+    examples: [
+      'What are the top unresolved Sentry issues in production this week?',
+      'Look at the latest error in Sentry for the billing service and find its cause in the code.'
+    ]
   }
 ];
 
