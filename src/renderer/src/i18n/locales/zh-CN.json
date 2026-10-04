@@ -788,10 +788,11 @@
     }
   },
   "setupPanel": {
-    "title": "前置条件",
+    "title": "环境设置",
     "checking": "正在检查已安装的工具…",
     "summary": "{{ready}} / {{total}} 就绪{{missing}}",
     "summaryMissing": " · {{count}} 个推荐项缺失",
+    "summaryAllReady": " · 推荐项均已就绪",
     "recheck": "重新检查",
     "checkingBtn": "检查中…",
     "statusReady": "就绪",
@@ -801,7 +802,7 @@
     "docs": "文档 →",
     "askDesc": "{{godName}} 可以为你安装 {{count}} 个缺失的推荐工具。这会填好他的派发框——在你按下派发前不会运行任何东西。",
     "askDescPlural": "{{godName}} 可以为你安装 {{count}} 个缺失的推荐工具。这会填好他的派发框——在你按下派发前不会运行任何东西。",
-    "allReady": "所有推荐项都已安装。上面的单个引擎都是可选的——只设置你实际使用的即可。",
+    "allReady": "所有推荐项都已安装。下面的单个引擎都是可选的——只设置你实际使用的即可。",
     "askMichael": "让 {{godName}} 设置一切",
     "sections": {
       "prerequisites": {
