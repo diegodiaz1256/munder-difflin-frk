@@ -1310,6 +1310,8 @@
     "clearAllTitle": "امسح كل الرسائل المصفوفة",
     "clearAll": "امسح الكل",
     "removeAttachment": "أزِل المرفق",
+    "previewAttachment": "اعرض {{name}}",
+    "closePreview": "أغلق المعاينة",
     "messagePlaceholder": "راسِل {{name}}",
     "busyPlaceholder": "{{name}} مشغول — أضِف رسالة إلى الطابور",
     "files": "ملفات",

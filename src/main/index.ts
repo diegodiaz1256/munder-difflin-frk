@@ -6,7 +6,7 @@ import { offerLegacyUninstall } from './legacyMigration';
 // Headless (server) mode sets Chromium switches — must load before ready too.
 import { HEADLESS, HEADLESS_SETUP, SERVER } from './headless';
 import { APP_NAME } from '../shared/fork';
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, powerMonitor, powerSaveBlocker, screen, shell, Notification } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, powerMonitor, powerSaveBlocker, screen, shell, Notification } from 'electron';
 import { spawn } from 'node:child_process';
 import {
   rmSync, existsSync, readFileSync, readdirSync, statSync, cpSync, writeFileSync,
@@ -4096,6 +4096,28 @@ ipcMain.handle('clipboard:saveImage', async () => {
     return { ok: true as const, file: { path: dest, name } };
   } catch (e) {
     return { ok: false as const, error: e instanceof Error ? e.message : String(e) };
+  }
+});
+
+// A preview of an attached image for the composer, as a data URL. The renderer
+// cannot show the file itself (it is sandboxed, and a dev build is not even on
+// file://), so main reads it. Images only, bounded in size, scaled down: a
+// preview, never a way to read arbitrary files back.
+const PREVIEW_EXT = /\.(png|jpe?g|gif|webp|bmp)$/i;
+ipcMain.handle('attachments:preview', (_evt, path: unknown, size: unknown) => {
+  if (typeof path !== 'string' || !PREVIEW_EXT.test(path)) return null;
+  try {
+    if (statSync(path).size > 25 * 1024 * 1024) return null;
+    const img = nativeImage.createFromPath(path);
+    if (img.isEmpty()) return null;
+    const max = typeof size === 'number' && size > 0 && size <= 1600 ? Math.round(size) : 160;
+    const { width, height } = img.getSize();
+    const scaled = width > max || height > max
+      ? img.resize(width >= height ? { width: max, quality: 'good' } : { height: max, quality: 'good' })
+      : img;
+    return scaled.toDataURL();
+  } catch {
+    return null;
   }
 });
 

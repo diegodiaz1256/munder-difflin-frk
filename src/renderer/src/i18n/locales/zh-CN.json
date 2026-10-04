@@ -1310,6 +1310,8 @@
     "clearAllTitle": "清空所有排队消息",
     "clearAll": "全部清空",
     "removeAttachment": "移除附件",
+    "previewAttachment": "查看 {{name}}",
+    "closePreview": "关闭预览",
     "messagePlaceholder": "给 {{name}} 发消息",
     "busyPlaceholder": "{{name}} 正在忙——排队发消息",
     "files": "文件",
