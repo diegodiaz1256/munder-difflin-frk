@@ -189,9 +189,60 @@ jobs:
             dist/SHA256SUMS-*.txt
           if-no-files-found: warn
 
+  server:
+    name: Server (${{ matrix.arch }})
+    needs: version
+    # The GUI-less server (src/server): a tarball per architecture with its
+    # native modules prebuilt for Node 22 on Ubuntu 22.04 (glibc 2.35, so it
+    # runs on 22.04+ and Debian 12+). Smoke-tested here on a real Ubuntu:
+    # office up, orchestrator spawned, SIGTERM shuts it down.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            arch: x64
+          - os: ubuntu-22.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install (no Electron)
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck:server
+      - name: Build
+        run: |
+          node tools/build-server.cjs
+          cd out/server && npm install --omit=dev --no-audit --no-fund
+      - name: Smoke test
+        run: node tools/server-smoke.cjs
+      - name: Package
+        shell: bash
+        run: |
+          version="${{ needs.version.outputs.tag }}"
+          name="munder-difflin-server-${version#v}-linux-${{ matrix.arch }}"
+          mkdir -p dist
+          rm -f out/server/index.cjs.map
+          tar -C out -czf "dist/$name.tar.gz" --transform "s|^server|$name|" server
+          (cd dist && sha256sum "$name.tar.gz" > "SHA256SUMS-server-${{ matrix.arch }}.txt")
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-${{ matrix.arch }}
+          path: |
+            dist/*.tar.gz
+            dist/SHA256SUMS-server-*.txt
+
   publish:
     name: Publish release
-    needs: [version, build]
+    needs: [version, build, server]
     if: needs.version.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -204,7 +255,7 @@ jobs:
       - name: Flatten + merge checksums
         run: |
           mkdir -p release
-          find artifacts -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.blockmap' -o -name 'latest*.yml' -o -name 'fork*.yml' \) -exec cp {} release/ \;
+          find artifacts -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.blockmap' -o -name 'latest*.yml' -o -name 'fork*.yml' -o -name '*.tar.gz' \) -exec cp {} release/ \;
           cat artifacts/*/SHA256SUMS-*.txt > release/SHA256SUMS.txt 2>/dev/null || true
           ls -la release
 
@@ -237,4 +288,5 @@ jobs:
             release/*.blockmap
             release/latest*.yml
             release/fork*.yml
+            release/*.tar.gz
             release/SHA256SUMS.txt

@@ -13,7 +13,7 @@ const { TeamNode } = loadTs('src/main/teamNode.ts');
 const { generateIdentity, seal, publicCard } = loadTs('src/main/teamCrypto.ts');
 
 /** Minimal ntfy: POST /:topic stores, GET /:topic/json streams (since=id|all). */
-async function fakeRelay(t) {
+async function fakeRelay(t, opts = {}) {
   const topics = new Map(); // topic -> [{id, message}]
   const subs = new Map();   // topic -> Set(res)
   const seenBodies = [];
@@ -21,6 +21,8 @@ async function fakeRelay(t) {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://x');
     const parts = url.pathname.split('/').filter(Boolean);
+    // A private relay (ntfy with access control): every request needs the token.
+    if (opts.token && req.headers.authorization !== `Bearer ${opts.token}`) { res.writeHead(403); return res.end(); }
     if (req.method === 'POST' && parts.length === 1) {
       let body = ''; req.on('data', (d) => body += d); req.on('end', () => {
         if (Buffer.byteLength(body) > 4096) { res.writeHead(413); return res.end(); }
@@ -55,14 +57,14 @@ async function fakeRelay(t) {
   return { base, seenBodies, publishRaw: (topic, body) => fetch(`${base}/${topic}`, { method: 'POST', body }) };
 }
 
-function node(name, relay, t) {
+function node(name, relay, t, token) {
   // The relay URL must be https in real invites; tests use the plain-http fake,
   // so hellos are posted with an https-looking relay field and mapped back here.
   const r = relay.base.replace('http://', 'https://');
   let state = { identity: generateIdentity(name), relay: r, teams: [{ id: `t-${name}`, name: `${name}'s team`, relay: r, level: 'message', mode: 'strict' }], peers: [], invites: [] };
   const inbox = [];
   const fetchImpl = (url, opts) => fetch(String(url).replace('https://', 'http://'), opts);
-  const n = new TeamNode({ load: () => state, save: (s) => { state = s; }, onMessage: (m) => inbox.push(m), fetch: fetchImpl });
+  const n = new TeamNode({ load: () => state, save: (s) => { state = s; }, onMessage: (m) => inbox.push(m), fetch: fetchImpl, relayToken: () => token });
   n.start();
   t.after(() => n.stop());
   return { n, inbox, get state() { return state; } };
@@ -201,4 +203,22 @@ test('a team on a second relay works alongside the first', async (t) => {
   assert.ok(await until(() => alice.inbox.length === 1));
   assert.equal(alice.inbox[0].team.name, 'Branch B');
   assert.ok(relayB.seenBodies.length >= 2 && relayA.seenBodies.length === 0, 'everything for that team went through relay B');
+});
+
+test('a private relay: the token opens it, and without one the error says what is missing', async (t) => {
+  const relay = await fakeRelay(t, { token: 'tk_team' });
+  const alice = node('Alice', relay, t, 'tk_team');
+  const bob = node('Bob', relay, t, 'tk_team');
+  const eve = node('Eve', relay, t);
+  await new Promise((r) => setTimeout(r, 100));
+
+  const joined = await bob.n.join(alice.n.createInvite('t-Alice').code);
+  assert.equal(joined.ok, true, joined.error);
+  assert.ok(await until(() => alice.state.peers.some((p) => p.name === 'Bob')));
+  assert.equal((await alice.n.send('Bob', 'Hi', 'through the private relay')).ok, true);
+  assert.ok(await until(() => bob.inbox.length === 1));
+
+  const denied = await eve.n.join(alice.n.createInvite('t-Alice').code);
+  assert.equal(denied.ok, false);
+  assert.match(denied.error, /access token/);
 });
