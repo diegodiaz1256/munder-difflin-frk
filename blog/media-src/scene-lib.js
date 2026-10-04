@@ -333,7 +333,7 @@ const RICH = {
     s += box(960, 560, 90, 60, true) + box(985, 495, 90, 60, true);
     // live site
     s += browserW(1130, 420, 320, 210);
-    s += txt(1210, 462, "munderdiffl.in/blog", BLUE, 23);
+    s += txt(1210, 462, "scranton-branch.zerogeworkshop.com/blog", BLUE, 23);
     s += `<path d="M1180 500 h220 M1180 540 h160 M1180 580 h190"/>`;
     // human gate before the site
     s += bell(1090, 350, 1) + `<path d="M1130 290 l14 -14 M1140 312 l18 -6"/>`;

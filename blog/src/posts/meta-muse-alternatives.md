@@ -9,7 +9,7 @@ type: Non-technical
 primaryKeyword: "meta muse alternatives"
 secondaryKeywords: ["meta muse alternative", "open source meta muse alternative", "free meta muse alternative", "meta muse not available in my country", "apps like meta muse", "meta muse competitors"]
 tags: ["Comparisons", "AI Agents", "Open Source", "Local-First"]
-ogImage: "https://munderdiffl.in/blog/assets/media/meta-muse-alternatives/lead-still.png"
+ogImage: "https://scranton-branch.zerogeworkshop.com/blog/assets/media/meta-muse-alternatives/lead-still.png"
 author:
   name: Chaitanya Giri
   initials: CG

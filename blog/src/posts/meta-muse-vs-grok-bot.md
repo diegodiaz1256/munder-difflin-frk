@@ -9,7 +9,7 @@ type: Non-technical
 primaryKeyword: "meta muse vs grok bot"
 secondaryKeywords: ["grok bot vs meta muse", "muse vs grok bot", "meta muse or grok bot", "grok bot vs muse pricing", "meta muse grok bot comparison"]
 tags: ["Comparisons", "AI Agents", "Security", "Local-First"]
-ogImage: "https://munderdiffl.in/blog/assets/media/meta-muse-vs-grok-bot/lead-still.png"
+ogImage: "https://scranton-branch.zerogeworkshop.com/blog/assets/media/meta-muse-vs-grok-bot/lead-still.png"
 author:
   name: Chaitanya Giri
   initials: CG

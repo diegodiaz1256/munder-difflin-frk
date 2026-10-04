@@ -116,7 +116,7 @@ A scheduler that fires the same instruction forever rewards a particular style o
   nightly report, a weekly retro — pick the interval from the underlying state, not from a vague sense
   that "more often is better."
 - **Target a coordinator for fan-out work.** Sending a "gather status and assign tasks" mission to
-  [the orchestrator](https://munderdiffl.in/#how) lets one coordinator decide and delegate, instead of
+  [the orchestrator](https://scranton-branch.zerogeworkshop.com/#how) lets one coordinator decide and delegate, instead of
   blasting an identical instruction at every agent. The orchestrator is built for exactly this routing.
 - **Pause with `enabled`, don't delete.** Flip `enabled: false` to stop a mission while keeping its
   history and `lastFiredAt`. You can switch it back on later and the cadence picks up cleanly.
@@ -167,6 +167,6 @@ history intact, and you can re-enable it later without rewinding the clock.
 ---
 
 Munder Difflin runs exactly this: a local hive of Claude Code agents that picks up recurring work on a
-schedule, routes it through [a GOD orchestrator](https://munderdiffl.in/#how), and pings you only for
-the calls that matter. [Download Munder Difflin](https://munderdiffl.in/#install) to set your first
+schedule, routes it through [a GOD orchestrator](https://scranton-branch.zerogeworkshop.com/#how), and pings you only for
+the calls that matter. [Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) to set your first
 mission and watch the floor wake itself up; it's free and open source.

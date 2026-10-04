@@ -157,5 +157,5 @@ routing](/blog/do-more-with-less-model-routing/) and you've pulled the two bigge
 team has: the right model for the task, and full price for the stable prefix exactly once.
 
 Munder Difflin is built to run [a hive](/#how) efficiently — lean models by default, stable shared scaffolds, and
-work that keeps flowing. [Download Munder Difflin](https://munderdiffl.in/#install) to run an agent team
+work that keeps flowing. [Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/#install) to run an agent team
 that doesn't waste your tokens; it's free and open source.

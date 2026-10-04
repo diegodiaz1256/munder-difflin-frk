@@ -79,7 +79,7 @@ never renders broken.
 ### 5. Pull request, then one human merge
 
 The agent opens a pull request with the new post and the rebuilt pages. A person reads it and merges it. Merging
-to main rebuilds the site with [Eleventy](https://www.11ty.dev/), and GitHub Pages serves it at munderdiffl.in/blog.
+to main rebuilds the site with [Eleventy](https://www.11ty.dev/), and GitHub Pages serves it at scranton-branch.zerogeworkshop.com/blog.
 The build adds the post to the index, its topic and tag pages, the sitemap and the RSS feed, with the structured
 data already wired in.
 
@@ -134,5 +134,5 @@ a pull request.
 ---
 
 Munder Difflin runs an office of agents on twelve terminal CLIs on your own machine, with worktrees, skills, schedules
-and an ASK ME board for the decisions that need you. [Download it free](https://munderdiffl.in/) and put a writer, or
+and an ASK ME board for the decisions that need you. [Download it free](https://scranton-branch.zerogeworkshop.com/) and put a writer, or
 any other worker, on your floor.

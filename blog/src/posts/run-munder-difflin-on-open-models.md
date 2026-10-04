@@ -178,5 +178,5 @@ Open weights turn Munder Difflin from a harness for a few vendors' CLIs into a h
 when privacy and a fixed cost matter, use a provider when you want the biggest models, and mix both across your floor, agent
 by agent.
 
-[Download Munder Difflin](https://munderdiffl.in/), free and open source, and point your favourite open model at it. On a Mac
+[Download Munder Difflin](https://scranton-branch.zerogeworkshop.com/), free and open source, and point your favourite open model at it. On a Mac
 and want the sizing walkthrough? Read the [Mac mini guide](/blog/run-munder-difflin-on-a-mac-mini/).

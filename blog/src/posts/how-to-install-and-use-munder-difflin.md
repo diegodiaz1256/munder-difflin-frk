@@ -278,7 +278,7 @@ and every agent will still fail the moment it starts.</p></div>
 
 ## Step 3: Install Munder Difflin
 
-Go to [munderdiffl.in](https://munderdiffl.in) and download the build for your system, or take it
+Go to [scranton-branch.zerogeworkshop.com](https://scranton-branch.zerogeworkshop.com) and download the build for your system, or take it
 straight from the
 [latest release on GitHub](https://github.com/chaitanyagiri/munder-difflin/releases/latest).
 
@@ -495,4 +495,4 @@ means queued work is being held for every agent, and nothing is lost when you sw
 {% img "note-2" %}
 
 The app is [open source on GitHub](https://github.com/chaitanyagiri/munder-difflin). If you get
-stuck, the [Discord](https://munderdiffl.in) is the fastest place to ask.
+stuck, the [Discord](https://scranton-branch.zerogeworkshop.com) is the fastest place to ask.

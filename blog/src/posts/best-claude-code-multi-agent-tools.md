@@ -148,7 +148,7 @@ Best for: people already on it who are comfortable with a community maintained t
 
 ## Munder Difflin: the coordinated office
 
-[Munder Difflin](https://munderdiffl.in/) is ours, and it lives in the fourth camp. It wraps twelve terminal
+[Munder Difflin](https://scranton-branch.zerogeworkshop.com/) is ours, and it lives in the fourth camp. It wraps twelve terminal
 coding CLIs (Claude Code, Codex, Gemini CLI, Antigravity, Grok, Kimi Code, Qwen, OpenCode, Crush, Pi, Copilot
 and Cursor) and runs them as real processes on your machine. Each agent gets a desk on an office floor, a
 mailbox and long term memory. Michael, your clone, turns what you ask for into tasks, hires workers and
@@ -163,7 +163,7 @@ routes messages between them. Questions that need you land on an ASK ME board.
 
 Best for: anyone running enough agents that coordination, not parallelism, is the real cost. The free app does
 all of the above. Optional paid plans exist too: Pro puts the office in one window and adds Stapler, and Teams
-lets your clone work with your teammates' clones. Details are on the [pricing page](https://munderdiffl.in/#pricing).
+lets your clone work with your teammates' clones. Details are on the [pricing page](https://scranton-branch.zerogeworkshop.com/#pricing).
 
 ## How do you choose?
 
