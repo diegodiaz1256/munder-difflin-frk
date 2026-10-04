@@ -788,10 +788,11 @@
     }
   },
   "setupPanel": {
-    "title": "PREREQUISITES",
+    "title": "SETUP",
     "checking": "Checking what is installed…",
     "summary": "{{ready}} of {{total}} ready{{missing}}",
     "summaryMissing": " · {{count}} recommended missing",
+    "summaryAllReady": " · all recommended ready",
     "recheck": "re-check",
     "checkingBtn": "checking…",
     "statusReady": "READY",
@@ -801,7 +802,7 @@
     "docs": "docs →",
     "askDesc": "{{godName}} can install the {{count}} missing recommended tool for you. This fills in his dispatch box — nothing runs until you press dispatch.",
     "askDescPlural": "{{godName}} can install the {{count}} missing recommended tools for you. This fills in his dispatch box — nothing runs until you press dispatch.",
-    "allReady": "Everything recommended is installed. Individual engines above are optional — set up only the ones you use.",
+    "allReady": "Everything recommended is installed. The engines below are optional — set up only the ones you use.",
     "askMichael": "ask {{godName}} to set up everything",
     "sections": {
       "prerequisites": {
