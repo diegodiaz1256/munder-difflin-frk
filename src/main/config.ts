@@ -234,6 +234,9 @@ export interface HarnessConfig {
   envVars?: Array<{ name: string; kind: 'plain' | 'secret' | 'op'; value?: string; agents?: string[] | null; note?: string }>;
   /** Commands agents may ask the app to run with secrets (envVault.ts). */
   runners?: Array<{ id: string; name: string; command: string; description?: string; secrets: string[]; approval: 'always' | 'on-change' | 'never'; timeoutSec?: number }>;
+  /** Your own MCP servers (main/mcpServers.ts). Secret env values are NOT
+   *  here: they live in the encrypted store as mcp:<id>:<ENV>. */
+  customMcp?: Array<{ id: string; name: string; transport: { kind: 'stdio'; command: string; args: string[] } | { kind: 'http'; url: string }; env: Record<string, string>; secretEnv: string[]; enabled: boolean; agents: string[] | null; source?: string }>;
   /** Factories this office watches or sends work to (FACTORY-MCP.md). Tokens
    *  are in the encrypted store as factory:<id>, never here. */
   factories?: Array<{ id: string; name: string; url: string; addedAt: number }>;
