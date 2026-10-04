@@ -1,6 +1,6 @@
-# Scranton Branch 0.4.6-fork.8
+# Scranton Branch 0.4.6-fork.9
 
-**fork.8:** Windows lists the publisher as Scranton Branch.
+**fork.9:** quitting lets Claude Code agents close themselves first, so Michael no longer stays listed in the Claude app after the office is closed. **fork.8:** Windows lists the publisher as Scranton Branch.
 
 **New name.** This fork is now **Scranton Branch**: its own app, its own repository, installed separately from upstream's Munder Difflin. The two no longer share a data folder or keychain entry. **Coming from the old name?** Install this one. On first launch it copies your settings, offices and history, and offers to remove the old "Munder Difflin …-fork" app. Upstream's own Munder Difflin is never touched. On macOS and Linux, Connection keys and the Team pairing are locked to the old app name: re-enter the keys and pair Team again.
 
@@ -8,7 +8,7 @@ The sidebar layout is now **Manager**, next to the classic **Floor**.
 
 Scranton Branch is the branch office of [Munder Difflin](https://github.com/HarnessMD/munder-difflin) 0.4.6: everything the open-source app does, plus offices that work together.
 
-**Versioning.** `<upstream version>-fork.<patch>`: upstream 0.4.6 plus patch 8. The in-app updater only follows this repository.
+**Versioning.** `<upstream version>-fork.<patch>`: upstream 0.4.6 plus patch 9. The in-app updater only follows this repository.
 
 ## What the branch adds
 
@@ -26,23 +26,23 @@ Scranton Branch is the branch office of [Munder Difflin](https://github.com/Harn
 ### macOS
 | | |
 |---|---|
-| Universal (Apple Silicon + Intel) | [`Scranton-Branch-0.4.6-fork.8-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.8-mac-universal.dmg) |
+| Universal (Apple Silicon + Intel) | [`Scranton-Branch-0.4.6-fork.9-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.9-mac-universal.dmg) |
 
 ### Windows
 | | |
 |---|---|
-| Installer (x64), *recommended* | [`Scranton-Branch-0.4.6-fork.8-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.8-win-x64-setup.exe) |
-| Portable (x64, no install) | [`Scranton-Branch-0.4.6-fork.8-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.8-win-x64-portable.exe) |
+| Installer (x64), *recommended* | [`Scranton-Branch-0.4.6-fork.9-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.9-win-x64-setup.exe) |
+| Portable (x64, no install) | [`Scranton-Branch-0.4.6-fork.9-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.9-win-x64-portable.exe) |
 
 ### Linux
 | | |
 |---|---|
-| AppImage (x86_64) | [`Scranton-Branch-0.4.6-fork.8-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.8-linux-x86_64.AppImage) |
-| Server, no GUI (x64) | [`scranton-branch-server-0.4.6-fork.8-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.8-linux-x64.tar.gz) |
-| Server, no GUI (arm64) | [`scranton-branch-server-0.4.6-fork.8-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.8-linux-arm64.tar.gz) |
+| AppImage (x86_64) | [`Scranton-Branch-0.4.6-fork.9-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.9-linux-x86_64.AppImage) |
+| Server, no GUI (x64) | [`scranton-branch-server-0.4.6-fork.9-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.9-linux-x64.tar.gz) |
+| Server, no GUI (arm64) | [`scranton-branch-server-0.4.6-fork.9-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.9-linux-arm64.tar.gz) |
 
 Server: unpack, then run `sudo ./install.sh`. Setup, Docker and secrets are in [SERVER.md](https://github.com/diegodiaz1256/scranton-branch/blob/main/SERVER.md). A server installed as `munder-difflin-server` (fork.5–6) keeps running. To switch, stop and disable `munder-difflin`, run the new installer, and copy `/var/lib/munder-difflin` and `/etc/munder-difflin` to the `scranton-branch` paths.
 
 Builds are not code-signed yet: macOS asks you to allow the app in System Settings → Privacy & Security, and Windows SmartScreen asks you to confirm ("More info" → "Run anyway").
 
-Source: [`v0.4.6-fork.8`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v0.4.6-fork.8.tar.gz)
+Source: [`v0.4.6-fork.9`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v0.4.6-fork.9.tar.gz)

@@ -4119,8 +4119,27 @@ ipcMain.handle('history:search', (_evt, query: unknown, limit: unknown) =>
 // ─── IPC: quit confirmation ─────────────────────────────────────────────────
 /** Tear the harness down and quit. Shared by the hard "kill all & quit" path
  *  and the closing-time conclusion (after the god confirmed the floor saved). */
+/** Claude Code, by the command a pty was started with (claude, claude.exe, a
+ *  path to either). Matched on the program, not the provider setting, so a
+ *  custom command that runs Claude Code is included. */
+const CLAUDE_CLI = /(^|[\\/\s"])claude(\.exe|\.cmd|\.ps1)?("|\s|$)/i;
+
+let quitting = false;
 function teardownAndQuit(): void {
+  if (quitting) return;
+  quitting = true;
   allowQuit = true;
+  // Claude Code first gets the chance to exit by itself (double Ctrl+C, its own
+  // quit), so it closes its Remote Control session instead of leaving it
+  // listed in the Claude app. Whatever is still running after that is killed
+  // below, as before. Bounded: the quit never waits more than a few seconds.
+  void ptyManager.exitGracefully((pt) => CLAUDE_CLI.test(pt.command), ['\x03', '\x03', '\x03'], 4000)
+    .then((n) => { if (n) console.log(`[quit] ${n} Claude Code session(s) exited on their own`); })
+    .catch((e) => console.error('[quit] graceful exit:', e))
+    .finally(finishTeardown);
+}
+
+function finishTeardown(): void {
   // Each teardown step is best-effort: a throw here (e.g. a dying child or a
   // half-torn-down socket) must never abort the quit or pop a crash dialog.
   try { clearMissionTimers(); } catch (e) { console.error('[quit] clearMissionTimers:', e); }
