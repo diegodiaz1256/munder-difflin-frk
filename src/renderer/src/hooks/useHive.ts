@@ -132,6 +132,7 @@ async function waitForTerminalReady(
 export async function enableRemoteControl(provider: AgentProvider, sessionName: string): Promise<boolean> {
   const cmd = remoteControlCommandForProvider(provider, sessionName);
   if (!cmd) return false;
+  useStore.getState().markRemoteControlAsked(GOD_PTY);
   await submitToPty(GOD_PTY, cmd, provider, REMOTE_CONTROL_SETTLE_MS);
   return true;
 }

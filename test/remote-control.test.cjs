@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const loadTs = require('./load-ts.cjs');
-const { detectRemoteControl } = loadTs('src/shared/remoteControl.ts');
+const { detectRemoteControl, isRemoteControlMenu } = loadTs('src/shared/remoteControl.ts');
 
 test('the session link means on', () => {
   const r = detectRemoteControl('\x1b[1mRemote Control\x1b[0m\r\nThis session is available in the Claude mobile app and at\r\nhttps://claude.ai/code/session_01Aryu8Xz5DmPoujZLjsbAE3.');
@@ -21,4 +21,9 @@ test('the newest notice wins; unrelated output says nothing', () => {
   assert.equal(detectRemoteControl('Remote Control disconnected ... https://claude.ai/code/session_abc').state, 'on');
   assert.equal(detectRemoteControl('https://claude.ai/code/session_abc ... Remote Control disconnected').state, 'off');
   assert.equal(detectRemoteControl('Reading files… done'), null);
+});
+
+test('Claude\'s Remote Control menu is recognised', () => {
+  assert.equal(isRemoteControlMenu('Remote Control\nThis session is available…\n  Disconnect this session\n  Show QR code\n> Continue\nEnter to select · Esc to continue'), true);
+  assert.equal(isRemoteControlMenu('Remote Control disconnected'), false);
 });

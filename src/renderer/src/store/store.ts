@@ -211,6 +211,10 @@ interface State {
   /** Remote Control per terminal, read from its output (shared/remoteControl.ts). */
   remoteControl: Record<string, RemoteControlState>;
   setRemoteControl: (ptyId: string, state: RemoteControlState) => void;
+  /** When the cloud button last sent /remote-control, per terminal: its menu,
+   *  if it opens right after, is ours to close. */
+  remoteControlAskedAt: Record<string, number>;
+  markRemoteControlAsked: (ptyId: string) => void;
   sidebarTab: SidebarTab;
   godStatus: GodStatus;
   /** Per-agent outgoing message queue (agent id → messages awaiting delivery).
@@ -693,6 +697,8 @@ export const useStore = create<State>((set, get) => ({
   ideAgentId: null,
   sidebarWidth: initialSidebarWidth,
   remoteControl: {},
+  remoteControlAskedAt: {},
+  markRemoteControlAsked: (ptyId) => set((s) => ({ remoteControlAskedAt: { ...s.remoteControlAskedAt, [ptyId]: Date.now() } })),
   setRemoteControl: (ptyId, state) => set((s) => {
     const prev = s.remoteControl[ptyId];
     if (prev && prev.state === state.state && (prev.state !== 'on' || state.state !== 'on' || prev.url === state.url)) return s;

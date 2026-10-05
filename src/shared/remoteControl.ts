@@ -26,3 +26,10 @@ export function detectRemoteControl(text: string): RemoteControlState | null {
   }
   return null;
 }
+
+/** Claude's Remote Control menu (shown when /remote-control runs while it is
+ *  already on): Disconnect / Show QR code / Continue. */
+export function isRemoteControlMenu(text: string): boolean {
+  const t = text.replace(ANSI, '');
+  return /Remote Control/i.test(t) && /Enter to (?:select|confirm|continue)/i.test(t);
+}
