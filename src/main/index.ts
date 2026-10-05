@@ -3302,6 +3302,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           // W3 — default-MCP consent state + the bundled skills source dir.
           mcpDefaults: readConfig().mcpDefaults,
           mcpGrant: readConfig().agentMcpGrants?.[opts.hive.id],
+          toolBlocks: readConfig().agentToolBlocks?.[opts.hive.id],
           mcpScopes: readConfig().connectionScopes,
           skillsDir: skillsResourceDir(),
           // The shared palace is mutated by the agent's own `mempalace` calls, so

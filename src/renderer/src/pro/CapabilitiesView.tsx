@@ -5,6 +5,7 @@ import { Icon } from '@/components/Icon';
 import { SkillsTab } from '@/components/SkillsTab';
 import { MCP_CATALOG, mcpCatalogEntry } from '@shared/mcpCatalog';
 import { BUNDLE_ICONS, allRoleBundles, mcpLabel, type BundleIcon, type RoleBundle } from '@shared/roleBundles';
+import { NATIVE_TOOL_GROUPS } from '@shared/nativeTools';
 import { useProStore } from './proStore';
 import { Avatar } from './data';
 import { effectiveServers } from './AgentView';
@@ -40,6 +41,24 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
     setSaving(true);
     try {
       await window.cth.setAgentMcpGrant(agentId, servers);
+      const who = roster.find((a) => a.id === agentId)?.name ?? agentId;
+      setNote(`${who}: saved. It takes effect the next time ${who} starts (Restart & Continue keeps the conversation).`);
+    } catch (e) {
+      setNote(String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** Take a Claude Code tool group away from an agent, or give it back. */
+  const toggleTools = async (agentId: string, group: string) => {
+    const all = { ...(config.agentToolBlocks ?? {}) };
+    const cur = all[agentId] ?? [];
+    const next = cur.includes(group) ? cur.filter((g) => g !== group) : [...cur, group];
+    if (next.length) all[agentId] = next; else delete all[agentId];
+    setSaving(true);
+    try {
+      await window.cth.updateConfig({ agentToolBlocks: all });
       const who = roster.find((a) => a.id === agentId)?.name ?? agentId;
       setNote(`${who}: saved. It takes effect the next time ${who} starts (Restart & Continue keeps the conversation).`);
     } catch (e) {
@@ -162,6 +181,22 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
               <div key={a.id} className="pro-card pro-row" style={{ flexWrap: 'wrap' }}>
                 <span className="pro-row" style={{ width: 150 }}><Avatar agent={a} /><strong style={{ fontSize: 13 }}>{a.name}</strong></span>
                 <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6, flex: 1 }}>
+                  {NATIVE_TOOL_GROUPS.map((g) => {
+                    // The orchestrator delegates through the office: never Claude's sub-agents.
+                    const locked = g.id === 'subagents' && a.isGod;
+                    const on = !locked && !(config.agentToolBlocks?.[a.id] ?? []).includes(g.id);
+                    return (
+                      <button key={g.id}
+                        className={`pro-chip${on ? ' pro-chip-on' : ' pro-chip-off'}`}
+                        style={{ cursor: locked ? 'default' : 'pointer' }}
+                        title={locked ? 'The orchestrator delegates through the office, never with sub-agents' : `Claude Code: ${g.description}`}
+                        disabled={saving || locked}
+                        onClick={() => void toggleTools(a.id, g.id)}>
+                        {g.label}
+                      </button>
+                    );
+                  })}
+                  <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--cth-ink-100)' }} />
                   {MCP_CATALOG.map((e) => {
                     const on = has.includes(e.id);
                     const usable = consented(config, e.id);
@@ -184,7 +219,7 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
             );
           })}
           <p className="pro-sub" style={{ fontSize: 12 }}>
-            MCP servers reach Claude Code agents. Dimmed or dashed servers need their key and switch in{' '}
+            Web, Shell and Sub-agents are Claude Code's own tools; switched off, the agent cannot use them. MCP servers reach Claude Code agents. Dimmed or dashed servers need their key and switch in{' '}
             <button className="pro-btn" style={{ padding: '1px 6px' }} onClick={() => setView({ kind: 'section', section: 'connections' })}>Connections</button> first.
           </p>
         </>

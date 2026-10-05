@@ -125,6 +125,8 @@ export interface HarnessConfig {
   agentTokenCaps?: Record<string, number>;
   /** Per-agent MCP grants (Pro Capabilities): agent id → catalog ids. */
   agentMcpGrants?: Record<string, string[]>;
+  /** Claude Code tool groups taken from an agent (Capabilities): agent id → group ids (shared/nativeTools.ts). */
+  agentToolBlocks?: Record<string, string[]>;
   /** Manager → Connections "Choose agents": a keyed MCP server listed here reaches
    *  only these agent ids (on their next spawn). Absent → every agent. */
   connectionScopes?: Record<string, string[]>;
