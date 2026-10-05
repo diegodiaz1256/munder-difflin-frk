@@ -140,7 +140,9 @@ export function acquireTerminal(ptyId: string, theme?: ThemeMap, fontSize = 14):
     lineHeight: 1.0,
     cursorBlink: true,
     cursorStyle: 'block',
-    scrollback: 100000,
+    // 20k, down from 100k: a TUI repaints whole frames, so the history fills
+    // fast, and every resize reflows all of it (a long stall on a narrow pane).
+    scrollback: 20000,
     // Guarantee legible text no matter what colors a running program sets.
     // When a program paints a coloured cell background (e.g. a git-diff add line
     // with a green bg, or a yellow-highlighted line) while leaving the default

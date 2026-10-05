@@ -226,6 +226,9 @@ interface State {
   toolCounts: Record<string, number>;
   bumpToolCount: (id: string) => void;
   setGodStatus: (status: GodStatus) => void;
+  /** Why the orchestrator could not start (shown on the floor). */
+  godError: string | null;
+  setGodError: (error: string | null) => void;
   select: (id: string) => void;
   updateAgent: (id: string, patch: Partial<Agent>) => void;
   /** Copy durable hive roles onto roster descriptions (and the reverse is a
@@ -626,7 +629,10 @@ const initialSidebarWidth = (() => {
     const n = v ? parseInt(v, 10) : NaN;
     if (!Number.isNaN(n) && n >= 320 && n <= 1200) return n;
   } catch { /* noop */ }
-  return 420;
+  // About 80 terminal columns: agent TUIs (Claude Code above all) wrap and
+  // pile up in anything narrower. Never more than half the window.
+  const half = typeof window !== 'undefined' ? Math.floor(window.innerWidth / 2) : 640;
+  return Math.max(420, Math.min(640, half));
 })();
 const initialSidebarTab: SidebarTab = (() => {
   try {
@@ -706,6 +712,8 @@ export const useStore = create<State>((set, get) => ({
   }),
   sidebarTab: initialSidebarTab,
   godStatus: 'booting',
+  godError: null,
+  setGodError: (error) => set({ godError: error }),
   messageQueues: initialQueues,
   toolCounts: {},
   bumpToolCount: (id) =>
