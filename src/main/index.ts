@@ -4344,6 +4344,8 @@ ipcMain.handle('hive:searchMemory', (_evt, query: unknown, wing: unknown) => {
 ipcMain.handle('hive:memoryWakeUp', (_evt, wing: unknown) =>
   memory.wakeUp(typeof wing === 'string' ? wing : undefined));
 ipcMain.handle('hive:mineNow', () => { memory.mineNow(); return { ok: true }; });
+// The one way the memory model goes online (memory.ts OFFLINE_ENV).
+ipcMain.handle('hive:memoryDownloadModel', () => memory.downloadModel());
 // Condense memory.md on demand: an explicit id condenses that one agent (skips
 // the size trigger — a "condense now" button); no id runs a full threshold scan.
 ipcMain.handle('memory:reflectNow', (_evt, id: unknown) =>
