@@ -137,6 +137,8 @@ export async function offerLegacyUninstall(win: BrowserWindow | null, opts: { as
     detail: `Your settings, offices and history were copied here. Removing the old app leaves its data folder in place as a backup.${keysLine}`
   };
   const { response } = win ? await dialog.showMessageBox(win, box) : await dialog.showMessageBox(box);
+  // A native box on Windows can leave the page unable to take typing.
+  if (win && !win.isDestroyed()) win.webContents.focus();
   if (response === 2) { opts.remember('legacy.uninstall.answered', 'keep'); return; }
   if (response !== 0) return;
   try {

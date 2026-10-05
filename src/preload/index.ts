@@ -951,6 +951,8 @@ const api = {
    *  Windows). Resolves true for the confirm button. */
   confirm: (message: string, opts?: { detail?: string; ok?: string }): Promise<boolean> =>
     ipcRenderer.invoke('app:confirm', message, opts?.detail, opts?.ok),
+  /** Give keyboard focus back to this page (lost after a native dialog on Windows). */
+  refocus: (): Promise<void> => ipcRenderer.invoke('app:refocus'),
   saveClipboardImage: (): Promise<
     { ok: true; file: { path: string; name: string } } | { ok: false; error: string }
   > => ipcRenderer.invoke('clipboard:saveImage'),

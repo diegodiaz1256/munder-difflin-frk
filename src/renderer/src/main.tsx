@@ -4,6 +4,7 @@ import { App } from './App';
 import brandLogo from '@brand/logo.png?url';
 import './design/global.css';
 import './i18n';
+import { installFocusRescue } from './focusRescue';
 
 const favicon = document.createElement('link');
 favicon.rel = 'icon';
@@ -19,6 +20,8 @@ if (splashMark) {
   img.style.cssText = 'height:56px;width:auto;display:block';
   splashMark.replaceWith(img);
 }
+
+installFocusRescue();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('No root element');

@@ -2,4 +2,4 @@
 - **Certificates:** trust company or local CAs for endpoints.
 - **Safer:** agents can't see or steer secrets.
 - **Uninstall** even when security software blocks it.
-- **Clearer errors** when WSL or a tool is missing.
+- **Text boxes** no longer lock after a file picker.

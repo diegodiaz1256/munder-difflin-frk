@@ -469,7 +469,7 @@ const envVault = new EnvVault({
       detail: `${runner.command}\n\nIn: ${cwd}\nWith secrets: ${runner.secrets.join(', ') || 'none'}${changed ? '\n\nFiles in this worktree changed since you last allowed it: the command runs code the agent may have edited.' : ''}\n\nThe agent only gets the output, with every secret masked.`
     };
     const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
-    if (win && !win.isDestroyed()) win.webContents.focus();
+    refocusPage(win);
     return response === 0 ? 'once' : response === 1 ? 'always' : 'deny';
   },
   log: (m) => console.log('[env]', m)
@@ -2672,12 +2672,15 @@ ipcMain.handle('hire:drainPending', () => {
 
 // IPC: "import hires…" file picker in the Add-Agent modal. Every selected file
 // is validated independently; valid neighbours survive an invalid manifest.
-ipcMain.handle('hire:openFile', async () => {
-  const res = await dialog.showOpenDialog({
+ipcMain.handle('hire:openFile', async (evt) => {
+  const win = BrowserWindow.fromWebContents(evt.sender);
+  const opts: Electron.OpenDialogOptions = {
     title: 'Import hire manifests',
     filters: [{ name: 'Hire manifest', extensions: ['json'] }],
     properties: ['openFile', 'multiSelections']
-  });
+  };
+  const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+  refocusPage(win);
   if (res.canceled || res.filePaths.length === 0) {
     return { ok: false, manifests: [], errors: [], error: 'cancelled' };
   }
@@ -2745,7 +2748,13 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
   allWindows.add(win);
   // Global timer events follow the user — the most-recently-focused window is
   // primary. The primary is also seeded synchronously so boot events route now.
-  win.on('focus', () => { mainWindow = win; });
+  win.on('focus', () => {
+    mainWindow = win;
+    // Coming back to the window must bring keyboard focus back to the page too:
+    // on Windows it can stay lost after a native dialog, and every text box then
+    // looks normal but takes no input.
+    if (!wc.isDestroyed() && !wc.isFocused() && !wc.isDevToolsFocused()) wc.focus();
+  });
   if (!isFloor) mainWindow = win;
 
   // Permission gate for the renderer (our own trusted, local content). The only
@@ -2826,7 +2835,7 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
           message: `Close this floor? ${owned} running terminal${owned === 1 ? '' : 's'} on it will be stopped.`,
           detail: 'Other floors keep running.'
         });
-        if (choice === 1) e.preventDefault();
+        if (choice === 1) { e.preventDefault(); refocusPage(win); }
       }
       return;
     }
@@ -3614,6 +3623,7 @@ ipcMain.handle('dialog:chooseFolder', async (evt) => {
     title: 'Pick a folder',
     ...(defaultPath ? { defaultPath } : {})
   });
+  refocusPage(win);
   if (res.canceled || res.filePaths.length === 0) return { ok: false as const, error: 'cancelled' };
   return { ok: true as const, path: res.filePaths[0] };
 });
@@ -4384,6 +4394,7 @@ ipcMain.handle('kg:addFiles', async (evt) => {
     properties: ['openFile', 'multiSelections'],
     title: 'Add documents to the Knowledge Graph'
   });
+  refocusPage(win);
   if (res.canceled || res.filePaths.length === 0) return { ok: false as const, error: 'cancelled' };
   const results = res.filePaths.map((srcPath) => {
     try {
@@ -4450,6 +4461,7 @@ ipcMain.handle('tls:pickCaFile', async (evt) => {
     title: 'CA certificate (PEM)',
     filters: [{ name: 'Certificates', extensions: ['pem', 'crt', 'cer'] }, { name: 'All Files', extensions: ['*'] }]
   });
+  refocusPage(win);
   if (res.canceled || !res.filePaths[0]) return { ok: false as const };
   return { ok: true as const, path: res.filePaths[0] };
 });
@@ -4490,6 +4502,7 @@ ipcMain.handle('dialog:attachFiles', async (evt) => {
       { name: 'All Files', extensions: ['*'] }
     ]
   });
+  refocusPage(win);
   if (res.canceled || res.filePaths.length === 0) return { ok: false as const, error: 'cancelled' };
   return { ok: true as const, files: res.filePaths.map((p) => ({ path: p, name: basename(p) })) };
 });
@@ -4598,6 +4611,16 @@ function finishTeardown(): void {
   try { ptyManager.killAll(); } catch (e) { console.error('[quit] killAll:', e); }
   app.quit();
 }
+// On Windows a native dialog (message box, file or folder picker) can leave the
+// page without keyboard focus when it closes: text boxes look fine but take no
+// clicks or typing until the window is refocused. Hand focus back explicitly.
+function refocusPage(win: BrowserWindow | null | undefined): void {
+  if (!win || win.isDestroyed()) return;
+  win.focus();
+  win.webContents.focus();
+}
+ipcMain.handle('app:refocus', (evt) => { refocusPage(BrowserWindow.fromWebContents(evt.sender)); });
+
 // A yes/no question for the renderer, instead of window.confirm(): Chromium's
 // native confirm on Windows leaves the page without keyboard focus afterwards —
 // text boxes look fine but no longer take input until the window is refocused
@@ -4613,7 +4636,7 @@ ipcMain.handle('app:confirm', async (evt, message: unknown, detail: unknown, ok:
     detail: typeof detail === 'string' ? detail.slice(0, 1000) : undefined
   };
   const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
-  if (win && !win.isDestroyed()) { win.focus(); win.webContents.focus(); }
+  refocusPage(win);
   return response === 0;
 });
 
