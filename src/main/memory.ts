@@ -396,6 +396,13 @@ export class MemoryManager {
         this.modelCache = null;
         void this.checkModel().then((ready) => {
           if (code === 0 && ready) { done({ ok: true }); this.start(); return; }
+          // mempalace finished fine but the model is not there: this version
+          // does not know it (EmbeddingGemma needs a newer mempalace; older
+          // ones quietly use MiniLM), so it would never arrive.
+          if (code === 0 && this.model() === 'embeddinggemma') {
+            done({ ok: false, error: 'this mempalace cannot use EmbeddingGemma. Update it (uv tool upgrade mempalace) or choose MiniLM in the Memory panel.' });
+            return;
+          }
           done({ ok: false, error: last || `the download did not finish (exit ${code})` });
         });
       });
