@@ -1,10 +1,12 @@
 import * as pty from 'node-pty';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { resolveCommand, userShellPath } from './shellEnv';
 import { expandTilde } from './fs';
 import { projectDir } from './transcript';
 import { ensureKilled } from './procKill';
+import { linuxizeText, parseWslPath, wslCommand } from './wsl';
 
 /**
  * Shared helper: run a HIDDEN interactive claude session (ephemeral PTY) and
@@ -127,16 +129,27 @@ export function runHiddenClaude(prompt: string, opts: HiddenClaudeOptions): Prom
     // Windows: node-pty's CreateProcess can't exec the npm `.cmd`/extensionless
     // `claude` shim directly (ERROR_BAD_EXE_FORMAT, error 193) — route non-.exe
     // targets through cmd.exe. A real claude.exe (WinGet) launches directly. (#22)
-    const winWrap = process.platform === 'win32' && !/\.(exe|com)$/i.test(exe);
-    const spawnFile = winWrap ? (process.env.ComSpec || 'cmd.exe') : exe;
-    const spawnArgs = winWrap ? ['/c', exe, ...args] : args;
+    // A WSL floor (cwd under \\wsl.localhost): claude runs inside the distro,
+    // with Linux paths, as the floor's agents do. cmd.exe cannot even start in a
+    // UNC folder, and Windows may not have claude at all.
+    const wsl = process.platform === 'win32' ? parseWslPath(cwd) : null;
+    const winWrap = !wsl && process.platform === 'win32' && !/\.(exe|com)$/i.test(exe);
+    let spawnFile = winWrap ? (process.env.ComSpec || 'cmd.exe') : exe;
+    let spawnArgs = winWrap ? ['/c', exe, ...args] : args;
+    if (wsl) {
+      const env: Record<string, string> = {};
+      for (const [k, v] of Object.entries(opts.env ?? {})) if (typeof v === 'string') env[k] = linuxizeText(v, wsl.distro);
+      const inv = wslCommand(wsl.distro, wsl.linuxPath, binary, args.map((a) => linuxizeText(a, wsl.distro)), env);
+      spawnFile = inv.file;
+      spawnArgs = inv.args;
+    }
     let ptyProc: pty.IPty;
     try {
       ptyProc = pty.spawn(spawnFile, spawnArgs, {
         name: 'xterm-color',
         cols: 220,
         rows: 50,
-        cwd: opts.cwd,
+        cwd: wsl ? os.homedir() : opts.cwd,
         env: {
           ...process.env,
           PATH: userShellPath(),

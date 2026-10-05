@@ -26,7 +26,7 @@ process.env.USERPROFILE = FAKE_HOME;
 
 const SRC = path.join(__dirname, '..', 'src', 'main');
 const out = fs.mkdtempSync(path.join(os.tmpdir(), 'transcript-'));
-for (const name of ['pricing', 'transcript']) {
+for (const name of ['pricing', 'wsl', 'transcript']) {
   const js = ts.transpileModule(fs.readFileSync(path.join(SRC, `${name}.ts`), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true }
   }).outputText;

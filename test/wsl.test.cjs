@@ -92,3 +92,12 @@ test('Windows drive paths become /mnt paths for agents in the distro', () => {
   assert.equal(fromLinuxPath('G:\\x', 'Ubuntu'), 'G:\\x');
   assert.equal(fromLinuxPath('~', 'Ubuntu', () => null), '~');
 });
+
+test('a WSL agent\'s Claude transcripts live in the distro home, keyed by the Linux path', () => {
+  const { claudeProjects } = loadTs('src/main/transcript.ts');
+  const loc = claudeProjects('\\\\wsl.localhost\\Ubuntu\\home\\d\\offices\\shop', 'win32', () => '\\\\wsl.localhost\\Ubuntu\\home\\d');
+  assert.equal(loc.root, '\\\\wsl.localhost\\Ubuntu\\home\\d\\.claude\\projects');
+  assert.equal(loc.cwd, '/home/d/offices/shop');
+  const plain = claudeProjects('/home/d/x', 'linux', () => { throw new Error('no wsl here'); });
+  assert.equal(plain.cwd, '/home/d/x');
+});

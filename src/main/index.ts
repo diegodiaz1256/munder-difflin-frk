@@ -4528,7 +4528,10 @@ ipcMain.handle('hive:agentContext', (_evt, agentId: unknown) => {
   if (typeof agentId !== 'string') return null;
   const tp = hookServer.transcriptPath(agentId);
   if (!tp) return null;
-  return readContextTokens(tp) ?? 0;
+  // An agent on a WSL floor reports the Linux path of its transcript.
+  const floorWsl = hive.wslRoot();
+  const file = floorWsl && tp.startsWith('/') ? fromLinuxPath(tp, floorWsl.distro) : tp;
+  return readContextTokens(file) ?? 0;
 });
 
 // A consolidated, NON-SENSITIVE per-agent directory for the voice read-layer
