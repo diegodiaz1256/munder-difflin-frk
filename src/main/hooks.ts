@@ -20,6 +20,7 @@ import type { ControlRegistry } from './control';
 import type { CircuitBreaker } from './breaker';
 import { estimateCostUsd } from './pricing';
 import { validateHookEvent } from '../shared/hookEvents';
+import { parseRateLimits, type RateLimits } from '../shared/rateLimits';
 
 /** Maximum JSON payload bytes in one newline-delimited hook frame. */
 const MAX_HOOK_FRAME_BYTES = 256 * 1024;
@@ -133,6 +134,10 @@ export class HookServer {
    *  get_agent_detail / list_agents) can report "how full is each agent's context"
    *  without depending on a renderer round-trip. */
   private contextById = new Map<string, { tokens: number; limit: number; ts: number }>();
+  /** The subscription's usage windows, from the latest status tick that had
+   *  them (shared/rateLimits.ts). One account behind every Claude agent, so one
+   *  value for the app; null for API-key users. */
+  rateLimits: RateLimits | null = null;
   /** The goal last delivered to each agent's current session. Goals are durable
    *  roster state, so repeating an unchanged multi-kilobyte briefing on every
    *  prompt only bloats the transcript. One entry per agent is sufficient: an
@@ -409,6 +414,11 @@ export class HookServer {
     // and telemetry should never write to the registry. transcript_path IS
     // still captured above, where every payload shape benefits from it.
     if (event === 'Status') {
+      const rl = parseRateLimits((p as { rate_limits?: unknown }).rate_limits);
+      if (rl) {
+        this.rateLimits = rl;
+        this.getWebContents()?.send('hive:rateLimits', rl);
+      }
       const cw = p.context_window;
       if (agentId && cw && typeof cw.total_input_tokens === 'number'
         && typeof cw.context_window_size === 'number' && cw.context_window_size > 0) {

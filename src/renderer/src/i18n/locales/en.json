@@ -1476,5 +1476,15 @@
   "app": {
     "godFailed": "The orchestrator could not start:",
     "godRetry": "Retry"
+  },
+  "usage": {
+    "title": "Subscription usage",
+    "fiveHour": "5-hour window",
+    "week": "This week",
+    "weekOpus": "This week (Opus)",
+    "weekSonnet": "This week (Sonnet)",
+    "fiveHourShort": "5h",
+    "weekShort": "week",
+    "resetsIn": "resets in {{time}}"
   }
 }

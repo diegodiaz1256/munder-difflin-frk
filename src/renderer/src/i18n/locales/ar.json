@@ -1476,5 +1476,15 @@
   "app": {
     "godFailed": "تعذّر تشغيل المنسق:",
     "godRetry": "إعادة المحاولة"
+  },
+  "usage": {
+    "title": "استخدام الاشتراك",
+    "fiveHour": "نافذة الخمس ساعات",
+    "week": "هذا الأسبوع",
+    "weekOpus": "هذا الأسبوع (Opus)",
+    "weekSonnet": "هذا الأسبوع (Sonnet)",
+    "fiveHourShort": "5س",
+    "weekShort": "الأسبوع",
+    "resetsIn": "يُعاد الضبط بعد {{time}}"
   }
 }
