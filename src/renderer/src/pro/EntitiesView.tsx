@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Entity } from '@shared/memoryEntities';
 import { scoreOf } from '@shared/memoryEntities';
 import type { MemoryNote } from '@shared/memoryGraph';
@@ -15,6 +16,7 @@ export function EntitiesView({ entities, notesFor, focus }: {
   focus?: string | null;
   notesFor: (key: string) => Array<MemoryNote & { source: string }>;
 }) {
+  const { t } = useTranslation();
   const [q, setQ] = useState('');
   const [picked, setPicked] = useState<string | null>(focus ?? entities[0]?.key ?? null);
   useEffect(() => { if (focus) { setPicked(focus); setQ(''); const k = entities.find((e) => e.key === focus)?.kind; if (k) setKind(k); } }, [focus, entities]);
@@ -34,7 +36,7 @@ export function EntitiesView({ entities, notesFor, focus }: {
               {kinds.map((k) => <button key={k} className={`pro-chip${k === kind ? ' pro-chip-on' : ''}`} onClick={() => setKind(k)}>{k}</button>)}
             </div>
           )}
-          <input className="pro-input" placeholder={`Filter ${kind.toLowerCase() || 'entities'}`} value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="pro-input" placeholder={t('pro.entities.filter', { kind: kind.toLowerCase() || t('pro.entities.entities') })} value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <div style={{ overflowY: 'auto', flex: 1 }}>
           {[...groups.entries()].map(([g, list]) => (
@@ -49,7 +51,7 @@ export function EntitiesView({ entities, notesFor, focus }: {
               ))}
             </div>
           ))}
-          {shown.length === 0 && <p className="pro-sub" style={{ padding: 12 }}>Nothing matches.</p>}
+          {shown.length === 0 && <p className="pro-sub" style={{ padding: 12 }}>{t('pro.entities.nothing')}</p>}
         </div>
       </aside>
       {sel ? <Profile e={sel} notes={notesFor(sel.key)} /> : null}
@@ -58,6 +60,7 @@ export function EntitiesView({ entities, notesFor, focus }: {
 }
 
 function Profile({ e, notes }: { e: Entity; notes: Array<MemoryNote & { source: string }> }) {
+  const { t } = useTranslation();
   const scores = e.attrs.filter((a) => scoreOf(a.value) !== null);
   const text = e.attrs.filter((a) => scoreOf(a.value) === null);
   return (
@@ -65,7 +68,7 @@ function Profile({ e, notes }: { e: Entity; notes: Array<MemoryNote & { source: 
       <div>
         <div className="pro-sub" style={{ fontSize: 11 }}>{e.kind}{e.group ? ` · ${e.group}` : ''}</div>
         <h3 style={{ margin: '2px 0 0', fontSize: 20 }}>{e.name}</h3>
-        {e.aliases.length > 0 && <div className="pro-sub" style={{ fontSize: 12 }}>also: {e.aliases.join(', ')}</div>}
+        {e.aliases.length > 0 && <div className="pro-sub" style={{ fontSize: 12 }}>{t('pro.entities.also', { names: e.aliases.join(', ') })}</div>}
       </div>
       {scores.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, auto) 1fr auto', gap: '6px 12px', alignItems: 'center', maxWidth: 560 }}>
@@ -90,7 +93,7 @@ function Profile({ e, notes }: { e: Entity; notes: Array<MemoryNote & { source: 
       ))}
       {notes.length > 0 && (
         <div>
-          <div className="pro-sub" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Mentioned in</div>
+          <div className="pro-sub" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>{t('pro.entities.mentionedIn')}</div>
           <ul style={{ margin: 0, paddingInlineStart: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
             {notes.slice(0, 8).map((n, i) => <li key={i} style={{ fontSize: 13, lineHeight: 1.45 }}>{n.text} <span className="pro-sub" style={{ fontSize: 11 }}>— {n.source}</span></li>)}
           </ul>

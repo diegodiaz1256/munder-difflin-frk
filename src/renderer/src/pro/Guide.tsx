@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 /** A dismissible step-by-step guide at the top of a Pro screen. Open the first
  *  time; once closed it stays closed for this viewer (a per-viewer nicety, so
@@ -22,11 +23,12 @@ export function Guide({ title, steps, footer, onClose }: {
   /** Omit for a guide that is always shown (no "Got it"). */
   onClose?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <section className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 10, borderColor: 'var(--cth-lemon)' }}>
       <div className="pro-row">
         <strong style={{ fontSize: 14 }}>{title}</strong>
-        {onClose && <button className="pro-btn" style={{ marginInlineStart: 'auto' }} onClick={onClose}>Got it</button>}
+        {onClose && <button className="pro-btn" style={{ marginInlineStart: 'auto' }} onClick={onClose}>{t('updateBadge.gotIt')}</button>}
       </div>
       <ol style={{ margin: 0, paddingInlineStart: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {steps.map(([head, body]) => (

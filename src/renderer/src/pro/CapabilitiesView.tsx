@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { HarnessConfig } from '@/store/config';
 import type { Agent } from '@/store/store';
 import { Icon } from '@/components/Icon';
@@ -27,6 +28,9 @@ type Draft = { id?: string; label: string; icon: BundleIcon; servers: string[] }
  * is switched on with its key in Connections.
  */
 export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: HarnessConfig }) {
+  const { t } = useTranslation();
+  /** A built-in bundle's name in the app language; yours stay as you wrote them. */
+  const bundleName = (b: RoleBundle) => (b.custom ? b.label : t(`pro.caps.bundle.${b.id}`, { defaultValue: b.label }));
   const setView = useProStore((s) => s.setView);
   const [tab, setTab] = useState<'bundles' | 'skills'>('bundles');
   const [target, setTarget] = useState<string | null>(roster.find((a) => !a.isGod)?.id ?? roster[0]?.id ?? null);
@@ -42,7 +46,7 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
     try {
       await window.cth.setAgentMcpGrant(agentId, servers);
       const who = roster.find((a) => a.id === agentId)?.name ?? agentId;
-      setNote(`${who}: saved. It takes effect the next time ${who} starts (Restart & Continue keeps the conversation).`);
+      setNote(t('pro.caps.saved', { name: who }));
     } catch (e) {
       setNote(String(e));
     } finally {
@@ -60,7 +64,7 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
     try {
       await window.cth.updateConfig({ agentToolBlocks: all });
       const who = roster.find((a) => a.id === agentId)?.name ?? agentId;
-      setNote(`${who}: saved. It takes effect the next time ${who} starts (Restart & Continue keeps the conversation).`);
+      setNote(t('pro.caps.saved', { name: who }));
     } catch (e) {
       setNote(String(e));
     } finally {
@@ -94,23 +98,23 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
     const next = draft.id
       ? custom.map(({ custom: _c, ...b }) => (b.id === draft.id ? edited : b))
       : [...rest, edited];
-    void saveBundles(next, `Bundle "${edited.label}" saved.`);
+    void saveBundles(next, t('pro.caps.bundleSaved', { name: edited.label }));
   };
 
   const remove = async (b: RoleBundle) => {
-    if (!(await window.cth.confirm(`Delete the bundle "${b.label}"?`, { detail: 'Agents that were granted it keep their servers.', ok: 'Delete' }))) return;
-    void saveBundles(custom.filter((x) => x.id !== b.id).map(({ custom: _c, ...x }) => x), `Bundle "${b.label}" deleted.`);
+    if (!(await window.cth.confirm(t('pro.caps.deleteConfirm', { name: b.label }), { detail: t('pro.caps.deleteDetail'), ok: t('pro.caps.delete') }))) return;
+    void saveBundles(custom.filter((x) => x.id !== b.id).map(({ custom: _c, ...x }) => x), t('pro.caps.bundleDeleted', { name: b.label }));
   };
 
   return (
     <div className="pro-page">
       <div className="pro-head">
-        <h2>Capabilities</h2>
-        <span className="pro-sub">Grant a role bundle</span>
+        <h2>{t('pro.nav.capabilities')}</h2>
+        <span className="pro-sub">{t('pro.caps.sub')}</span>
         <div className="pro-head-end">
           <div className="pro-tabs" role="tablist">
-            <button role="tab" aria-selected={tab === 'bundles'} onClick={() => setTab('bundles')}>Bundles &amp; servers</button>
-            <button role="tab" aria-selected={tab === 'skills'} onClick={() => setTab('skills')}>Skills</button>
+            <button role="tab" aria-selected={tab === 'bundles'} onClick={() => setTab('bundles')}>{t('pro.caps.bundlesTab')}</button>
+            <button role="tab" aria-selected={tab === 'skills'} onClick={() => setTab('skills')}>{t('pro.caps.skillsTab')}</button>
           </div>
         </div>
       </div>
@@ -120,7 +124,7 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
       ) : (
         <>
           <div className="pro-row">
-            <span className="pro-sub">Grant to</span>
+            <span className="pro-sub">{t('pro.caps.grantTo')}</span>
             <select className="pro-input" value={target ?? ''} onChange={(e) => setTarget(e.target.value)}>
               {roster.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
@@ -142,25 +146,25 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
                   style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 130, ...(match ? { background: 'var(--cth-lemon-light)', borderColor: 'var(--cth-lemon)' } : {}) }}>
                   <span className="pro-row">
                     <span style={{ display: 'inline-flex', padding: 8, borderRadius: 8, background: 'var(--cth-cream-200)' }}><Icon name={b.icon} /></span>
-                    <strong style={{ fontSize: 15, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.label}</strong>
-                    {b.custom && <span className="pro-chip" style={{ marginInlineStart: 'auto' }}>yours</span>}
+                    <strong style={{ fontSize: 15, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{bundleName(b)}</strong>
+                    {b.custom && <span className="pro-chip" style={{ marginInlineStart: 'auto' }}>{t('pro.caps.yours')}</span>}
                   </span>
                   <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6, flex: 1 }}>
-                    {b.servers.length === 0 && <span className="pro-sub" style={{ fontSize: 12 }}>No servers</span>}
+                    {b.servers.length === 0 && <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.caps.noServers')}</span>}
                     {b.servers.map((s) => <span key={s} className={`pro-chip${consented(config, s) ? '' : ' pro-chip-off'}`}>{mcpLabel(s)}</span>)}
                   </span>
                   <span className="pro-row" style={{ flexWrap: 'wrap', gap: 6 }}>
                     <button className="pro-btn pro-btn-primary" disabled={!target || saving || match} onClick={() => target && void grant(target, b.servers)}>
-                      {match ? `${targetAgent?.name ?? 'Agent'} has it` : `Grant to ${targetAgent?.name ?? '…'}`}
+                      {match ? t('pro.caps.hasIt', { name: targetAgent?.name ?? t('pro.nav.agent') }) : t('pro.caps.grantBtn', { name: targetAgent?.name ?? '…' })}
                     </button>
                     {b.custom ? (
                       <>
-                        <button className="pro-btn" disabled={saving} onClick={() => setDraft({ id: b.id, label: b.label, icon: b.icon, servers: b.servers })}>Edit</button>
-                        <button className="pro-btn" disabled={saving} onClick={() => remove(b)}>Delete</button>
+                        <button className="pro-btn" disabled={saving} onClick={() => setDraft({ id: b.id, label: b.label, icon: b.icon, servers: b.servers })}>{t('pro.caps.edit')}</button>
+                        <button className="pro-btn" disabled={saving} onClick={() => remove(b)}>{t('pro.caps.delete')}</button>
                       </>
                     ) : (
-                      <button className="pro-btn" disabled={saving} title="Make your own copy to change"
-                        onClick={() => setDraft({ label: `${b.label} (copy)`, icon: b.icon, servers: b.servers })}>Duplicate</button>
+                      <button className="pro-btn" disabled={saving} title={t('pro.caps.duplicateTitle')}
+                        onClick={() => setDraft({ label: t('pro.caps.copyOf', { name: bundleName(b) }), icon: b.icon, servers: b.servers })}>{t('pro.caps.duplicate')}</button>
                     )}
                   </span>
                 </article>
@@ -169,11 +173,11 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
             <button className="pro-card" disabled={saving}
               style={{ borderStyle: 'dashed', minHeight: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--cth-ink-500)' }}
               onClick={() => setDraft({ label: '', icon: 'mcp', servers: [] })}>
-              + New bundle
+              + {t('pro.caps.newBundle')}
             </button>
           </div>
 
-          <h3 style={{ margin: '6px 0 0', fontSize: 14 }}>Who has what</h3>
+          <h3 style={{ margin: '6px 0 0', fontSize: 14 }}>{t('pro.caps.whoHasWhat')}</h3>
           {roster.map((a) => {
             const has = effectiveServers(config, a.id);
             const ownGrant = !!config.agentMcpGrants?.[a.id];
@@ -189,10 +193,10 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
                       <button key={g.id}
                         className={`pro-chip${on ? ' pro-chip-on' : ' pro-chip-off'}`}
                         style={{ cursor: locked ? 'default' : 'pointer' }}
-                        title={locked ? 'The orchestrator delegates through the office, never with sub-agents' : `Claude Code: ${g.description}`}
+                        title={locked ? t('pro.caps.lockedTitle') : `Claude Code: ${t(`pro.caps.tool.${g.id}Desc`, { defaultValue: g.description })}`}
                         disabled={saving || locked}
                         onClick={() => void toggleTools(a.id, g.id)}>
-                        {g.label}
+                        {t(`pro.caps.tool.${g.id}`, { defaultValue: g.label })}
                       </button>
                     );
                   })}
@@ -204,7 +208,7 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
                       <button key={e.id}
                         className={`pro-chip${on && usable ? ' pro-chip-on' : ''}${!on ? ' pro-chip-off' : ''}`}
                         style={{ cursor: 'pointer', borderStyle: on && !usable ? 'dashed' : undefined }}
-                        title={on && !usable ? `${e.label} is granted but not switched on in Connections` : e.description}
+                        title={on && !usable ? t('pro.caps.notSwitchedOn', { name: e.label }) : e.description}
                         disabled={saving}
                         onClick={() => toggle(a.id, e.id)}>
                         {e.label}
@@ -213,14 +217,14 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
                   })}
                 </span>
                 {ownGrant
-                  ? <button className="pro-btn" disabled={saving} onClick={() => void grant(a.id, undefined)}>Use defaults</button>
-                  : <span className="pro-sub" style={{ fontSize: 11 }}>workspace defaults</span>}
+                  ? <button className="pro-btn" disabled={saving} onClick={() => void grant(a.id, undefined)}>{t('pro.caps.useDefaults')}</button>
+                  : <span className="pro-sub" style={{ fontSize: 11 }}>{t('pro.caps.workspaceDefaults')}</span>}
               </div>
             );
           })}
           <p className="pro-sub" style={{ fontSize: 12 }}>
-            Web, Shell and Sub-agents are Claude Code's own tools; switched off, the agent cannot use them. MCP servers reach Claude Code agents. Dimmed or dashed servers need their key and switch in{' '}
-            <button className="pro-btn" style={{ padding: '1px 6px' }} onClick={() => setView({ kind: 'section', section: 'connections' })}>Connections</button> first.
+            {t('pro.caps.footer')}{' '}
+            <button className="pro-btn" style={{ padding: '1px 6px' }} onClick={() => setView({ kind: 'section', section: 'connections' })}>{t('pro.nav.connections')}</button>
           </p>
         </>
       )}
@@ -232,19 +236,20 @@ function BundleEditor({ draft, config, saving, onChange, onCancel, onSave, onCon
   draft: Draft; config: HarnessConfig; saving: boolean;
   onChange: (d: Draft) => void; onCancel: () => void; onSave: () => void; onConnections: () => void;
 }) {
+  const { t } = useTranslation();
   const flip = (id: string) =>
     onChange({ ...draft, servers: draft.servers.includes(id) ? draft.servers.filter((s) => s !== id) : [...draft.servers, id] });
   const needsKey = draft.servers.filter((s) => !consented(config, s));
   return (
     <section className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 12, borderColor: 'var(--cth-lemon)' }}>
       <div className="pro-row">
-        <strong style={{ fontSize: 14 }}>{draft.id ? 'Edit bundle' : 'New bundle'}</strong>
+        <strong style={{ fontSize: 14 }}>{draft.id ? t('pro.caps.editBundle') : t('pro.caps.newBundle')}</strong>
       </div>
       <div className="pro-row" style={{ flexWrap: 'wrap' }}>
-        <input className="pro-input" style={{ flex: 1, minWidth: 200 }} placeholder="Name, e.g. Data Analyst" maxLength={40} autoFocus
+        <input className="pro-input" style={{ flex: 1, minWidth: 200 }} placeholder={t('pro.caps.namePlaceholder')} maxLength={40} autoFocus
           value={draft.label} onChange={(e) => onChange({ ...draft, label: e.target.value })}
           onKeyDown={(e) => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }} />
-        <div className="pro-row" role="radiogroup" aria-label="Icon" style={{ gap: 4 }}>
+        <div className="pro-row" role="radiogroup" aria-label={t('pro.caps.icon')} style={{ gap: 4 }}>
           {BUNDLE_ICONS.map((ic) => (
             <button key={ic} role="radio" aria-checked={draft.icon === ic} title={ic}
               className="pro-btn" style={{ padding: 5, background: draft.icon === ic ? 'var(--cth-lemon-light)' : undefined, borderColor: draft.icon === ic ? 'var(--cth-lemon)' : undefined }}
@@ -264,13 +269,13 @@ function BundleEditor({ draft, config, saving, onChange, onCancel, onSave, onCon
       </div>
       {needsKey.length > 0 && (
         <p className="pro-sub" style={{ fontSize: 12, margin: 0 }}>
-          {needsKey.map(mcpLabel).join(', ')} {needsKey.length === 1 ? 'needs' : 'need'} a key before agents can use {needsKey.length === 1 ? 'it' : 'them'}:{' '}
-          <button className="pro-btn" style={{ padding: '1px 6px' }} onClick={onConnections}>set up in Connections</button>
+          {t(needsKey.length === 1 ? 'pro.caps.needsKeyOne' : 'pro.caps.needsKeyMany', { names: needsKey.map(mcpLabel).join(', ') })}{' '}
+          <button className="pro-btn" style={{ padding: '1px 6px' }} onClick={onConnections}>{t('pro.caps.setUpInConnections')}</button>
         </p>
       )}
       <div className="pro-row">
-        <button className="pro-btn pro-btn-primary" disabled={saving || !draft.label.trim()} onClick={onSave}>{saving ? 'Saving…' : 'Save bundle'}</button>
-        <button className="pro-btn" disabled={saving} onClick={onCancel}>Cancel</button>
+        <button className="pro-btn pro-btn-primary" disabled={saving || !draft.label.trim()} onClick={onSave}>{saving ? t('settings.saving') : t('pro.caps.saveBundle')}</button>
+        <button className="pro-btn" disabled={saving} onClick={onCancel}>{t('common.cancel')}</button>
       </div>
     </section>
   );

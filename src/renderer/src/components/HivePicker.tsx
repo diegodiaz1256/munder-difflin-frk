@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PixelPanel } from './PixelPanel';
 import { PixelButton } from './PixelButton';
 import { Icon } from './Icon';
@@ -43,6 +44,7 @@ function RunsOn({ path }: { path: string }) {
  * every switch is a clean process restart (cheap here, before any work is live).
  */
 export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
+  const { t } = useTranslation();
   const current = config.harnessHome;
   const recents = (config.recentHives ?? []).filter((h) => h && h !== current);
   const [busy, setBusy] = useState<string | undefined>();
@@ -63,7 +65,7 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
       // Success never returns (the process relaunches). A return means an error.
       if (!res.ok) {
         window.localStorage.removeItem(SKIP_KEY);
-        setError(res.error ?? 'Could not open that folder.');
+        setError(res.error ?? t('hivePicker.couldNotOpen'));
         setBusy(undefined);
       }
     } catch (e) {
@@ -91,20 +93,17 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
       padding: 32
     }}>
       <div style={{ width: 560, maxWidth: '94vw' }}>
-        <PixelPanel variant="dialog" title="SELECT A HARNESS CONFIG" noPadding>
+        <PixelPanel variant="dialog" title={t('hivePicker.title')} noPadding>
           <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
             <p style={{ margin: 0, fontSize: 12, lineHeight: '19px', color: 'var(--cth-ink-700)' }}>
-              A <strong>harness config</strong> is the folder where the app keeps everything for one
-              workspace — its settings, your agents and their memory, tasks, triggers, and history.
-              Each config is separate and self-contained, so you can run different setups side by side.
-              Open the one you were working in, switch to another, or start a new one.
+              <span dangerouslySetInnerHTML={{ __html: t('hivePicker.intro') }} />
             </p>
 
             {/* CURRENT — the last-used home, the one-click default. */}
             {current && (
               <div>
                 <div style={{ fontFamily: 'var(--cth-font-display)', fontSize: 9, color: 'var(--cth-ink-500)', marginBottom: 4 }}>
-                  CURRENT
+                  {t('hivePicker.current')}
                 </div>
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
@@ -121,7 +120,7 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
                     }}>{current}</div>
                   </div>
                   <PixelButton variant="primary" size="md" onClick={onOpenCurrent} disabled={!!busy}>
-                    open
+                    {t('hivePicker.open')}
                   </PixelButton>
                 </div>
               </div>
@@ -131,7 +130,7 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
             {recents.length > 0 && (
               <div>
                 <div style={{ fontFamily: 'var(--cth-font-display)', fontSize: 9, color: 'var(--cth-ink-500)', marginBottom: 4 }}>
-                  RECENT
+                  {t('hivePicker.recent')}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
                   {recents.map((h) => (
@@ -139,7 +138,7 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
                       key={h}
                       onClick={() => openHive(h)}
                       disabled={!!busy}
-                      title={`Switch to ${h} (reloads the app)`}
+                      title={t('hivePicker.switchTitle', { path: h })}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
                         background: 'var(--cth-paper-100)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)',
@@ -158,7 +157,7 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
                         }}>{h}</div>
                       </div>
                       <span style={{ fontSize: 11, color: 'var(--cth-ink-500)', flexShrink: 0 }}>
-                        {busy === h ? 'opening…' : 'switch →'}
+                        {busy === h ? t('hivePicker.opening') : t('hivePicker.switch')}
                       </span>
                     </button>
                   ))}
@@ -178,7 +177,7 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
 
             {busy && (
               <div style={{ fontSize: 12, color: 'var(--cth-ink-500)' }}>
-                Opening {folderName(busy)} — the app will reload…
+                {t('hivePicker.reloading', { name: folderName(busy) })}
               </div>
             )}
 
@@ -187,12 +186,12 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               <PixelButton variant="secondary" size="md" onClick={browse} disabled={!!busy}>
                 <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                  <Icon name="folder" /> open existing config…
+                  <Icon name="folder" /> {t('hivePicker.openExisting')}
                 </span>
               </PixelButton>
               <PixelButton variant="secondary" size="md" onClick={isWindows ? () => setCreating(true) : browse} disabled={!!busy}>
                 <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                  <Icon name="plus" /> create new config…
+                  <Icon name="plus" /> {t('hivePicker.createNew')}
                 </span>
               </PixelButton>
             </div>
@@ -209,18 +208,17 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
 function NewOffice({ onCancel, onWindows, onCreated, onError }: {
   onCancel: () => void; onWindows: () => void; onCreated: (path: string) => void; onError: (e: string | undefined) => void;
 }) {
+  const { t } = useTranslation();
   const [where, setWhere] = useState<'windows' | 'wsl'>('windows');
   const [distros, setDistros] = useState<string[] | null>(null);
   const [wslError, setWslError] = useState<string | null>(null);
-  const [mirrored, setMirrored] = useState(true);
   const [distro, setDistro] = useState('');
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     void window.cth.wslDistros().then((r) => {
       setDistros(r.distros);
-      setMirrored(r.mirrored !== false);
-      if (!r.ok || !r.distros.length) setWslError(r.error ?? 'No WSL distribution is installed.');
+      if (!r.ok || !r.distros.length) setWslError(r.error ?? t('hivePicker.noDistro'));
       else setDistro(r.distros[0]);
     });
   }, []);
@@ -229,12 +227,12 @@ function NewOffice({ onCancel, onWindows, onCreated, onError }: {
     setBusy(true);
     const r = await window.cth.wslCreateOffice(distro, name);
     setBusy(false);
-    if (r.ok && r.path) onCreated(r.path); else onError(r.error ?? 'Could not create it.');
+    if (r.ok && r.path) onCreated(r.path); else onError(r.error ?? t('hivePicker.couldNotCreate'));
   };
   const label = { fontFamily: 'var(--cth-font-display)', fontSize: 9, color: 'var(--cth-ink-500)' } as const;
   return (
     <div style={{ padding: 12, background: 'var(--cth-paper-100)', boxShadow: 'inset 0 0 0 2px var(--cth-ink-300)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={label}>NEW CONFIG · WHERE DOES IT RUN?</div>
+      <div style={label}>{t('hivePicker.newWhere')}</div>
       <div style={{ display: 'flex', gap: 8 }}>
         {(['windows', 'wsl'] as const).map((w) => (
           <button key={w} onClick={() => setWhere(w)} style={{
@@ -244,17 +242,17 @@ function NewOffice({ onCancel, onWindows, onCreated, onError }: {
           }}>
             <div style={{ fontWeight: 600, fontSize: 12 }}>{w === 'windows' ? 'Windows' : 'WSL (Linux)'}</div>
             <div style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>
-              {w === 'windows' ? 'Agents run on Windows, in a folder you pick.' : 'Agents, git and tools run inside a Linux distribution.'}
+              {w === 'windows' ? t('hivePicker.windowsDesc') : t('hivePicker.wslDesc')}
             </div>
           </button>
         ))}
       </div>
       {where === 'wsl' && (
-        distros === null ? <div style={{ fontSize: 12, color: 'var(--cth-ink-500)' }}>Looking for WSL…</div>
+        distros === null ? <div style={{ fontSize: 12, color: 'var(--cth-ink-500)' }}>{t('hivePicker.lookingForWsl')}</div>
         : wslError ? (
           <div style={{ fontSize: 12, lineHeight: '18px', color: 'var(--cth-ink-700)' }}>
             {wslError}<br />
-            Install it from an administrator PowerShell with <code>wsl --install -d Ubuntu</code> (virtualization must be on in the BIOS), then come back.
+            <span dangerouslySetInnerHTML={{ __html: t('hivePicker.installWsl') }} />
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -262,24 +260,18 @@ function NewOffice({ onCancel, onWindows, onCreated, onError }: {
               <select value={distro} onChange={(e) => setDistro(e.target.value)} style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 12 }}>
                 {distros.map((d) => <option key={d} value={d}>{d}</option>)}
               </select>
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="name, e.g. shop"
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('hivePicker.namePlaceholder')}
                 style={{ flex: 1, fontFamily: 'var(--cth-font-mono)', fontSize: 12, padding: '4px 6px' }} />
             </div>
-            <div style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>Created as <code>~/offices/{name.trim() || 'name'}</code> in {distro}.</div>
-            {!mirrored && (
-              <div style={{ fontSize: 11, lineHeight: '16px', color: 'var(--cth-ink-700)', background: 'var(--cth-lemon-light)', padding: '4px 6px' }}>
-                Agents in WSL report back to the app over localhost, which needs WSL's mirrored networking:
-                add <code>networkingMode=mirrored</code> under <code>[wsl2]</code> in <code>%UserProfile%\.wslconfig</code>, then run <code>wsl --shutdown</code>.
-              </div>
-            )}
+            <div style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>{t('hivePicker.createdAs', { name: name.trim() || t('hivePicker.name'), distro })}</div>
           </div>
         )
       )}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <PixelButton variant="secondary" size="md" onClick={onCancel}>cancel</PixelButton>
+        <PixelButton variant="secondary" size="md" onClick={onCancel}>{t('common.cancel')}</PixelButton>
         {where === 'windows'
-          ? <PixelButton variant="primary" size="md" onClick={onWindows}>pick a folder…</PixelButton>
-          : <PixelButton variant="primary" size="md" onClick={() => void create()} disabled={busy || !!wslError || !distro || !name.trim()}>{busy ? 'creating…' : 'create in WSL'}</PixelButton>}
+          ? <PixelButton variant="primary" size="md" onClick={onWindows}>{t('hivePicker.pickFolder')}</PixelButton>
+          : <PixelButton variant="primary" size="md" onClick={() => void create()} disabled={busy || !!wslError || !distro || !name.trim()}>{busy ? t('hivePicker.creating') : t('hivePicker.createInWsl')}</PixelButton>}
       </div>
     </div>
   );
