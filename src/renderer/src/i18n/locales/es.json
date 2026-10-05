@@ -317,7 +317,9 @@
       "modelDownloading": "Descargando… una sola vez, hasta unos cientos de MB",
       "modelFailed": "La descarga falló: {{error}}",
       "modelDone": "Modelo listo.",
-      "modelOffline": "La memoria nunca se conecta por su cuenta: este botón es la única vez que lo hace."
+      "modelOffline": "La memoria nunca se conecta por su cuenta: este botón es la única vez que lo hace.",
+      "modelTooOld": "El mempalace instalado no puede usar EmbeddingGemma y no se ha podido actualizar {{detail}}. Reinstálalo desde Ajustes → Requisitos, o cambia el modelo de memoria a MiniLM (solo inglés) en el panel de memoria.",
+      "modelDownloadingHint": "Si mempalace es demasiado antiguo para este modelo, la app lo actualiza antes (unos minutos)."
     },
     "connections": {
       "slack": "Slack",
