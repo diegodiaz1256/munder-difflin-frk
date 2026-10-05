@@ -4178,7 +4178,7 @@ ipcMain.handle('tools:status', async (): Promise<ToolStatus[]> => {
   const win = process.platform === 'win32';
   const mem = (() => { try { memory.resetBinCache(); return memory.status(); } catch { return null; } })();
   // A WSL floor: its agents and tools run inside the distro, so look there and
-  // give Linux install commands (memory stays on Windows, with the app).
+  // give Linux install commands (memory finds mempalace inside the distro too).
   const wslLoc = win ? parseWslPath(readConfig().harnessHome) : null;
   if (wslLoc) {
     const specs = toolCatalog();
@@ -4186,7 +4186,15 @@ ipcMain.handle('tools:status', async (): Promise<ToolStatus[]> => {
     const found = await probeInDistro(wslLoc.distro, specs.map((s) => s.bin).filter((b): b is string => !!b), (m) => { probeError = m; });
     return specs.map((spec): ToolStatus => {
       if (spec.id === 'mempalace') {
-        return { ...spec, installCommand: spec.install.win32, found: !!mem?.available, path: mem?.bin ?? null };
+        return {
+          ...spec,
+          installCommand: spec.install.posix,
+          found: !!mem?.available,
+          path: mem?.bin ?? null,
+          detail: mem?.available
+            ? `${mem.initialized ? 'palace initialised' : 'installed — palace not built yet'} (inside WSL ${wslLoc.distro})`
+            : `not installed inside WSL (${wslLoc.distro}); mempalace on Windows does not count for a WSL floor`
+        };
       }
       const installCommand = WSL_INSTALL[spec.id] ?? spec.install.posix.replace(/^xcode-select --install\s+# macOS · or: /, '');
       const path = spec.bin ? found[spec.bin] ?? null : null;
