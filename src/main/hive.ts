@@ -48,7 +48,7 @@ import { assignTaskKeys, normalizeTaskKeyLedger, taskKeyPrefix } from '../shared
 import { cleanServerList } from '../shared/roleBundles';
 import { detectProjectType, memoryInstruction, memoryTemplate, parseMemory, type ProjectType } from '../shared/memorySections';
 import { listsInstruction, parseList } from '../shared/lists';
-import { disallowedTools } from '../shared/nativeTools';
+import { blockedMcpServers, disallowedTools } from '../shared/nativeTools';
 import { MD_LISTS_MCP } from './listsMcp';
 
 /** The subset of HarnessConfig the hive consumes for the default-MCP merge.
@@ -1189,7 +1189,7 @@ export class HiveManager {
     // grant used to reach no agent at all. --mcp-config is additive to the user's
     // own servers. It takes several values, so the option pushed right after it
     // ends the list and nothing positional can be swallowed as a config path.
-    const mcp = this.buildDefaultMcpServers(meta.cwd, opts.mcpDefaults, opts.mcpGrant, meta.id, opts.mcpScopes);
+    const mcp = this.buildDefaultMcpServers(meta.cwd, opts.mcpDefaults, opts.mcpGrant, meta.id, opts.mcpScopes, opts.toolBlocks);
     const mcpPath = join(dir, 'mcp.json');
     if (Object.keys(mcp.servers).length) {
       this.writeJson(mcpPath, this.forAgentJson({ mcpServers: mcp.servers }));
@@ -1535,13 +1535,17 @@ export class HiveManager {
     cfg: McpDefaultsMap,
     grant?: string[],
     agentId?: string,
-    scopes?: Record<string, string[]>
+    scopes?: Record<string, string[]>,
+    toolBlocks?: string[]
   ): { servers: Record<string, McpServerEntry>; env: Record<string, string> } {
     const servers: Record<string, McpServerEntry> = {};
     const env: Record<string, string> = {};
     const keyed: string[] = [];
     const granted = grant ? new Set(cleanServerList(grant)) : null;
+    // Web taken away (Capabilities): no web-reading servers either.
+    const noWeb = blockedMcpServers(toolBlocks);
     for (const e of MCP_CATALOG) {
+      if (noWeb.has(e.id)) continue;
       // Keyed servers never run under the agent: their key would be in its
       // environment. They go through main's MCP gateway (mcpGateway.ts), which
       // holds the key; the agent only gets a capability token. A service can
