@@ -109,3 +109,11 @@ test('locale: UTF-8 defaults on darwin, the user\'s exported locale wins, win32 
   assert.ok(!('LANG' in win));
   assert.ok(!('LC_CTYPE' in win));
 });
+
+test('Windows `Path` is replaced, not kept beside the PATH built for the agent', () => {
+  // node-pty hands both to Windows, which reads the first one: the agent's PATH lost.
+  const env = buildPtyEnv({ Path: 'C:\old', SystemRoot: 'C:\Windows' }, 'C:\new;C:\Windows\System32', undefined, 'win32');
+  assert.equal(env.PATH, 'C:\new;C:\Windows\System32');
+  assert.deepEqual(Object.keys(env).filter((k) => k.toUpperCase() === 'PATH'), ['PATH']);
+  assert.equal(env.SystemRoot, 'C:\Windows');
+});

@@ -57,6 +57,10 @@ export function buildPtyEnv(
   for (const [k, v] of Object.entries(parentEnv)) {
     if (v === undefined) continue;
     if (CLAUDE_MARKER_RE.test(k) && !CLAUDE_CONFIG_KEEP.has(k)) continue;
+    // Windows calls it `Path`; we set `PATH` below. node-pty passes both into
+    // the environment block and Windows uses the FIRST, so the inherited one
+    // won and the PATH built for the agent was ignored.
+    if (k !== 'PATH' && k.toUpperCase() === 'PATH') continue;
     inherited[k] = v;
   }
   return {
