@@ -1,5 +1,5 @@
 - **Memory by project** and your own lists (have / want).
 - **Model and effort per role**; Web and Shell as capabilities.
 - Cards say **asks you** when an agent waits on a menu.
+- **Windows first run** installs Node and Claude.
 - The terminal prompt stays at the bottom.
-- WSL: agents starting together no longer hang.

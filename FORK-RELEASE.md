@@ -18,6 +18,11 @@ Memory by project and personal lists, control over models and tools per agent, a
 - **The prompt stays at the bottom.** After a menu closed, or coming back from Manager, the terminal could show blank space under Claude's prompt.
 - **Open a terminal here** works on Windows (Windows Terminal or cmd) and in WSL offices (inside the distribution); it failed with `spawn open ENOENT`.
 
+### First run on Windows
+- **The setup help installs for real.** On a machine without Node, it downloaded Node and then skipped every later step, so Claude was never installed and the orchestrator died with *"the command line is too long"*. Each step now runs in order and stops with a clear message if it fails; a checksum mismatch stops the install.
+- The app only relaunches the agent once its CLI is really there, and otherwise says why under the installer output.
+- Cursor's Windows installer runs through PowerShell. The first screen says *Welcome to Scranton Branch*.
+
 ### WSL offices
 - **The orchestrator and a worker starting together both start.** One of them could hang at "WSL bridge" until the 90 s timeout.
 
