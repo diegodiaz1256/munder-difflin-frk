@@ -31,8 +31,21 @@ export function opensInteractiveTerminalUi(input: string): boolean {
 
 /** Follow output only if the user was already at (or one line from) the bottom.
  * This keeps live TUIs visible without yanking someone reading scrollback. */
-export function shouldFollowTerminalOutput(viewportY: number, baseY: number): boolean {
-  return baseY - viewportY <= 1;
+export function shouldFollowTerminalOutput(viewportY: number, baseY: number, pinned = 0): boolean {
+  return baseY - viewportY <= 1 + pinned;
+}
+
+/** Blank screen rows under the content (and the cursor) that following output
+ *  should hide. A TUI like Claude Code redraws a region at the bottom; when it
+ *  shrinks (a menu closes) the rows it cleared stay blank below the prompt,
+ *  and "scrolled to the bottom" showed that empty space instead of the prompt.
+ *  Lifting the viewport by this many rows keeps the prompt at the bottom.
+ *  Capped by the scrollback there is to show above. */
+export function blankRowsBelowContent(screenRowBlank: boolean[], cursorRow: number, baseY: number): number {
+  let last = screenRowBlank.length - 1;
+  while (last >= 0 && screenRowBlank[last]) last--;
+  const lastUsed = Math.max(last, cursorRow);
+  return Math.max(0, Math.min(baseY, screenRowBlank.length - 1 - lastUsed));
 }
 
 /** How long an untouched draft on the prompt keeps blocking queue delivery.
