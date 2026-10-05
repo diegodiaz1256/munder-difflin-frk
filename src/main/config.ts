@@ -355,6 +355,10 @@ export interface HarnessConfig {
   providerBaseUrls?: Partial<Record<AgentProvider, string>>;
   /** Per-CLI-provider default model slug, used to pre-fill the model picker. */
   providerDefaultModels?: Partial<Record<AgentProvider, string>>;
+  /** Certificates for agents' HTTPS (custom endpoints, company gateways):
+   *  verify on/off, an extra CA file, and trusting the Windows / WSL stores.
+   *  See src/main/caBundle.ts. */
+  tls?: { verify?: boolean; caFile?: string; trustWindows?: boolean; trustWsl?: boolean };
   /** Master toggle for the Slack → Michael's-queue integration. */
   slackEnabled?: boolean;
   /** Slack app signing secret (Basic Information → Signing Secret). Never logged. */
@@ -748,6 +752,15 @@ export function writeConfig(patch: Partial<HarnessConfig>): HarnessConfig {
   // as it is picked from the folder dialog. Expand `~` here so the persisted list
   // (and therefore every agent's default cwd) is ABSOLUTE; Node's fs/spawn treat
   // `~` as a literal directory name and the spawn dies with `cwd does not exist`.
+  if (patch.tls !== undefined) {
+    const t = patch.tls && typeof patch.tls === 'object' ? patch.tls : {};
+    next.tls = {
+      verify: t.verify !== false,
+      caFile: typeof t.caFile === 'string' && t.caFile.trim() ? t.caFile.trim() : undefined,
+      trustWindows: t.trustWindows === true,
+      trustWsl: t.trustWsl === true
+    };
+  }
   if (Array.isArray(patch.registeredRepos)) {
     const seen = new Set<string>();
     next.registeredRepos = patch.registeredRepos

@@ -837,6 +837,9 @@ export class HiveManager {
        *  base URL for that engine). Passed here, never through process.env,
        *  which every later agent would inherit. */
       proxyUpstream?: string;
+      /** TLS for the proxy sidecar's upstream (the app's CA bundle, and
+       *  verification off only when the user chose it). */
+      tls?: { caFile?: string; insecure?: boolean };
       /** REST integrations this agent may call through the key broker (its
        *  MD_BROKER_TOKEN is granted for exactly these). Listed in its prompt with
        *  the md-api command; empty/undefined → no line. */
@@ -1059,7 +1062,7 @@ export class HiveManager {
             // slow sidecar start past the 4s ceiling), so try a few times before
             // giving up: without this ONE bad moment at spawn cost the agent its
             // hive events for the whole session.
-            const port = await this.startProxyBridgeWithRetry(meta.id, { sock, sessionId, api: desc.api, upstream });
+            const port = await this.startProxyBridgeWithRetry(meta.id, { sock, sessionId, api: desc.api, upstream, caFile: opts.tls?.caFile, insecure: opts.tls?.insecure });
             if (port > 0) this.proxyPorts.set(meta.id, port); else this.proxyPorts.delete(meta.id);
             // Only redirect the CLI through the proxy if the sidecar actually bound a
             // port. On failure leave routing untouched → the CLI talks to its real
@@ -1596,7 +1599,7 @@ export class HiveManager {
    *  listener. Resolves the bound port, or 0 once every attempt has failed. */
   private async startProxyBridgeWithRetry(
     agentId: string,
-    cfg: { sock: string; sessionId: string; api: 'openai' | 'anthropic'; upstream: string }
+    cfg: { sock: string; sessionId: string; api: 'openai' | 'anthropic'; upstream: string; caFile?: string; insecure?: boolean }
   ): Promise<number> {
     for (let attempt = 1; attempt <= PROXY_BIND_ATTEMPTS; attempt++) {
       const port = await this.startProxyBridge(agentId, cfg);
@@ -1611,7 +1614,7 @@ export class HiveManager {
 
   private startProxyBridge(
     agentId: string,
-    cfg: { sock: string; sessionId: string; api: 'openai' | 'anthropic'; upstream: string }
+    cfg: { sock: string; sessionId: string; api: 'openai' | 'anthropic'; upstream: string; caFile?: string; insecure?: boolean }
   ): Promise<number> {
     this.stopProxyBridge(agentId);
     const script = this.proxyShimPath();
@@ -1629,6 +1632,8 @@ export class HiveManager {
             HIVE_SOCK: cfg.sock,
             AGENT_ID: agentId,
             UPSTREAM_BASE_URL: cfg.upstream,
+            ...(cfg.caFile ? { UPSTREAM_CA_FILE: cfg.caFile } : {}),
+            ...(cfg.insecure ? { UPSTREAM_INSECURE: '1' } : {}),
             HIVE_PROXY_SESSION: cfg.sessionId,
             HIVE_PROXY_API: cfg.api
           },
@@ -3674,6 +3679,12 @@ const AGENT_ID = process.env.AGENT_ID || null;
 const UPSTREAM = process.env.UPSTREAM_BASE_URL || '';
 const SESSION = process.env.HIVE_PROXY_SESSION || null;
 const API = process.env.HIVE_PROXY_API === 'anthropic' ? 'anthropic' : 'openai';
+// TLS to the upstream (Settings → AI Engines → Certificates): the app's CA
+// bundle (Node's roots + the user's CA / Windows / WSL stores), and verification
+// off only when the user turned it off.
+let UPSTREAM_CA;
+try { if (process.env.UPSTREAM_CA_FILE) UPSTREAM_CA = require('fs').readFileSync(process.env.UPSTREAM_CA_FILE); } catch (e) {}
+const UPSTREAM_INSECURE = process.env.UPSTREAM_INSECURE === '1';
 
 function trimSlash(s) { while (s.length && s.charAt(s.length - 1) === '/') s = s.slice(0, -1); return s; }
 
@@ -3843,6 +3854,10 @@ const server = http.createServer(function (req, res) {
     path: target.pathname + target.search,
     headers: headers
   };
+  if (isHttps) {
+    if (UPSTREAM_CA) opts.ca = UPSTREAM_CA;
+    if (UPSTREAM_INSECURE) opts.rejectUnauthorized = false;
+  }
   const upReq = lib.request(opts, function (upRes) {
     res.writeHead(upRes.statusCode || 502, upRes.headers);
     const ct = String((upRes.headers['content-type'] || ''));
