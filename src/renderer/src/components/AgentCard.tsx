@@ -132,6 +132,16 @@ export function AgentCard({
     <div
       role="button"
       tabIndex={0}
+      // Select on press, not on release. The card sits in a draggable wrapper
+      // (reorder by drag), and a click that moved a couple of pixels became a
+      // drag start: the click never fired and the terminal did not switch.
+      // Controls inside the card (talk, rename, note) keep their own clicks.
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        const inner = (e.target as HTMLElement).closest('button, input, textarea, a, select');
+        if (inner && inner !== e.currentTarget) return;
+        onClick?.();
+      }}
       onClick={onClick}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;

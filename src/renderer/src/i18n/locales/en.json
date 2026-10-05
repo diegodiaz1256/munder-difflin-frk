@@ -288,7 +288,16 @@
       "adding": "adding…",
       "addFiles": "add files…",
       "docCount": "{{count}} document indexed",
-      "docCountPlural": "{{count}} documents indexed"
+      "docCountPlural": "{{count}} documents indexed",
+      "modelTitle": "Memory model",
+      "modelReady": "{{model}} is downloaded. Memory runs offline.",
+      "modelMissing": "{{model}} is not downloaded. Memory search and saving wait for it.",
+      "modelDownload": "Download model",
+      "modelUpdate": "Update model",
+      "modelDownloading": "Downloading… one time, up to a few hundred MB",
+      "modelFailed": "Download failed: {{error}}",
+      "modelDone": "Model ready.",
+      "modelOffline": "Memory never goes online by itself: this button is the only time it does."
     },
     "connections": {
       "slack": "Slack",
@@ -1417,5 +1426,10 @@
     "viewSource": "view source",
     "loading": "loading image…",
     "decodeFailed": "could not decode this image — the file may be corrupt or misnamed"
+  },
+  "floor": {
+    "clockOut": "Clock out?",
+    "clockOutDetail": "This closes Scranton Branch. Agents that are running get asked to stop first.",
+    "clockOutOk": "Clock out"
   }
 }
