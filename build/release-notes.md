@@ -1,5 +1,5 @@
-- **Memory:** offline, a graph of what agents know.
-- **Hiring:** proposals arrive as a CV to approve.
-- **Remote Control:** a button that shows its state.
-- **WSL:** the orchestrator always starts again.
-- **Smoother terminals** and readable bubbles.
+- **Memory by project** and your own lists (have / want).
+- **Model and effort per role**; Web and Shell as capabilities.
+- Cards say **asks you** when an agent waits on a menu.
+- The terminal prompt stays at the bottom.
+- WSL: agents starting together no longer hang.
