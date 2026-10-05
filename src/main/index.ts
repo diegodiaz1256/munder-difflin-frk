@@ -38,6 +38,7 @@ import {
 } from './git';
 import { linkWorktreeDeps, unlinkWorktreeDeps } from './worktreeDeps';
 import { excludeOfficeFromRepo } from './gitExclude';
+import { openTerminalAt } from './openTerminal';
 import { HiveManager, type AgentMeta, type HiveMessage, type HiveTask } from './hive';
 import { HookServer } from './hooks';
 import { CircuitBreaker, type BreakerInput } from './breaker';
@@ -3060,8 +3061,31 @@ ipcMain.handle('pty:spawn', async (evt, opts: AgentSpawnOptions) => {
   // Record the spawning window as the PTY's owner so its output routes ONLY back
   // to that floor, then run the shared spawn core.
   const owner = BrowserWindow.fromWebContents(evt.sender)?.webContents ?? null;
-  return spawnAgentCore(opts, owner);
+  // A start that never finishes used to leave the UI waiting forever (the
+  // orchestrator never appeared, and nothing said why). Give up after 90 s
+  // with the step it was stuck on; the core keeps its own log of steps.
+  let timer: NodeJS.Timeout | undefined;
+  const watchdog = new Promise<{ ok: false; error: string }>((resolve) => {
+    timer = setTimeout(() => {
+      const at = spawnSteps.get(opts.id) ?? 'starting';
+      console.error(`[spawn ${opts.id}] still not started after 90 s (at: ${at})`);
+      resolve({ ok: false, error: `it did not start within 90 s (stuck at: ${at})` });
+    }, 90_000);
+  });
+  try {
+    return await Promise.race([spawnAgentCore(opts, owner), watchdog]);
+  } finally {
+    clearTimeout(timer);
+    spawnSteps.delete(opts.id);
+  }
 });
+
+/** The step each agent start is on, for the watchdog and the log. */
+const spawnSteps = new Map<string, string>();
+function spawnStep(id: string, step: string): void {
+  spawnSteps.set(id, step);
+  console.log(`[spawn ${id}] ${step}`);
+}
 
 /** Core agent-spawn logic — provider inference, the missing-CLI installer
  *  short-circuit, git-worktree isolation, hive provisioning, model/resume flags,
@@ -3223,6 +3247,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // for every agent's HTTPS and for the qwen/crush proxy's upstream. An agent's
   // own env still wins.
   const tlsCfg = readConfig().tls;
+  spawnStep(opts.id, 'certificates');
   const caBundle = tlsActive(tlsCfg) ? (await ensureCaBundle()).path : null;
   if (tlsActive(tlsCfg)) opts.env = { ...tlsEnv(tlsCfg, caBundle), ...(opts.env ?? {}) };
   const proxyTls = { caFile: caBundle ?? undefined, insecure: tlsCfg?.verify === false };
@@ -3256,6 +3281,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
       }
     }
     try {
+      spawnStep(opts.id, 'preparing the agent in the hive');
       const inj = await hive.ensureAgent(
         { ...opts.hive, cwd: opts.cwd, provider },
         {
@@ -3502,6 +3528,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // the TUI to it so the thread is visible in ChatGPT mobile. Best-effort: an
   // unavailable/older Codex install still gets a normal local terminal.
   if (provider === 'codex' && opts.hive?.id) {
+    spawnStep(opts.id, 'Codex remote');
     await enableCodexRemoteForSpawn(opts, opts.hive.id);
   }
   // A WSL floor: its agents reach the hook server, MCP gateway, key broker and
@@ -3527,7 +3554,9 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
       // refuse to start rather than point the agent there.
       const mirrored = mirroredNetworking();
       for (const l of listeners) {
+        spawnStep(opts.id, `WSL bridge: ${l.name}`);
         const p = await bridge.ensure(l);
+        spawnStep(opts.id, `WSL bridge: ${l.name} → ${p}`);
         if (l.name === 'hooks' && typeof p === 'number') opts.env = { ...(opts.env ?? {}), HIVE_SOCK: `tcp://127.0.0.1:${p}` };
         if (typeof p === 'number' || (p === 'direct' && mirrored)) continue;
         console.warn(`[wsl-bridge] ${l.name}: ${p}`);
@@ -3547,7 +3576,9 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
       return { ok: false, error: `Could not start the agent in WSL (${wslLoc.distro}): ${e instanceof Error ? e.message : describeWslError(e, wslLoc.distro)}` };
     }
   }
+  spawnStep(opts.id, 'starting the terminal');
   const res = ptyManager.spawn(opts, owner);
+  spawnStep(opts.id, res.ok ? 'started' : `failed: ${res.error}`);
   if (res.ok) analytics.track('agent_spawned', { provider });
   else analytics.track('agent_spawn_failed', { provider, reason: spawnFailReason(res.error) });
   syncKeepAwake(); // arm the power-save blocker while ≥1 agent PTY is alive (#18)
@@ -3650,19 +3681,10 @@ ipcMain.handle('dialog:chooseFolder', async (evt) => {
   return { ok: true as const, path: res.filePaths[0] };
 });
 
-// ─── IPC: Terminal.app at a folder ──────────────────────────────────────────
+// ─── IPC: a terminal at a folder (any platform; a WSL folder opens in its distro) ─
 ipcMain.handle('terminal:openAtFolder', async (_evt, cwd: unknown) => {
   if (typeof cwd !== 'string' || cwd.length === 0) return { ok: false, error: 'invalid cwd' };
-  return new Promise<{ ok: boolean; error?: string }>((resolve) => {
-    const p = spawn('open', ['-a', 'Terminal', cwd]);
-    let err = '';
-    p.stderr.on('data', (d) => { err += d.toString(); });
-    p.on('error', (e) => resolve({ ok: false, error: e.message }));
-    p.on('close', (code) => {
-      if (code === 0) resolve({ ok: true });
-      else resolve({ ok: false, error: err.trim() || `open exited ${code}` });
-    });
-  });
+  return openTerminalAt(cwd);
 });
 
 // ─── IPC: integrations (Phase 2 registry — backend for Ryan's Settings UI) ────
