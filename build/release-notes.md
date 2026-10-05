@@ -1,8 +1,5 @@
-- **Environment & secrets:** agents use secrets, never see them.
-- **Factories:** watch a software factory work, send it tasks.
-- **New name: Scranton Branch.** Your data comes along.
-- **Team:** post-quantum, over MQTT or ntfy.
-- **Server edition:** offices on Ubuntu or Docker.
-- **Agents never see Connections keys.**
-- **Manager layout** next to the Floor.
-- **No analytics.**
+- **WSL offices:** agents, memory and git run inside Linux.
+- **Certificates:** trust company or local CAs for endpoints.
+- **Safer:** agents can't see or steer secrets.
+- **Uninstall** even when security software blocks it.
+- **Clearer errors** when WSL or a tool is missing.
