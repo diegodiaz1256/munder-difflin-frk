@@ -1,6 +1,7 @@
 import { useState, useEffect, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { agentModels, type HarnessConfig } from '@/store/config';
+import { RoleModelsSettings } from './RoleModelsSettings';
 import { useStore } from '@/store/store';
 import {
   CLONE_NODE_BLURB,
@@ -1224,6 +1225,16 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                             ))}
                           </div>
                         </div>
+                      </div>
+
+                      <div style={{ height: 1, background: 'var(--cth-ink-300)' }} />
+
+                      <div>
+                        <div style={sectionHead}>{t('settings.agentsModels.perRole')}</div>
+                        <span style={{ display: 'block', fontSize: 12, lineHeight: '16px', color: 'var(--cth-ink-500)', marginBottom: 8 }}>
+                          {t('settings.agentsModels.perRoleDesc')}
+                        </span>
+                        <RoleModelsSettings config={config} stage={stage} selectStyle={slackInputStyle} agentModel={defaultModelSel} setAgentModel={saveDefaultModel} />
                       </div>
 
                       <div style={{ height: 1, background: 'var(--cth-ink-300)' }} />

@@ -217,6 +217,10 @@ export interface HarnessConfig {
   /** The model GOD runs on. Unset falls back to the provider preset's
    *  `recommendedOrchestratorModel`, then MODEL_GOD. Default 'claude-opus-5-5'. */
   godModel?: string;
+  /** Model for temps (one-job workers the orchestrator starts); unset = defaultModel. Claude only. */
+  tempModel?: string;
+  /** Claude Code --effort per kind of agent (god / agent / temp); unset = Claude's own default. */
+  roleEffort?: Partial<Record<'god' | 'agent' | 'temp', 'low' | 'medium' | 'high' | 'xhigh' | 'max'>>;
   /** Per-server consent state for the default MCP bundle, keyed by catalog id.
    *  Seeded from MCP_CATALOG (safe-readonly ON, write/secret OFF); the user flips
    *  these in Settings. A server is wired into an agent only when enabled here. */
