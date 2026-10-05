@@ -35,10 +35,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Live pids in process group `pgid` (empty when the group is gone). */
 function groupPids(pgid) {
+  // Live members only: a killed process that nobody has reaped yet is a zombie
+  // (state Z). Where PID 1 does not reap orphans (some containers), killed
+  // children stay listed that way, yet they are gone.
   try {
-    return execFileSync('pgrep', ['-g', String(pgid)], { encoding: 'utf8' })
-      .split('\n').map((s) => s.trim()).filter(Boolean).map(Number);
-  } catch { return []; } // pgrep exits 1 when no match
+    return execFileSync('ps', ['-o', 'pid=,stat=', '-g', String(pgid)], { encoding: 'utf8' })
+      .split('\n').map((s) => s.trim()).filter(Boolean)
+      .filter((l) => !/^\d+\s+Z/.test(l))
+      .map((l) => Number(l.split(/\s+/)[0]));
+  } catch { return []; } // ps exits 1 when no match
 }
 
 /** Spawn a detached (own-process-group) leader that traps HUP, with a child. */

@@ -25,7 +25,7 @@ import {
   symlinkSync, unlinkSync, copyFileSync, cpSync, chmodSync
 } from 'node:fs';
 import { join, dirname, basename, isAbsolute, relative, resolve } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { spawnSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes, createHash } from 'node:crypto';
 import type { AgentUsageSample } from './usage';
@@ -209,6 +209,26 @@ export interface SpawnInjection {
    *  (today: the proxy-bridge sidecar never bound after retries, so a proxy-tier
    *  agent such as Crush runs without hive events). Human-readable, one line. */
   degraded?: string;
+}
+
+/** Longest path a Unix socket can be bound at, with room to spare (sun_path is
+ *  104 bytes on macOS, 108 on Linux, NUL included). */
+const MAX_SOCK_PATH = 100;
+
+/**
+ * Where the hook socket goes for a hive `root` (POSIX). Normally
+ * `<root>/hooks.sock`; when that path is too long to bind (an office deep in
+ * the home folder, iCloud Drive…) every bind failed and the floor ran with
+ * hooks allowed and no cost recorded. Then: a short per-user path, named by a
+ * hash of the root so two offices never share it — in $XDG_RUNTIME_DIR (a
+ * private per-user folder) when there is one, else a 0700 folder in the temp dir.
+ */
+export function hookSockPath(root: string, env: { runtimeDir?: string; tmp: string; uid?: number }): string {
+  const normal = join(root, 'hooks.sock');
+  if (Buffer.byteLength(normal) <= MAX_SOCK_PATH) return normal;
+  const id = createHash('sha1').update(root).digest('hex').slice(0, 12);
+  const base = env.runtimeDir && env.runtimeDir.trim() ? env.runtimeDir : join(env.tmp, `scranton-branch-${env.uid ?? 'u'}`);
+  return join(base, `md-hooks-${id}.sock`);
 }
 
 /** A message id / agent id usable as a file or folder name: no separators, no `..`. */
@@ -477,7 +497,21 @@ export class HiveManager {
       const id = createHash('sha1').update(root).digest('hex').slice(0, 12);
       return `\\\\.\\pipe\\munder-difflin-${id}`;
     }
-    return join(root, 'hooks.sock');
+    const sock = hookSockPath(root, { runtimeDir: process.env.XDG_RUNTIME_DIR, tmp: tmpdir(), uid: process.getuid?.() });
+    // The short fallback lives in a folder only this user can open (the hook
+    // server takes no password: who can reach the socket can speak for agents).
+    if (sock !== join(root, 'hooks.sock')) {
+      try {
+        mkdirSync(dirname(sock), { recursive: true, mode: 0o700 });
+        // Someone else's folder (made first in a shared /tmp), or one others
+        // can open, is never used: keep the normal path, whose bind failure is
+        // reported, rather than a socket another user could take over.
+        const st = lstatSync(dirname(sock));
+        const mine = typeof process.getuid !== 'function' || st.uid === process.getuid();
+        if (!st.isDirectory() || !mine || (st.mode & 0o077) !== 0) return join(root, 'hooks.sock');
+      } catch { return join(root, 'hooks.sock'); }
+    }
+    return sock;
   }
   private shimPath(): string | null {
     const root = this.root();

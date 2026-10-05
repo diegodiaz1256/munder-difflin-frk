@@ -48,7 +48,8 @@ test('closing with staged changes asks first, instead of dropping them', () => {
   const i = MODAL.indexOf('const requestClose');
   const body = MODAL.slice(i, i + 300);
   assert.match(body, /dirty/, 'the guard does not check for staged changes');
-  assert.match(body, /window\.confirm/, 'the guard does not actually ask');
+  // A native dialog through the preload (window.cth.confirm) or the DOM one.
+  assert.match(body, /window\.(cth\.)?confirm\(/, 'the guard does not actually ask');
   // And the footer button must use it, not raw onClose.
   assert.match(MODAL, /onClick=\{requestClose\}/, 'the footer Close bypasses the guard');
 });
