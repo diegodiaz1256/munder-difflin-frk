@@ -288,7 +288,16 @@
       "adding": "添加中…",
       "addFiles": "添加文件…",
       "docCount": "已索引 {{count}} 个文档",
-      "docCountPlural": "已索引 {{count}} 个文档"
+      "docCountPlural": "已索引 {{count}} 个文档",
+      "modelTitle": "记忆模型",
+      "modelReady": "{{model}} 已下载。记忆离线运行。",
+      "modelMissing": "{{model}} 尚未下载。记忆搜索和保存将等待它。",
+      "modelDownload": "下载模型",
+      "modelUpdate": "更新模型",
+      "modelDownloading": "正在下载…仅一次，最多几百 MB",
+      "modelFailed": "下载失败：{{error}}",
+      "modelDone": "模型已就绪。",
+      "modelOffline": "记忆不会自行联网：只有这个按钮会。"
     },
     "connections": {
       "slack": "Slack",
