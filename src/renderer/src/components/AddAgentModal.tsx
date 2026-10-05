@@ -189,7 +189,9 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
   const [name, setName] = useState(pendingHire?.name ?? 'Jim');
   const [character, setCharacter] = useState<OfficeCharacterName>(knownCharacter(pendingHire?.character));
   const [accent, setAccent] = useState<AccentColorName>(knownAccent(pendingHire?.accent));
-  const [cwd, setCwd] = useState<string>(config.registeredRepos[0] ?? '');
+  // No project registered yet (a new office): the office folder itself, so a
+  // hire is never stopped at "Pick a folder first" with nothing to pick.
+  const [cwd, setCwd] = useState<string>(config.registeredRepos[0] ?? config.harnessHome ?? '');
   // Local mirror of the registered projects so one added from here shows as a
   // quick-pick immediately (the `config` prop is a snapshot taken at open time).
   const [repos, setRepos] = useState<string[]>(config.registeredRepos);
@@ -202,6 +204,8 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
   );
   const [description, setDescription] = useState(pendingHire?.description ?? 'a fresh harness');
   const [hireMeta, setHireMeta] = useState<HireManifest | null>(pendingHire);
+  /** A hire opens as a CV to read; "Edit details" switches to the full form. */
+  const [cvMode, setCvMode] = useState<boolean>(!!pendingHire);
 
   // Picking a model rebuilds the command; the command field stays editable for
   // power users (it's the source of truth for the actual spawn).
@@ -335,6 +339,8 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
    *  manifest can never inject the spawn binary. Import never spawns. */
   const applyManifest = (m: HireManifest) => {
     setHireMeta(m);
+    setCvMode(true);
+    setCwd((c) => c || config.harnessHome || '');
     setName(m.name);
     // A manifest that names an agent but omits `character` should get the
     // matching avatar rather than the Jim default (issue #191).
@@ -528,7 +534,18 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
               around the section pane. maxHeight keeps the dialog within the
               viewport (title bar stays pinned). */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16, maxHeight: '86vh', overflowY: 'auto' }}>
-            {hireMeta && (
+            {hireMeta && cvMode && (
+              <HireCv
+                m={hireMeta}
+                character={character}
+                accent={accent}
+                engine={[provider, model].filter(Boolean).join(' · ')}
+                cwd={cwd}
+                onPickFolder={async () => { const r = await window.cth.chooseFolder(); if (r.ok) setCwd(r.path); }}
+                progress={reviewProgress ? tr('addAgent.hireProgress', { current: reviewProgress.current, total: reviewProgress.total }) : undefined}
+              />
+            )}
+            {hireMeta && !cvMode && (
               <div style={{
                 padding: '6px 10px',
                 background: 'var(--cth-lemon-light, #fdf3cf)',
@@ -627,8 +644,8 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
               </div>
             )}
 
-            {/* sidebar index + the active section's fields */}
-            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+            {/* sidebar index + the active section's fields (hidden behind the CV) */}
+            <div style={{ display: hireMeta && cvMode ? 'none' : 'flex', gap: 16, alignItems: 'flex-start' }}>
               {/* LEFT — section index. Capabilities isn't a nav item: it isn't a
                   user field, it rides the imported hire manifest (banner above). */}
               <nav style={{ width: 168, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1136,12 +1153,15 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
                 {tr('addAgent.importHireBtn')}
               </PixelButton>
               <div style={{ flex: 1 }} />
+              {hireMeta && cvMode && (
+                <PixelButton variant="secondary" size="md" onClick={() => setCvMode(false)} disabled={busy}>{tr('addAgent.cv.edit')}</PixelButton>
+              )}
               {pendingHire && (
                 <PixelButton variant="secondary" size="md" onClick={skipHire} disabled={busy}>{tr('addAgent.skipHire')}</PixelButton>
               )}
               <PixelButton variant="ghost" size="md" onClick={onClose} disabled={busy}>{tr('common.cancel')}</PixelButton>
               <PixelButton variant="primary" size="md" onClick={submit} disabled={busy}>
-                {busy ? tr('addAgent.spawning') : tr('addAgent.spawn')}
+                {busy ? tr('addAgent.spawning') : hireMeta && cvMode ? tr('addAgent.cv.hire', { name }) : tr('addAgent.spawn')}
               </PixelButton>
             </div>
           </div>
@@ -1162,6 +1182,64 @@ const inputStyle: React.CSSProperties = {
   color: 'var(--cth-ink-900)',
   outline: 'none'
 };
+
+/** A hire read like a CV: who they are, what they will do, what they need.
+ *  Everything comes from the manifest already applied to the form. */
+function HireCv({ m, character, accent, engine, cwd, onPickFolder, progress }: {
+  m: HireManifest; character: OfficeCharacterName; accent: AccentColorName; engine: string;
+  cwd: string; onPickFolder: () => void; progress?: string;
+}) {
+  const { t: tr } = useTranslation();
+  const skills = [...(m.capabilities ?? []), ...(m.skills ?? [])];
+  const head: React.CSSProperties = {
+    fontFamily: 'var(--cth-font-display)', fontSize: 8, lineHeight: '12px',
+    color: 'var(--cth-ink-700)', textTransform: 'uppercase', marginBottom: 4
+  };
+  return (
+    <div style={{ display: 'flex', gap: 18, alignItems: 'stretch', minHeight: 300 }}>
+      <div style={{
+        width: 190, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+        padding: '16px 10px', background: `var(--cth-${accent}-light)`, boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)'
+      }}>
+        <SpritePortrait character={character} scale={4} />
+        <strong style={{ fontFamily: 'var(--cth-font-display)', fontSize: 14, color: 'var(--cth-ink-900)', textAlign: 'center' }}>{m.name}</strong>
+        {m.description && <span style={{ fontSize: 12, color: 'var(--cth-ink-700)', textAlign: 'center', lineHeight: 1.4 }}>{m.description}</span>}
+        {m.author && <span style={{ fontSize: 11, color: 'var(--cth-ink-500)', textAlign: 'center' }}>{tr('addAgent.cv.proposedBy', { author: m.author })}</span>}
+        {progress && <span style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>{progress}</span>}
+      </div>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {m.goal && (
+          <div>
+            <div style={head}>{tr('addAgent.cv.mission')}</div>
+            <div style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--cth-ink-900)', maxHeight: 150, overflowY: 'auto', whiteSpace: 'pre-wrap' }}>{m.goal}</div>
+          </div>
+        )}
+        {skills.length > 0 && (
+          <div>
+            <div style={head}>{tr('addAgent.cv.skills')}</div>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {skills.map((s) => (
+                <span key={s} style={{ fontSize: 12, padding: '1px 6px', background: 'var(--cth-cream-100)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)', color: 'var(--cth-ink-900)' }}>{s}</span>
+              ))}
+            </div>
+          </div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 14px', fontSize: 13, alignItems: 'baseline' }}>
+          <span style={head}>{tr('addAgent.cv.engine')}</span>
+          <span style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 12 }}>{engine || '—'}</span>
+          <span style={head}>{tr('addAgent.cv.worksIn')}</span>
+          <span style={{ display: 'flex', gap: 8, alignItems: 'baseline', minWidth: 0 }}>
+            <span style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{cwd || '—'}</span>
+            <button type="button" onClick={onPickFolder} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--cth-ink-700)', textDecoration: 'underline' }}>{tr('addAgent.cv.change')}</button>
+          </span>
+          <span style={head}>{tr('addAgent.cv.budget')}</span>
+          <span style={{ fontSize: 12 }}>{m.tokenCap ? tr('addAgent.cv.tokens', { count: m.tokenCap.toLocaleString() }) : tr('addAgent.cv.noCap')}</span>
+        </div>
+        <span style={{ fontSize: 11, color: 'var(--cth-ink-500)', marginTop: 'auto' }}>{tr('addAgent.cv.hint')}</span>
+      </div>
+    </div>
+  );
+}
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
