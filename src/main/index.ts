@@ -1022,7 +1022,18 @@ ptyManager.setExitHandler((id, exitCode, info) => {
     // Activation funnel: did the auto-installer actually complete? A non-zero exit
     // is the Linux-installer-cannot-finish-unattended signal that used to be silent.
     const provider = pending.opts.provider ?? inferAgentProvider(pending.opts.command, undefined);
-    if (exitCode === 0) {
+    // A clean exit is not proof: an installer can "succeed" without leaving the
+    // CLI where we look. Relaunching then started a missing binary through
+    // cmd.exe ("the command line is too long") and wiped the installer's output.
+    const installed = exitCode === 0 && ptyManager.isCommandAvailable(pending.bin);
+    if (exitCode === 0 && !installed) {
+      const wc = (pending.owner && !pending.owner.isDestroyed()) ? pending.owner : liveWebContents();
+      const msg = `\r\n\x1b[31m  [x] The installer finished, but "${pending.bin}" still cannot be found.\x1b[0m\r\n` +
+        '  Close and reopen Scranton Branch (a fresh install is only on the PATH of new programs),\r\n' +
+        '  or install it by hand, then restart the agent.\r\n';
+      try { wc?.send(`pty:data:${id}`, msg); } catch { /* window gone */ }
+    }
+    if (installed) {
       analytics.track('agent_install_finished', { provider, rung: pending.rung, outcome: 'agent_launched' });
       // Re-arm the renderer's pooled terminal (clear the "process exited" line +
       // re-enable input) so the freshly-spawned CLI paints onto a clean, typeable
