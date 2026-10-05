@@ -128,7 +128,20 @@ const isDev = !!process.env.ELECTRON_RENDERER_URL;
 // NOT take the whole app and every running agent down with it. Log and continue
 // rather than letting the default handler exit the process.
 // (Restored during the #71 merge — the PR's rebase dropped these handlers.)
+// A closed stdout/stderr (the terminal or pipe that launched the app went
+// away) makes every console write fail with EPIPE. Unhandled, each failure
+// came back here, was logged through the same broken stream, failed again,
+// and the main process spun on it: 0% idle, every IPC call ~1 s, the whole
+// UI stuttering. Swallow those stream errors; log nothing about them.
+for (const stream of [process.stdout, process.stderr]) {
+  stream?.on?.('error', () => { /* the console is gone; nothing to tell it */ });
+}
+const isBrokenConsole = (err: unknown): boolean => {
+  const code = (err as { code?: string } | null)?.code;
+  return code === 'EPIPE' || code === 'ERR_STREAM_DESTROYED' || code === 'EIO';
+};
 process.on('uncaughtException', (err) => {
+  if (isBrokenConsole(err)) return;
   console.error('[main] uncaughtException (kept alive):', err);
 });
 process.on('unhandledRejection', (reason) => {
