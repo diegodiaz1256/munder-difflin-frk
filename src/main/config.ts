@@ -13,7 +13,7 @@ import { defaultMcpDefaults } from '../shared/mcpCatalog';
 import { MAX_AGENT_TOKEN_CAP } from '../shared/tokenCaps';
 import { cleanServerList } from '../shared/roleBundles';
 import { expandTilde, normalizeHiveHome } from './fs';
-import { distroHomeUnc, parseWslPath } from './wsl';
+import { distroHomeUnc, fromLinuxPath, parseWslPath } from './wsl';
 import { hasPlainSecrets, mergeSecrets, splitSecrets, type SecretCodec } from './configSecrets';
 import type { IntegrationRecord } from '../shared/integrations';
 import {
@@ -763,8 +763,12 @@ export function writeConfig(patch: Partial<HarnessConfig>): HarnessConfig {
   }
   if (Array.isArray(patch.registeredRepos)) {
     const seen = new Set<string>();
+    // On a WSL floor a typed `/home/u/repo` or `~/repo` is inside the distro.
+    const floorWsl = process.platform === 'win32' ? parseWslPath(next.harnessHome) : null;
     next.registeredRepos = patch.registeredRepos
-      .map((r) => expandTilde(r))
+      .map((r) => (floorWsl && typeof r === 'string' && /^(\/|~(\/|$))/.test(r.trim())
+        ? fromLinuxPath(r, floorWsl.distro, () => distroHomeUnc(floorWsl.distro))
+        : expandTilde(r)))
       .filter((r) => r && !seen.has(r) && (seen.add(r), true));
   }
   // The HIVE HOME needs the exact same treatment as registeredRepos above, and for
