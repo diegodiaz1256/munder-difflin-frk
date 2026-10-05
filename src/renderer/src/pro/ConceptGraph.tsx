@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ConceptGraph as Graph, MemoryDoc } from '@shared/memoryGraph';
 import { forceLayout, type LayoutEdge, type LayoutNode } from '@/components/memoryGraph/forceLayout';
 
@@ -11,6 +12,7 @@ import { forceLayout, type LayoutEdge, type LayoutNode } from '@/components/memo
 export function ConceptGraph({ graph, docs, selected, onSelect }: {
   graph: Graph; docs: MemoryDoc[]; selected: string | null; onSelect: (conceptId: string | null) => void;
 }) {
+  const { t } = useTranslation();
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 600, h: 420 });
   const [hover, setHover] = useState<string | null>(null);
@@ -61,7 +63,7 @@ export function ConceptGraph({ graph, docs, selected, onSelect }: {
 
   if (!graph.concepts.length) {
     return <div ref={box} style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center' }}>
-      <p className="pro-sub" style={{ maxWidth: 360, textAlign: 'center' }}>Nothing remembered yet. As agents write their memory and deliverables, the names they keep coming back to show up here.</p>
+      <p className="pro-sub" style={{ maxWidth: 360, textAlign: 'center' }}>{t('pro.graph.empty')}</p>
     </div>;
   }
 
@@ -110,7 +112,7 @@ export function ConceptGraph({ graph, docs, selected, onSelect }: {
         })}
       </svg>
       <div className="pro-sub" style={{ position: 'absolute', insetInlineStart: 10, bottom: 8, fontSize: 11, display: 'flex', gap: 12 }}>
-        <span>● concept</span><span>■ agent</span><span>▯ document</span>
+        <span>● {t('pro.graph.concept')}</span><span>■ {t('pro.graph.agent')}</span><span>▯ {t('pro.graph.document')}</span>
       </div>
     </div>
   );
