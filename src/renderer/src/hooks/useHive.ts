@@ -417,7 +417,13 @@ export function useHive(config: HarnessConfig | null): void {
         hive: { id: GOD_ID, name: godName, provider: godProvider, cwd: config.harnessHome!, isGod: true, role: 'orchestrator (god)' }
       });
       if (cancelled) { godSpawning.current = false; return; }
-      if (!res.ok) { godSpawning.current = false; useStore.getState().setGodStatus('failed'); return; }
+      if (!res.ok) {
+        godSpawning.current = false;
+        useStore.getState().setGodError(res.error ?? 'the orchestrator did not start');
+        useStore.getState().setGodStatus('failed');
+        return;
+      }
+      useStore.getState().setGodError(null);
       const god: Agent = {
         id: GOD_ID,
         name: godName,

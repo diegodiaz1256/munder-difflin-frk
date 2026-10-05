@@ -218,6 +218,9 @@ interface State {
   toolCounts: Record<string, number>;
   bumpToolCount: (id: string) => void;
   setGodStatus: (status: GodStatus) => void;
+  /** Why the orchestrator could not start (shown on the floor). */
+  godError: string | null;
+  setGodError: (error: string | null) => void;
   select: (id: string) => void;
   updateAgent: (id: string, patch: Partial<Agent>) => void;
   /** Copy durable hive roles onto roster descriptions (and the reverse is a
@@ -693,6 +696,8 @@ export const useStore = create<State>((set, get) => ({
   sidebarWidth: initialSidebarWidth,
   sidebarTab: initialSidebarTab,
   godStatus: 'booting',
+  godError: null,
+  setGodError: (error) => set({ godError: error }),
   messageQueues: initialQueues,
   toolCounts: {},
   bumpToolCount: (id) =>

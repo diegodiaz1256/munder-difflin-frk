@@ -1431,5 +1431,9 @@
     "clockOut": "Clock out?",
     "clockOutDetail": "This closes Scranton Branch. Agents that are running get asked to stop first.",
     "clockOutOk": "Clock out"
+  },
+  "app": {
+    "godFailed": "The orchestrator could not start:",
+    "godRetry": "Retry"
   }
 }

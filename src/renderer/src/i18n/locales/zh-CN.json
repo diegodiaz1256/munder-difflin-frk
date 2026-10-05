@@ -1431,5 +1431,9 @@
     "clockOut": "下班打卡？",
     "clockOutDetail": "这将关闭 Scranton Branch。正在运行的智能体会先被要求停止。",
     "clockOutOk": "下班"
+  },
+  "app": {
+    "godFailed": "协调者无法启动：",
+    "godRetry": "重试"
   }
 }
