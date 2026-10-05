@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Agent } from '@/store/store';
 import { useStore } from '@/store/store';
 import { buildMemoryGraph, parsePalaceSearch, splitNotes, type MemoryDoc } from '@shared/memoryGraph';
-import { parseMemory, SECTION_ORDER, filePathIn, type MemoryEntry, type MemorySection } from '@shared/memorySections';
+import { parseMemory, orderSections, sectionDef, filePathIn, PROJECT_TYPE_LABEL, type MemoryEntry, type ProjectType } from '@shared/memorySections';
 import { useProStore } from './proStore';
 import { ConceptGraph } from './ConceptGraph';
+import { EntitiesView } from './EntitiesView';
+import { buildEntities, matchEntity } from '@shared/memoryEntities';
 import type { KeyedTask } from './data';
 
-type CorpusDoc = MemoryDoc & { project: string };
+type CorpusDoc = MemoryDoc & { project: string; projectType?: string };
 
 interface Hit {
   title: string;
@@ -15,33 +17,11 @@ interface Hit {
   /** Who or where it comes from. */
   source: string;
   when?: string;
-  section?: MemorySection;
+  section?: string;
 }
 
-const SECTION_LABEL: Record<MemorySection, string> = {
-  decisions: 'Decisions',
-  conventions: 'Conventions',
-  issues: 'Known issues',
-  files: 'Key files',
-  questions: 'Open questions',
-  notes: 'Other notes'
-};
-const SECTION_HINT: Record<MemorySection, string> = {
-  decisions: 'What was chosen, and why.',
-  conventions: 'How things are done here.',
-  issues: 'What breaks, and the way around it.',
-  files: 'Where things live.',
-  questions: 'Still to be decided or found out.',
-  notes: 'Everything else agents wrote down.'
-};
-const SECTION_TONE: Record<MemorySection, string> = {
-  decisions: 'var(--cth-lemon-light)',
-  conventions: 'var(--cth-sky-light)',
-  issues: 'var(--cth-coral-light)',
-  files: 'var(--cth-mint-light)',
-  questions: 'var(--cth-lilac-light)',
-  notes: 'var(--cth-cream-200)'
-};
+/** A section's colour, from its tone (design tokens only). */
+const toneVar = (tone: string) => (tone === 'cream' ? 'var(--cth-cream-200)' : `var(--cth-${tone}-light)`);
 
 function words(q: string): string[] {
   return q.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 2);
@@ -79,6 +59,9 @@ export function MemoryView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agen
   const [scope, setScope] = useState<string>('office');
   const [concept, setConcept] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(false);
+  /** Whole-office view: the concept map, or the entities in the deliverables. */
+  const [tab, setTab] = useState<'map' | 'entities'>('map');
+  const [focusEntity, setFocusEntity] = useState<string | null>(null);
   const setView = useProStore((s) => s.setView);
   const openAgent = useCallback((id: string) => { useStore.getState().select(id); setView({ kind: 'agent', agentId: id }); }, [setView]);
 
@@ -103,11 +86,24 @@ export function MemoryView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agen
   const inScope = (p: string) => scope === 'office' || p === scope;
   const scopedDocs = useMemo(() => docs.filter((d) => scope === 'office' || d.project === scope), [docs, scope]);
   const graph = useMemo(() => buildMemoryGraph(scopedDocs), [scopedDocs]);
+  const entities = useMemo(() => buildEntities(scopedDocs), [scopedDocs]);
+  const notesFor = useCallback((key: string) => {
+    const words = key.split(' ');
+    const out: Array<{ docId: string; text: string; source: string }> = [];
+    for (const d of scopedDocs) {
+      if (d.kind !== 'agent') continue;
+      for (const n of splitNotes(d.text)) if (words.every((w) => n.toLowerCase().includes(w))) out.push({ docId: d.id, text: n, source: d.label });
+    }
+    return out;
+  }, [scopedDocs]);
 
   const run = async () => {
     const query = q.trim();
     setConcept(null);
     if (!query) { setHits(null); return; }
+    // A search that names an entity (by name, alias or close spelling) opens it.
+    const named = matchEntity(entities, query);
+    if (named) { setFocusEntity(named.key); setTab('entities'); setHits(null); if (scope !== 'office' && !scopedDocs.some(() => true)) setScope('office'); return; }
     setBusy(true);
     const ws = words(query);
     const out: Hit[] = [];
@@ -158,13 +154,20 @@ export function MemoryView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agen
           <button key={p} className={`pro-chip${scope === p ? ' pro-chip-on' : ''}`} onClick={() => { setScope(p); setConcept(null); setHits(null); }}>{p} <span className="pro-sub">{n}</span></button>
         ))}
         {projects.length === 0 && <span className="pro-sub" style={{ fontSize: 12 }}>Projects appear here as agents working in a repository write their memory.</span>}
-        {scope !== 'office' && (
+        {scope !== 'office' ? (
           <button className="pro-btn" style={{ marginInlineStart: 'auto' }} onClick={() => setShowMap((v) => !v)}>{showMap ? 'Hide map' : 'Map'}</button>
+        ) : entities.length > 0 && (
+          <div className="pro-switch" role="group" aria-label="View" style={{ marginInlineStart: 'auto' }}>
+            <button aria-pressed={tab === 'map'} onClick={() => setTab('map')}>Map</button>
+            <button aria-pressed={tab === 'entities'} onClick={() => setTab('entities')}>{entities.length} {entities.length === 1 ? 'entity' : 'entities'}</button>
+          </div>
         )}
       </div>
 
-      {scope !== 'office' && !hits && !showMap ? (
-        <ProjectMemory project={scope} entries={projectEntries} roster={roster} onOpenAgent={openAgent} />
+      {tab === 'entities' && !hits && entities.length > 0 && (scope === 'office' || focusEntity) ? (
+        <EntitiesView entities={entities} notesFor={notesFor} focus={focusEntity} />
+      ) : scope !== 'office' && !hits && !showMap ? (
+        <ProjectMemory project={scope} type={(docs.find((d) => d.project === scope)?.projectType as ProjectType | undefined) ?? null} entries={projectEntries} roster={roster} onOpenAgent={openAgent} />
       ) : (
         <div style={{ flex: 1, minHeight: 460, display: 'flex', gap: 12 }}>
           <div className="pro-card pro-embed" style={{ padding: 0, overflow: 'hidden', minWidth: 0, flex: 1 }}>
@@ -201,42 +204,60 @@ function NoteCard({ hit }: { hit: Hit }) {
           ...(open ? {} : { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }) }}>{hit.body}</span>
       )}
       <span className="pro-row" style={{ gap: 6, flexWrap: 'wrap' }}>
-        {hit.section && <span className="pro-badge" style={{ background: SECTION_TONE[hit.section], fontSize: 10 }}>{SECTION_LABEL[hit.section]}</span>}
+        {hit.section && <span className="pro-badge" style={{ background: toneVar(sectionDef(hit.section).tone), fontSize: 10 }}>{sectionDef(hit.section).label}</span>}
         <span className="pro-sub" style={{ fontSize: 11 }}>{hit.source}{hit.when ? ` · ${hit.when}` : ''}</span>
       </span>
     </button>
   );
 }
 
+/** Inline `code` in a note, shown as code. */
+function Rich({ text }: { text: string }) {
+  const parts = text.split(/(`[^`]+`)/g);
+  return <>{parts.map((p, i) => (p.startsWith('`') && p.endsWith('`') && p.length > 2
+    ? <code key={i} className="pro-mono" style={{ fontSize: '0.92em', background: 'var(--cth-cream-200)', padding: '0 3px' }}>{p.slice(1, -1)}</code>
+    : <span key={i}>{p}</span>))}</>;
+}
+
+/** "demo-shop: orders are…" → "orders are…" inside demo-shop's own view. */
+function withoutProject(text: string, project: string): string {
+  const prefix = text.slice(0, project.length + 3);
+  if (!prefix.toLowerCase().startsWith(project.toLowerCase())) return text;
+  const rest = text.slice(project.length);
+  const m = /^\s*[:—–-]\s*/.exec(rest);
+  return m ? rest.slice(m[0].length) : text;
+}
+
 /** A project's memory, by section: what a technical user needs to trust. */
-function ProjectMemory({ project, entries, roster, onOpenAgent }: {
-  project: string; entries: Entry[]; roster: Agent[]; onOpenAgent: (id: string) => void;
+function ProjectMemory({ project, type, entries, roster, onOpenAgent }: {
+  project: string; type: ProjectType | null; entries: Entry[]; roster: Agent[]; onOpenAgent: (id: string) => void;
 }) {
-  const by = new Map<MemorySection, Entry[]>();
+  const by = new Map<string, Entry[]>();
   for (const e of entries) by.set(e.section, [...(by.get(e.section) ?? []), e]);
   const agents = [...new Map(entries.filter((e) => e.agentId).map((e) => [e.agentId!, e.agent])).entries()];
   if (!entries.length) return <p className="pro-sub">Nothing recorded for {project} yet.</p>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div className="pro-row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        {type && <span className="pro-badge" style={{ background: 'var(--cth-cream-200)' }}>{PROJECT_TYPE_LABEL[type]} project</span>}
         <span className="pro-sub" style={{ fontSize: 12 }}>From</span>
         {agents.map(([id, name]) => (
           <button key={id} className="pro-chip" onClick={() => onOpenAgent(id)} disabled={!roster.some((a) => a.id === id)}>{name}</button>
         ))}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12, alignItems: 'start' }}>
-        {SECTION_ORDER.filter((s) => by.has(s)).map((s) => (
+        {orderSections([...by.keys()], type).map((s) => (
           <section key={s} className="pro-card" style={{ padding: 0, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--pro-line)', background: SECTION_TONE[s] }}>
-              <strong style={{ fontSize: 13 }}>{SECTION_LABEL[s]}</strong>
-              <span className="pro-sub" style={{ fontSize: 11, marginInlineStart: 8 }}>{SECTION_HINT[s]}</span>
+            <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--pro-line)', background: toneVar(sectionDef(s).tone) }}>
+              <strong style={{ fontSize: 13 }}>{sectionDef(s).label}</strong>
+              {sectionDef(s).hint && <span className="pro-sub" style={{ fontSize: 11, marginInlineStart: 8 }}>{sectionDef(s).hint}</span>}
             </div>
             <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
               {(by.get(s) ?? []).sort((a, b) => (b.date ?? '').localeCompare(a.date ?? '')).map((e, i) => {
                 const file = s === 'files' ? filePathIn(e.text) : null;
                 return (
                   <li key={i} style={{ padding: '8px 12px', borderTop: i ? '1px solid var(--pro-line)' : undefined, fontSize: 13, lineHeight: 1.45 }}>
-                    {file ? <><code className="pro-mono" style={{ fontSize: 12 }}>{file}</code> <span>{e.text.replace(/`[^`]+`/, '').replace(/^\s*[—–-]\s*/, '')}</span></> : e.text}
+                    {file ? <><code className="pro-mono" style={{ fontSize: 12 }}>{file}</code> <Rich text={withoutProject(e.text, project).replace(/`[^`]+`/, '').replace(/^\s*[—–-]\s*/, '')} /></> : <Rich text={withoutProject(e.text, project)} />}
                     <div className="pro-sub" style={{ fontSize: 11 }}>{e.agent}{e.date ? ` · ${e.date}` : ''}</div>
                   </li>
                 );

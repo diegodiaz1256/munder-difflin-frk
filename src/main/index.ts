@@ -4218,14 +4218,14 @@ ipcMain.handle('hive:memoryCorpus', async () => {
   if (!root) return [];
   const { readFile, readdir } = await import('node:fs/promises');
   const PER_FILE = 64 * 1024;
-  const out: Array<{ id: string; kind: 'agent' | 'doc'; label: string; agentId?: string; project: string; text: string }> = [];
+  const out: Array<{ id: string; kind: 'agent' | 'doc'; label: string; agentId?: string; project: string; projectType: string; text: string }> = [];
   const reg = hive.registry();
   const home = readConfig().harnessHome ?? '';
   await Promise.all(Object.values(reg.agents ?? {}).map(async (a) => {
     try {
       const text = await readFile(join(root, 'agents', a.id, 'memory.md'), 'utf8');
       const project = await memoryProjectOf(a.cwd, home);
-      out.push({ id: `agent:${a.id}`, kind: 'agent', label: a.name, agentId: a.id, project, text: text.slice(0, PER_FILE) });
+      out.push({ id: `agent:${a.id}`, kind: 'agent', label: a.name, agentId: a.id, project, projectType: hive.projectTypeOf(a.cwd), text: text.slice(0, PER_FILE) });
     } catch { /* no memory yet */ }
   }));
   try {
@@ -4233,7 +4233,7 @@ ipcMain.handle('hive:memoryCorpus', async () => {
     await Promise.all(files.map(async (f) => {
       try {
         const text = await readFile(join(root, 'research', f), 'utf8');
-        out.push({ id: `doc:research/${f}`, kind: 'doc', label: f, project: 'office', text: text.slice(0, PER_FILE) });
+        out.push({ id: `doc:research/${f}`, kind: 'doc', label: f, project: 'office', projectType: hive.projectTypeOf(readConfig().harnessHome ?? undefined), text: text.slice(0, PER_FILE) });
       } catch { /* gone */ }
     }));
   } catch { /* no research yet */ }

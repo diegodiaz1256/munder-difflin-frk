@@ -46,7 +46,7 @@ import { expandTilde } from './fs';
 import { resolveGodName } from '../shared/godIdentity';
 import { assignTaskKeys, normalizeTaskKeyLedger, taskKeyPrefix } from '../shared/taskKeys';
 import { cleanServerList } from '../shared/roleBundles';
-import { memoryTemplate, parseMemory } from '../shared/memorySections';
+import { detectProjectType, memoryInstruction, memoryTemplate, parseMemory, type ProjectType } from '../shared/memorySections';
 
 /** The subset of HarnessConfig the hive consumes for the default-MCP merge.
  *  Kept as a local shape so hive.ts never imports the foundation-owned config
@@ -944,7 +944,7 @@ export class HiveManager {
     const memory = join(dir, 'memory.md');
     if (!existsSync(memory)) {
       // Sections the Memory screen shows per project (shared/memorySections.ts).
-      writeFileSync(memory, memoryTemplate(meta.name, meta.id), 'utf8');
+      writeFileSync(memory, memoryTemplate(meta.name, meta.id, this.projectTypeOf(meta.cwd)), 'utf8');
     }
     ensureMineIgnore(dir); // keep settings.json / cursor / messages out of mempalace's index
     const cursor = join(dir, 'cursor.json');
@@ -1824,6 +1824,21 @@ export class HiveManager {
    *    read `C:\Users\x\hive\agents\god/inbox/`. Use join() so the agent's own
    *    tooling gets a path it can pass straight to its shell.
    */
+  /** The kind of project an agent works in (shared/memorySections.ts), from
+   *  what is in its folder, or the repository the folder is in. Cached. */
+  private projectTypes = new Map<string, ProjectType>();
+  projectTypeOf(cwd: string | undefined): ProjectType {
+    if (!cwd) return 'research';
+    const hit = this.projectTypes.get(cwd);
+    if (hit) return hit;
+    const root = enclosingGitRepo(cwd) ?? cwd;
+    let names: string[] = [];
+    try { names = readdirSync(root); } catch { /* unreadable: research */ }
+    const t = detectProjectType(names);
+    this.projectTypes.set(cwd, t);
+    return t;
+  }
+
   private injectedPrompt(
     meta: AgentMeta,
     dir: string,
@@ -1917,7 +1932,7 @@ export class HiveManager {
       '',
       'HIVE PROTOCOL — follow it every task:',
       `1. At the START of a task, read ${inDir('memory.md')} and EVERY file in ${inDir('inbox')} (messages other agents sent you). After handling an inbox message, move its file into ${inDir('inbox', '.done')}.`,
-      `2. Record durable knowledge in ${inDir('memory.md')}, one dated bullet each, under the heading it belongs to: Decisions (what was chosen and why), Conventions (how things are done here), Known issues (what breaks and the workaround), Key files (\`path\` — what it is), Open questions; anything else under Log. Correct or remove a bullet when it stops being true: people read this per project, and stale facts mislead the next agent.`,
+      `2. Record durable knowledge in ${inDir('memory.md')}, one dated bullet each, ${memoryInstruction(this.projectTypeOf(meta.cwd))}. Correct or remove a bullet when it stops being true: people read this per project, and stale facts mislead the next agent.`,
       `3. To ask another agent for something or share information, write ONE message JSON into ${inDir('outbox')} (schema in PROTOCOL.md). NEVER write into another agent's folder — the orchestrator delivers your outbox.`,
       '4. At the END of a task, append what you learned to memory.md so future-you remembers.',
       guardrailsLine,
