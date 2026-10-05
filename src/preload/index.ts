@@ -411,6 +411,10 @@ export interface HarnessConfig {
   providerBaseUrls?: Partial<Record<AgentProvider, string>>;
   /** Per-CLI-provider default model slug, used to pre-fill the model picker. */
   providerDefaultModels?: Partial<Record<AgentProvider, string>>;
+  /** Certificates for agents' HTTPS (custom endpoints, company gateways):
+   *  verify on/off, an extra CA file, and trusting the Windows / WSL stores.
+   *  See src/main/caBundle.ts. */
+  tls?: { verify?: boolean; caFile?: string; trustWindows?: boolean; trustWsl?: boolean };
 }
 
 export interface MemoryStatus {
@@ -926,6 +930,14 @@ const api = {
   /** Ingest explicit file paths (e.g. drag-and-drop). */
   kgIngestFiles: (paths: string[], tags?: string[]): Promise<KnowledgeIngestResult> =>
     ipcRenderer.invoke('kg:ingestFiles', { paths, tags }),
+
+  // ─── Certificates for agents' HTTPS (Settings → AI Engines) ────────────────
+  /** Rebuild the CA bundle from the saved settings; how many certificates it holds. */
+  tlsStatus: (): Promise<{ count: number; errors: string[]; path: string | null }> => ipcRenderer.invoke('tls:status'),
+  /** Pick a CA certificate file (PEM). */
+  tlsPickCaFile: (): Promise<{ ok: true; path: string } | { ok: false }> => ipcRenderer.invoke('tls:pickCaFile'),
+  /** GET <url>/models with the saved certificate settings. */
+  tlsTest: (url: string): Promise<{ ok: true; status: number } | { ok: false; error: string }> => ipcRenderer.invoke('tls:test', url),
 
   // ─── Composer attachments (images + files, sent to agents by PATH) ─────────
   /** Open an OS picker for images/files; returns chosen absolute paths + names. */

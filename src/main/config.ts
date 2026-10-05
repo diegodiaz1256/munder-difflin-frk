@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { app, safeStorage } from 'electron';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
@@ -14,6 +14,7 @@ import { MAX_AGENT_TOKEN_CAP } from '../shared/tokenCaps';
 import { cleanServerList } from '../shared/roleBundles';
 import { expandTilde, normalizeHiveHome } from './fs';
 import { distroHomeUnc, parseWslPath } from './wsl';
+import { hasPlainSecrets, mergeSecrets, splitSecrets, type SecretCodec } from './configSecrets';
 import type { IntegrationRecord } from '../shared/integrations';
 import {
   DEFAULT_CONTEXT_TRIGGER,
@@ -354,6 +355,10 @@ export interface HarnessConfig {
   providerBaseUrls?: Partial<Record<AgentProvider, string>>;
   /** Per-CLI-provider default model slug, used to pre-fill the model picker. */
   providerDefaultModels?: Partial<Record<AgentProvider, string>>;
+  /** Certificates for agents' HTTPS (custom endpoints, company gateways):
+   *  verify on/off, an extra CA file, and trusting the Windows / WSL stores.
+   *  See src/main/caBundle.ts. */
+  tls?: { verify?: boolean; caFile?: string; trustWindows?: boolean; trustWsl?: boolean };
   /** Master toggle for the Slack → Michael's-queue integration. */
   slackEnabled?: boolean;
   /** Slack app signing secret (Basic Information → Signing Secret). Never logged. */
@@ -614,6 +619,50 @@ function migrateTriggersV1(cfg: HarnessConfig): HarnessConfig {
   }
 }
 
+// ─── Secrets out of config.json (configSecrets.ts) ──────────────────────────
+function secretsFilePath(): string {
+  return join(dirname(configPath()), 'config-secrets.json');
+}
+const decrypted = new Map<string, string>();
+const codec: SecretCodec = {
+  available: () => { try { return safeStorage.isEncryptionAvailable(); } catch { return false; } },
+  encrypt: (plain) => safeStorage.encryptString(plain).toString('base64'),
+  decrypt: (cipher) => {
+    const hit = decrypted.get(cipher);
+    if (hit !== undefined) return hit;
+    try {
+      const v = safeStorage.decryptString(Buffer.from(cipher, 'base64'));
+      decrypted.set(cipher, v);
+      return v;
+    } catch { return undefined; }
+  }
+};
+function readSecretsFile(): Record<string, string> {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(secretsFilePath(), 'utf8'));
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {};
+  } catch { return {}; }
+}
+/** Write config.json without its secrets, the secrets (encrypted) first. */
+function writeConfigFiles(p: string, next: HarnessConfig): void {
+  const { plain, secrets } = splitSecrets(next as unknown as Record<string, unknown>, codec);
+  if (secrets) atomicWrite(secretsFilePath(), JSON.stringify(secrets, null, 2), 0o600);
+  atomicWrite(p, JSON.stringify(plain, null, 2));
+}
+function atomicWrite(p: string, text: string, mode?: number): void {
+  // Temp + rename: `rename` is atomic within a filesystem, so a crash mid-write
+  // leaves either the old file or the new one, never half of either.
+  const tmp = `${p}.tmp-${Math.random().toString(36).slice(2, 10)}`;
+  try {
+    writeFileSync(tmp, text, mode !== undefined ? { encoding: 'utf8', mode } : 'utf8');
+    renameSync(tmp, p);
+  } catch (e) {
+    try { rmSync(tmp, { force: true }); } catch { /* the tmp file is disposable */ }
+    throw e;
+  }
+}
+let secretsMigrated = false;
+
 export function readConfig(): HarnessConfig {
   const p = configPath();
   // No file yet = a first run with nothing to migrate; the defaults ARE the
@@ -623,7 +672,14 @@ export function readConfig(): HarnessConfig {
   try {
     const raw = readFileSync(p, 'utf8');
     const parsed = JSON.parse(raw);
-    return normalizeStoredHomes(migrateTriggersV1(withTriggerDefaults({ ...DEFAULTS, ...parsed })));
+    // A config.json from before secrets moved out still holds them in the
+    // clear: move them once, as soon as the OS can encrypt.
+    if (!secretsMigrated && hasPlainSecrets(parsed) && codec.available()) {
+      secretsMigrated = true;
+      try { writeConfigFiles(p, mergeSecrets(parsed, readSecretsFile(), codec)); } catch { /* retried next launch */ }
+    }
+    const withSecrets = mergeSecrets(parsed, readSecretsFile(), codec);
+    return normalizeStoredHomes(migrateTriggersV1(withTriggerDefaults({ ...DEFAULTS, ...withSecrets })));
   } catch {
     return withTriggerDefaults({ ...DEFAULTS });
   }
@@ -674,14 +730,8 @@ function persistConfig(next: HarnessConfig): HarnessConfig {
   // unparseable config.json to factory defaults — one torn write would wipe
   // harnessHome, the Slack/webhook secrets and every saved setting. Same
   // discipline as roster.ts and hive.ts atomicWriteJson.
-  const tmp = `${p}.tmp-${Math.random().toString(36).slice(2, 10)}`;
-  try {
-    writeFileSync(tmp, JSON.stringify(next, null, 2), 'utf8');
-    renameSync(tmp, p);
-  } catch (e) {
-    try { rmSync(tmp, { force: true }); } catch { /* the tmp file is disposable */ }
-    throw e;
-  }
+  // Secrets go to their own encrypted file (configSecrets.ts).
+  writeConfigFiles(p, next);
   // Saving one setting stores only that setting, so fill the rest back in first:
   // subscribers must see the same complete config a read gives them, never a
   // half-filled one. Skip the migration — it saves in its own right, and has
@@ -702,6 +752,15 @@ export function writeConfig(patch: Partial<HarnessConfig>): HarnessConfig {
   // as it is picked from the folder dialog. Expand `~` here so the persisted list
   // (and therefore every agent's default cwd) is ABSOLUTE; Node's fs/spawn treat
   // `~` as a literal directory name and the spawn dies with `cwd does not exist`.
+  if (patch.tls !== undefined) {
+    const t = patch.tls && typeof patch.tls === 'object' ? patch.tls : {};
+    next.tls = {
+      verify: t.verify !== false,
+      caFile: typeof t.caFile === 'string' && t.caFile.trim() ? t.caFile.trim() : undefined,
+      trustWindows: t.trustWindows === true,
+      trustWsl: t.trustWsl === true
+    };
+  }
   if (Array.isArray(patch.registeredRepos)) {
     const seen = new Set<string>();
     next.registeredRepos = patch.registeredRepos

@@ -7,7 +7,11 @@ import { offerLegacyUninstall } from './legacyMigration';
 import { HEADLESS, HEADLESS_SETUP, SERVER } from './headless';
 import { APP_NAME } from '../shared/fork';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, powerMonitor, powerSaveBlocker, screen, shell, Notification } from 'electron';
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import * as http from 'node:http';
+import * as https from 'node:https';
+import { rootCertificates as tlsRootCertificates } from 'node:tls';
+import { buildCaBundle, tlsActive, tlsEnv, WINDOWS_STORE_SCRIPT } from './caBundle';
 import {
   rmSync, existsSync, readFileSync, readdirSync, statSync, cpSync, writeFileSync,
   unlinkSync, mkdirSync, renameSync, createWriteStream, copyFileSync, lstatSync,
@@ -83,7 +87,8 @@ import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, rel
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
-import { buildWorkerLaunch } from './workerLaunch';
+import { buildWorkerLaunch, workerRequestProblem } from './workerLaunch';
+import { tokenizeCommand } from '../shared/commandLine';
 import { ControlRegistry } from './control';
 import { WorkerWakeWatchdog, WORKER_WAKE_REPORT_MS, activityEvidenceAt, type WorkerWakeFacts } from './workerWake';
 import { inboxNudgeText } from '../shared/hiveNudge';
@@ -93,6 +98,7 @@ import { parseHireDeepLink, type HireManifest } from '../shared/hire';
 import { ClosingTimeController } from './closingTime';
 import {
   argsWithAutoModeFlag,
+  defaultCommandForProvider,
   inferAgentProvider,
   isClaudeProvider,
   nonInteractiveEnvForProvider,
@@ -3175,6 +3181,13 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   const proxyUpstream = opts.hive && (provider === 'crush' || provider === 'qwen')
     ? readConfig().providerBaseUrls?.[provider]?.trim() || undefined
     : undefined;
+  // Certificates (Settings → AI Engines): the CA bundle and/or "don't verify",
+  // for every agent's HTTPS and for the qwen/crush proxy's upstream. An agent's
+  // own env still wins.
+  const tlsCfg = readConfig().tls;
+  const caBundle = tlsActive(tlsCfg) ? (await ensureCaBundle()).path : null;
+  if (tlsActive(tlsCfg)) opts.env = { ...tlsEnv(tlsCfg, caBundle), ...(opts.env ?? {}) };
+  const proxyTls = { caFile: caBundle ?? undefined, insecure: tlsCfg?.verify === false };
   // If the agent carries hive metadata, provision its workspace and add
   // provider-specific spawn injection. Non-Claude providers get shared AGENT_*
   // env only; Claude Code also gets prompt/settings hook args.
@@ -3216,6 +3229,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           // Windows floor. Empty when the KG is off (the line isn't emitted then).
           kgCliPath: knowledge.env().KG_CLI,
           proxyUpstream,
+          tls: proxyTls,
           integrations: brokerIntegrations,
           runners: runnersForAgent,
           theme: readConfig().terminalTheme ?? 'light',
@@ -4375,6 +4389,85 @@ ipcMain.handle('kg:addFiles', async (evt) => {
 // The message queue pipes raw text into a Claude CLI PTY, so attachments travel
 // as a file PATH the agent reads with its Read tool (same convention as Slack).
 // Picker offers an Images group + All Files.
+// ─── Certificates for agents (caBundle.ts) ──────────────────────────────────
+let caBuild: Promise<{ path: string | null; count: number; errors: string[] }> | null = null;
+let caBuildKey = '';
+/** Build (once per settings change) the CA bundle agents are pointed at. */
+function ensureCaBundle(): Promise<{ path: string | null; count: number; errors: string[] }> {
+  const t = readConfig().tls ?? {};
+  const key = JSON.stringify(t);
+  if (caBuild && key === caBuildKey) return caBuild;
+  caBuildKey = key;
+  const needsBundle = !!(t.caFile || t.trustWindows || t.trustWsl);
+  caBuild = !needsBundle ? Promise.resolve({ path: null, count: 0, errors: [] }) : (async () => {
+    const win = process.platform === 'win32';
+    const run = (file: string, args: string[]): Promise<string> => new Promise((res, rej) => {
+      execFile(file, args, { windowsHide: true, timeout: 30_000, maxBuffer: 64 * 1024 * 1024 }, (err, out, errOut) => {
+        if (err) rej(file === 'wsl.exe' ? new Error(describeWslError(errOut || err)) : new Error(String(errOut ?? '').trim().split(/\r?\n/)[0] || err.message));
+        else res(String(out));
+      });
+    });
+    const floor = hive.wslRoot();
+    const r = await buildCaBundle(t, {
+      nodeRoots: tlsRootCertificates,
+      readCaFile: (p) => readFileSync(p, 'utf8'),
+      windowsStore: () => (win
+        ? run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', WINDOWS_STORE_SCRIPT])
+        : Promise.reject(new Error('only on Windows'))),
+      wslStore: () => (win
+        ? run('wsl.exe', [...(floor ? ['-d', floor.distro] : []), '--exec', 'cat', '/etc/ssl/certs/ca-certificates.crt'])
+        : Promise.resolve(readFileSync('/etc/ssl/certs/ca-certificates.crt', 'utf8')))
+    });
+    for (const e of r.errors) console.warn('[tls]', e);
+    const file = join(app.getPath('userData'), 'ca', 'bundle.pem');
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, r.pem, 'utf8');
+    return { path: file, count: r.count, errors: r.errors };
+  })().catch((e) => ({ path: null, count: 0, errors: [e instanceof Error ? e.message : String(e)] }));
+  return caBuild;
+}
+ipcMain.handle('tls:status', async () => {
+  caBuild = null; // the user asked: look again (a CA may have been installed)
+  const r = await ensureCaBundle();
+  return { count: r.count, errors: r.errors, path: r.path };
+});
+ipcMain.handle('tls:pickCaFile', async (evt) => {
+  const win = BrowserWindow.fromWebContents(evt.sender);
+  if (!win) return { ok: false as const };
+  const res = await dialog.showOpenDialog(win, {
+    properties: ['openFile'],
+    title: 'CA certificate (PEM)',
+    filters: [{ name: 'Certificates', extensions: ['pem', 'crt', 'cer'] }, { name: 'All Files', extensions: ['*'] }]
+  });
+  if (res.canceled || !res.filePaths[0]) return { ok: false as const };
+  return { ok: true as const, path: res.filePaths[0] };
+});
+/** Try an endpoint with the current certificate settings: `<url>/models`. */
+ipcMain.handle('tls:test', async (_evt, url: unknown) => {
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url.trim())) return { ok: false, error: 'enter an http(s) URL' };
+  let target: URL;
+  try { target = new URL(url.trim().replace(/\/+$/, '') + '/models'); } catch { return { ok: false, error: 'invalid URL' }; }
+  const t = readConfig().tls;
+  const bundle = tlsActive(t) ? (await ensureCaBundle()).path : null;
+  const lib = target.protocol === 'https:' ? https : http;
+  return new Promise((resolve) => {
+    const req = lib.request(target, {
+      method: 'GET',
+      timeout: 10_000,
+      ...(target.protocol === 'https:' ? {
+        ...(bundle ? { ca: readFileSync(bundle) } : {}),
+        rejectUnauthorized: t?.verify !== false
+      } : {})
+    }, (res) => {
+      res.resume();
+      resolve({ ok: true, status: res.statusCode ?? 0 });
+    });
+    req.on('timeout', () => { req.destroy(new Error('timed out')); });
+    req.on('error', (e) => resolve({ ok: false, error: (e as NodeJS.ErrnoException).code ? `${(e as NodeJS.ErrnoException).code}: ${e.message}` : e.message }));
+    req.end();
+  });
+});
+
 ipcMain.handle('dialog:attachFiles', async (evt) => {
   const win = BrowserWindow.fromWebContents(evt.sender);
   if (!win) return { ok: false as const, error: 'no window' };
@@ -5480,6 +5573,22 @@ async function processSpawnRequest(filePath: string): Promise<void> {
   if (!isSafeCommandName(bin) && !isAbsolute(bin)) {
     fail(`refusing spawn: engine command "${bin}" is not a plain command name or an absolute path`);
     return;
+  }
+  // The request file is untrusted (any agent can write the hive): only an agent
+  // CLI, with no settings/MCP/backend flags, in a folder the user set up.
+  {
+    const providers: AgentProvider[] = ['claude', 'codex', 'grok', 'kimi', 'gemini', 'antigravity', 'qwen', 'opencode', 'crush', 'pi', 'copilot', 'cursor'];
+    const bins = [
+      ...providers.map((pr) => tokenizeCommand(defaultCommandForProvider(pr))[0] ?? ''),
+      tokenizeCommand(cfgSpawn.defaultCommand ?? '')[0] ?? ''
+    ];
+    const roots = [
+      ...(cfgSpawn.registeredRepos ?? []),
+      cfgSpawn.harnessHome ?? '',
+      ...Object.values(hive.registry().agents ?? {}).map((a) => (a as { cwd?: string }).cwd ?? '')
+    ];
+    const problem = workerRequestProblem(launch, cwd, { bins, roots, caseInsensitive: process.platform === 'win32' });
+    if (problem) { fail(`refusing spawn: ${problem}`); return; }
   }
   // Missing-CLI → FAIL FAST. A headless worker has no human to watch an installer,
   // so we never run the cc49e1e install banner here — we reject and tell god.

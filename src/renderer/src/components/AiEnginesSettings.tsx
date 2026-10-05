@@ -187,6 +187,8 @@ export function AiEnginesSettings({ config }: { config: HarnessConfig }) {
         ))}
       </div>
 
+      <CertificatesSettings config={config} />
+
       {/* Unsandboxed-in-auto caveat (Pam guardrail #6) */}
       <div style={{
         fontSize: 12, color: 'var(--cth-ink-700)', lineHeight: '17px',
@@ -194,6 +196,99 @@ export function AiEnginesSettings({ config }: { config: HarnessConfig }) {
       }}>
         {t('aiEngines.autoModeCaveat')}
       </div>
+    </div>
+  );
+}
+
+type TlsCfg = NonNullable<HarnessConfig['tls']>;
+
+/** Certificates for agents' HTTPS to a custom endpoint (src/main/caBundle.ts):
+ *  trust the Windows / WSL stores and/or an extra CA file, verification on/off,
+ *  and a connection test against an endpoint with those settings. */
+function CertificatesSettings({ config }: { config: HarnessConfig }) {
+  const { t } = useTranslation();
+  const [tls, setTls] = useState<TlsCfg>({ verify: true, ...(config.tls ?? {}) });
+  const [bundle, setBundle] = useState<{ count: number; errors: string[] } | null>(null);
+  const [testUrl, setTestUrl] = useState(config.providerBaseUrls?.qwen ?? config.providerBaseUrls?.crush ?? config.providerBaseUrls?.opencode ?? '');
+  const [testNote, setTestNote] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async () => {
+    try { setBundle(await window.cth.tlsStatus()); } catch { /* noop */ }
+  };
+  const save = async (patch: Partial<TlsCfg>) => {
+    const next = { ...tls, ...patch };
+    setTls(next);
+    try { await window.cth.updateConfig({ tls: next }); } catch { /* noop */ }
+    if (next.caFile || next.trustWindows || next.trustWsl) void refresh(); else setBundle(null);
+  };
+  useEffect(() => { if (tls.caFile || tls.trustWindows || tls.trustWsl) void refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const browse = async () => {
+    const r = await window.cth.tlsPickCaFile();
+    if (r.ok) void save({ caFile: r.path });
+  };
+  const test = async () => {
+    setBusy(true);
+    setTestNote('');
+    try {
+      const r = await window.cth.tlsTest(testUrl);
+      setTestNote(r.ok ? t('aiEngines.certsTestOk', { status: r.status }) : t('aiEngines.certsTestFail', { error: r.error }));
+    } finally { setBusy(false); }
+  };
+
+  const row: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--cth-ink-900)' };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={headStyle}>{t('aiEngines.certs')}</div>
+      <div style={{ fontSize: 12, color: 'var(--cth-ink-700)', lineHeight: '17px' }}>{t('aiEngines.certsDesc')}</div>
+      <label style={row}>
+        <input type="checkbox" checked={!!tls.trustWindows} onChange={(e) => void save({ trustWindows: e.target.checked })} />
+        {t('aiEngines.certsTrustWindows')}
+      </label>
+      <label style={row}>
+        <input type="checkbox" checked={!!tls.trustWsl} onChange={(e) => void save({ trustWsl: e.target.checked })} />
+        {t('aiEngines.certsTrustWsl')}
+      </label>
+      <label style={labelStyle}>{t('aiEngines.certsCaFile')}</label>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          key={tls.caFile ?? ''}
+          placeholder={t('aiEngines.certsCaFilePlaceholder')}
+          defaultValue={tls.caFile ?? ''}
+          onBlur={(e) => { if ((e.target.value.trim() || undefined) !== tls.caFile) void save({ caFile: e.target.value.trim() || undefined }); }}
+          style={inputStyle}
+        />
+        <PixelButton variant="secondary" size="sm" onClick={() => void browse()}>{t('aiEngines.certsBrowse')}</PixelButton>
+      </div>
+      <label style={row}>
+        <input type="checkbox" checked={tls.verify !== false} onChange={(e) => void save({ verify: e.target.checked })} />
+        {t('aiEngines.certsVerify')}
+      </label>
+      {tls.verify === false && (
+        <div style={{ fontSize: 12, lineHeight: '17px', color: 'var(--cth-ink-900)', padding: 8, background: 'var(--cth-coral-light)', boxShadow: 'inset 0 0 0 1px var(--cth-coral)' }}>
+          {t('aiEngines.certsVerifyOffWarning')}
+        </div>
+      )}
+      {bundle && (
+        <div style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>
+          {t('aiEngines.certsBundle', { count: bundle.count })}
+          {bundle.errors.map((e) => <div key={e}>⚠ {e}</div>)}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          placeholder="https://your-endpoint/v1"
+          value={testUrl}
+          onChange={(e) => setTestUrl(e.target.value)}
+          style={inputStyle}
+        />
+        <PixelButton variant="secondary" size="sm" onClick={() => void test()} disabled={busy || !testUrl.trim()}>{t('aiEngines.certsTest')}</PixelButton>
+        {(tls.caFile || tls.trustWindows || tls.trustWsl) && (
+          <PixelButton variant="secondary" size="sm" onClick={() => void refresh()}>{t('aiEngines.certsCheck')}</PixelButton>
+        )}
+      </div>
+      {testNote && <div style={{ fontSize: 11, color: 'var(--cth-ink-500)', wordBreak: 'break-word' }}>{testNote}</div>}
     </div>
   );
 }

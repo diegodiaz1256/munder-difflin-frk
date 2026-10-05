@@ -837,6 +837,9 @@ export class HiveManager {
        *  base URL for that engine). Passed here, never through process.env,
        *  which every later agent would inherit. */
       proxyUpstream?: string;
+      /** TLS for the proxy sidecar's upstream (the app's CA bundle, and
+       *  verification off only when the user chose it). */
+      tls?: { caFile?: string; insecure?: boolean };
       /** REST integrations this agent may call through the key broker (its
        *  MD_BROKER_TOKEN is granted for exactly these). Listed in its prompt with
        *  the md-api command; empty/undefined → no line. */
@@ -1059,7 +1062,7 @@ export class HiveManager {
             // slow sidecar start past the 4s ceiling), so try a few times before
             // giving up: without this ONE bad moment at spawn cost the agent its
             // hive events for the whole session.
-            const port = await this.startProxyBridgeWithRetry(meta.id, { sock, sessionId, api: desc.api, upstream });
+            const port = await this.startProxyBridgeWithRetry(meta.id, { sock, sessionId, api: desc.api, upstream, caFile: opts.tls?.caFile, insecure: opts.tls?.insecure });
             if (port > 0) this.proxyPorts.set(meta.id, port); else this.proxyPorts.delete(meta.id);
             // Only redirect the CLI through the proxy if the sidecar actually bound a
             // port. On failure leave routing untouched → the CLI talks to its real
@@ -1596,7 +1599,7 @@ export class HiveManager {
    *  listener. Resolves the bound port, or 0 once every attempt has failed. */
   private async startProxyBridgeWithRetry(
     agentId: string,
-    cfg: { sock: string; sessionId: string; api: 'openai' | 'anthropic'; upstream: string }
+    cfg: { sock: string; sessionId: string; api: 'openai' | 'anthropic'; upstream: string; caFile?: string; insecure?: boolean }
   ): Promise<number> {
     for (let attempt = 1; attempt <= PROXY_BIND_ATTEMPTS; attempt++) {
       const port = await this.startProxyBridge(agentId, cfg);
@@ -1611,7 +1614,7 @@ export class HiveManager {
 
   private startProxyBridge(
     agentId: string,
-    cfg: { sock: string; sessionId: string; api: 'openai' | 'anthropic'; upstream: string }
+    cfg: { sock: string; sessionId: string; api: 'openai' | 'anthropic'; upstream: string; caFile?: string; insecure?: boolean }
   ): Promise<number> {
     this.stopProxyBridge(agentId);
     const script = this.proxyShimPath();
@@ -1629,6 +1632,8 @@ export class HiveManager {
             HIVE_SOCK: cfg.sock,
             AGENT_ID: agentId,
             UPSTREAM_BASE_URL: cfg.upstream,
+            ...(cfg.caFile ? { UPSTREAM_CA_FILE: cfg.caFile } : {}),
+            ...(cfg.insecure ? { UPSTREAM_INSECURE: '1' } : {}),
             HIVE_PROXY_SESSION: cfg.sessionId,
             HIVE_PROXY_API: cfg.api
           },
@@ -1800,7 +1805,7 @@ export class HiveManager {
     // saying nothing, and COMMANDS.md documents it either way for the case where
     // the operator turns it on after god was already running.
     const spawnQueueLine = meta.isGod && this.orchestratorMaySpawn()
-      ? `SPAWNING A WORKER: you can start an ephemeral worker yourself by writing ONE JSON file into ${inRoot('spawn-requests')}/<id>.json. Required: \`objective\` (what the worker must do) and \`cwd\` (the repo it runs in). Optional: \`name\`, \`command\` (overrides the provider default), \`provider\` (selects its default CLI when command is omitted), \`model\`, \`isolate\` (default true = its own git worktree), \`tokenCap\`, and \`slack\` ({channel, thread_ts}) to route its failures back to a thread. The harness polls that directory, spawns \`worker-<id>\`, and moves the request to \`spawn-requests/.done/\` on success or \`.failed/\` with a reason. This is the ONLY way you can spawn; a hire manifest under research/hires/ needs the human to confirm it in the UI, so it is not a route you can complete on your own. Reuse an existing agent first, as above — a worker is a fresh spend every time.`
+      ? `SPAWNING A WORKER: you can start an ephemeral worker yourself by writing ONE JSON file into ${inRoot('spawn-requests')}/<id>.json. Required: \`objective\` (what the worker must do) and \`cwd\` (the repo it runs in). Optional: \`name\`, \`command\` (overrides the provider default; it must be an agent CLI — claude, codex, agy… — with no --settings/--mcp-config/--add-dir/-c/--config/--provider/--base-url flags, and \`cwd\` must be a registered repo, this office or an agent's folder, or the request is refused), \`provider\` (selects its default CLI when command is omitted), \`model\`, \`isolate\` (default true = its own git worktree), \`tokenCap\`, and \`slack\` ({channel, thread_ts}) to route its failures back to a thread. The harness polls that directory, spawns \`worker-<id>\`, and moves the request to \`spawn-requests/.done/\` on success or \`.failed/\` with a reason. This is the ONLY way you can spawn; a hire manifest under research/hires/ needs the human to confirm it in the UI, so it is not a route you can complete on your own. Reuse an existing agent first, as above — a worker is a fresh spend every time.`
       : '';
     const godLine = meta.isGod
       ? 'You are the GOD / ORCHESTRATOR of this hive — your job is to ORCHESTRATE, not to implement: maintain live situational awareness and delegate the work. (1) AWARENESS — always know what is going on: keep an accurate picture of every agent (active vs archived/idle), the task board, and all in-flight work; drain your inbox continually and triage every other agent\'s requests, answering clarifications so the team runs autonomously. (2) DELEGATE — decompose work and fan it out to the hive agents via their inboxes (route messages and assign owners; do not do their jobs); do NOT take on grunt implementation yourself. Stay aware of who is already on the floor and delegate OPPORTUNISTICALLY: BEFORE you spawn anything, CHECK THE LIVE ROSTER (active agents in registry.json + their state in fleet.json) and prefer routing to an EXISTING agent that fits — above all when the request names one ("ask Pam to…", "have Jim…"), route to that agent instead of reflexively creating a new one. Reuse an idle or already-running agent whose role matches; only spawn a fresh agent when no existing one is a sensible fit, and say that you checked. One capable owner beats a duplicate. (3) OWN ONLY THE IMPORTANT, high-leverage things — task decomposition, dispatch decisions, sign-offs, conflict resolution, branch integration, and final QA — and remain the sole scribe of board.md. You are otherwise fully autonomous — there is NO separate approval queue. For the genuinely critical (destructive actions, spending real money, scope changes, unresolvable conflicts), ask the human directly in your own session and let the tool-permission prompt gate the action; the human approves natively, including remotely from their phone via /remote-control. Keep the team unblocked. When you DISPATCH a task, write it as a 4-part contract so the agent can run autonomously: (1) OBJECTIVE — the concrete goal; (2) OUTPUT — the expected deliverable/format; (3) TOOLS — what to use or avoid, and any references to read instead of re-deriving; (4) BOUNDARIES — scope limits + the definition of done. Pass references (file paths, message ids, board sections), not pasted content — keep dispatches short.'
@@ -3339,9 +3344,9 @@ the hive root:
 \`\`\`json
 {
   "objective": "what the worker must do (required)",
-  "cwd": "/absolute/path/to/the/repo (required)",
+  "cwd": "/absolute/path/to/the/repo (required: a registered repo, this office, or an agent's folder)",
   "name": "display name (optional)",
-  "command": "engine CLI (optional; overrides the provider default)",
+  "command": "engine CLI (optional; overrides the provider default; an agent CLI only, no settings/MCP/backend flags)",
   "provider": "claude | codex | cursor | antigravity | … (optional; selects its default CLI when command is omitted)",
   "model": "model override (optional)",
   "isolate": true,
@@ -3674,6 +3679,12 @@ const AGENT_ID = process.env.AGENT_ID || null;
 const UPSTREAM = process.env.UPSTREAM_BASE_URL || '';
 const SESSION = process.env.HIVE_PROXY_SESSION || null;
 const API = process.env.HIVE_PROXY_API === 'anthropic' ? 'anthropic' : 'openai';
+// TLS to the upstream (Settings → AI Engines → Certificates): the app's CA
+// bundle (Node's roots + the user's CA / Windows / WSL stores), and verification
+// off only when the user turned it off.
+let UPSTREAM_CA;
+try { if (process.env.UPSTREAM_CA_FILE) UPSTREAM_CA = require('fs').readFileSync(process.env.UPSTREAM_CA_FILE); } catch (e) {}
+const UPSTREAM_INSECURE = process.env.UPSTREAM_INSECURE === '1';
 
 function trimSlash(s) { while (s.length && s.charAt(s.length - 1) === '/') s = s.slice(0, -1); return s; }
 
@@ -3843,6 +3854,10 @@ const server = http.createServer(function (req, res) {
     path: target.pathname + target.search,
     headers: headers
   };
+  if (isHttps) {
+    if (UPSTREAM_CA) opts.ca = UPSTREAM_CA;
+    if (UPSTREAM_INSECURE) opts.rejectUnauthorized = false;
+  }
   const upReq = lib.request(opts, function (upRes) {
     res.writeHead(upRes.statusCode || 502, upRes.headers);
     const ct = String((upRes.headers['content-type'] || ''));

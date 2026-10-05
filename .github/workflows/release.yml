@@ -257,6 +257,9 @@ jobs:
           mkdir -p release
           find artifacts -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.blockmap' -o -name 'latest*.yml' -o -name 'fork*.yml' -o -name '*.tar.gz' \) -exec cp {} release/ \;
           cat artifacts/*/SHA256SUMS-*.txt > release/SHA256SUMS.txt 2>/dev/null || true
+          # Windows: uninstall without the (unsigned) uninstaller, for machines
+          # whose endpoint security blocks it. See tools/windows/.
+          cp tools/windows/uninstall-scranton-branch.ps1 tools/windows/uninstall-scranton-branch.cmd release/
           ls -la release
 
       - name: Publish to GitHub Release
@@ -290,3 +293,5 @@ jobs:
             release/fork*.yml
             release/*.tar.gz
             release/SHA256SUMS.txt
+            release/uninstall-scranton-branch.ps1
+            release/uninstall-scranton-branch.cmd
