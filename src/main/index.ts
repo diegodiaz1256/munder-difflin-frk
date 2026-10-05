@@ -93,7 +93,7 @@ import { ControlRegistry } from './control';
 import { WorkerWakeWatchdog, WORKER_WAKE_REPORT_MS, activityEvidenceAt, type WorkerWakeFacts } from './workerWake';
 import { inboxNudgeText } from '../shared/hiveNudge';
 import { resolveGodName } from '../shared/godIdentity';
-import { fetchHireManifest, readHireManifestFiles } from './hire';
+import { collectHireManifests, fetchHireManifest, readHireManifestFiles } from './hire';
 import { parseHireDeepLink, type HireManifest } from '../shared/hire';
 import { ClosingTimeController } from './closingTime';
 import {
@@ -2610,6 +2610,25 @@ function deliverHire(manifest: HireManifest): void {
       mainWindow.show();
       mainWindow.focus();
     }
+  }
+}
+
+/**
+ * The orchestrator may propose a permanent hire by writing a manifest into
+ * research/hires/ (in the hive, or the office). Its prompt has always said
+ * the human confirms it in the UI, but nothing looked there, so the
+ * proposal sat unseen. Each one now opens the Add-Agent review, prefilled.
+ */
+function offerOrchestratorHires(): void {
+  const root = hive.root();
+  const home = readConfig().harnessHome;
+  const dirs = [root ? join(root, 'research', 'hires') : null, home ? join(home, 'research', 'hires') : null]
+    .filter((d): d is string => !!d && existsSync(d));
+  if (!dirs.length) return;
+  const { offered, invalid } = collectHireManifests(dirs);
+  for (const m of offered) deliverHire(m);
+  for (const bad of invalid) {
+    informGod('[hire manifest rejected]', `research/hires/${bad.file} is not a valid hire manifest: ${bad.error}`);
   }
 }
 
@@ -5762,6 +5781,7 @@ async function ephemeralWorkerTick(): Promise<void> {
   workerTickRunning = true;
   try {
     const cfg = readConfig();
+    offerOrchestratorHires();
     const maxWorkers = Math.max(1, cfg.maxConcurrentWorkers ?? 4);
     const idleTimeoutMs = Math.max(1, cfg.workerIdleTimeoutMinutes ?? 20) * 60_000;
     // Per-worker token cap. 0 = UNLIMITED (the default — wired but never throttles
