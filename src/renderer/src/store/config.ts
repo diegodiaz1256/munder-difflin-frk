@@ -79,6 +79,10 @@ export interface HarnessConfig {
    *  'claude' / 'claude-opus-4-8'. Mirrors src/main/config.ts. */
   godProvider?: AgentProvider;
   godModel?: string;
+  /** Model for temps (one-job workers the orchestrator starts); unset = defaultModel. Claude only. */
+  tempModel?: string;
+  /** Claude Code --effort per kind of agent (god / agent / temp); unset = Claude's own default. */
+  roleEffort?: Partial<Record<'god' | 'agent' | 'temp', 'low' | 'medium' | 'high' | 'xhigh' | 'max'>>;
   /** Per-server consent for the default MCP bundle, keyed by catalog id (mirrors
    *  src/main/config.ts; seeded from MCP_CATALOG). */
   mcpDefaults?: { [id: string]: { enabled: boolean } };

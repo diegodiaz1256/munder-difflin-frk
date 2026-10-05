@@ -39,6 +39,7 @@ import {
 import { linkWorktreeDeps, unlinkWorktreeDeps } from './worktreeDeps';
 import { excludeOfficeFromRepo } from './gitExclude';
 import { openTerminalAt } from './openTerminal';
+import { agentKind, effortArgs } from '../shared/roleModels';
 import { formatList, parseList, type PersonalList } from '../shared/lists';
 import { HiveManager, type AgentMeta, type HiveMessage, type HiveTask } from './hive';
 import { HookServer } from './hooks';
@@ -3043,7 +3044,7 @@ function findCodexHomeForSession(sessionId: string, siblingsRoot: string): strin
 
 /** Spawn options shared by the `pty:spawn` IPC handler and the god-triggered
  *  ephemeral-worker watcher. */
-type AgentSpawnOptions = SpawnOptions & { hive?: AgentMeta; isolate?: boolean; resume?: boolean; requireResume?: boolean; resumeSessionId?: string; provider?: AgentProvider; noAutoInstall?: boolean };
+type AgentSpawnOptions = SpawnOptions & { hive?: AgentMeta; temp?: boolean; isolate?: boolean; resume?: boolean; requireResume?: boolean; resumeSessionId?: string; provider?: AgentProvider; noAutoInstall?: boolean };
 
 /** Map a `ptyManager.spawn` failure string to the closed `agent_spawn_failed.reason`
  *  enum (analytics.ts). The two known strings come from PtyManager.spawn; anything
@@ -3352,12 +3353,16 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     // else the user's global defaultModel; else the role-based default tier. The
     // GOD is special-cased: it has its own engine config (godProvider/godModel), so
     // modelForRole resolves it and that wins over the worker-oriented defaultModel.
+    // Temps can have their own model (Settings → Agents & Models, per role).
+    const kind = agentKind(opts.hive, opts.temp);
     if (!args.includes('--model')) {
-      const m = opts.hive.isGod
+      const m = kind === 'god'
         ? modelForRole(opts.hive, cfg)
-        : cfg.defaultModel ?? modelForRole(opts.hive, cfg);
+        : (kind === 'temp' && cfg.tempModel) || (cfg.defaultModel ?? modelForRole(opts.hive, cfg));
       if (m) args.push('--model', m);
     }
+    // Effort per role; unset leaves Claude Code's own default (often "high").
+    args.push(...effortArgs(args, kind, cfg));
     // Name the Remote Control session after the agent (Michael, Jim, Dev1…) so it
     // is identifiable in claude.ai / the mobile app. Otherwise Claude defaults the
     // prefix to the machine hostname (e.g. "vyapaks-macbook-pro-…"), which is
@@ -5839,7 +5844,7 @@ async function processSpawnRequest(filePath: string): Promise<void> {
   const spawnOpts: AgentSpawnOptions = {
     id: workerId, cwd, command: bin, cols: 120, rows: 32,
     args: launch.args,
-    hive: meta, isolate, provider: raw.provider, env: brokerEnv
+    hive: meta, temp: true, isolate, provider: raw.provider, env: brokerEnv
   };
 
   let res: { ok: boolean; error?: string; worktreePath?: string };
