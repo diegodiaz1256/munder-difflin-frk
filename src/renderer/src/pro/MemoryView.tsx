@@ -13,6 +13,10 @@ interface Hit {
   body?: string;
   detail?: string;
   onOpen?: () => void;
+  /** A memory's whole note, shown when its card is opened. */
+  full?: string;
+  /** The agent whose memory it is, for "Open <agent>". */
+  agentId?: string;
 }
 
 const KIND_BG: Record<Hit['kind'], string> = {
@@ -53,6 +57,14 @@ export function MemoryView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agen
   const [semantic, setSemantic] = useState<boolean | null>(null);
   const [docs, setDocs] = useState<MemoryDoc[]>([]);
   const [concept, setConcept] = useState<string | null>(null);
+  /** The memory card that is open (its whole note and what you can do with it). */
+  const [open, setOpen] = useState<string | null>(null);
+  const god = roster.find((a) => a.isGod);
+  const askGod = (text: string) => {
+    if (!god) return;
+    useStore.getState().enqueueMessage(god.id, `About this from the office's memory:\n\n${text}\n\nWhat do we know, and what should we do with it?`);
+    useStore.getState().select(god.id);
+  };
   const setView = useProStore((s) => s.setView);
 
   const openAgent = useCallback((id: string) => { useStore.getState().select(id); setView({ kind: 'agent', agentId: id }); }, [setView]);
@@ -91,18 +103,18 @@ export function MemoryView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agen
     }
     for (const d of docs) {
       for (const n of splitNotes(d.text)) {
-        if (n.length > 8 && score(n, ws) >= 0.6) out.push({ kind: 'memory', ...titled(n), detail: d.label, onOpen: docOpen(d.id) });
+        if (n.length > 8 && score(n, ws) >= 0.6) out.push({ kind: 'memory', ...titled(n), detail: d.label, full: n, agentId: d.agentId });
       }
     }
     const [kg, palace] = await Promise.all([
       window.cth.kgSearch(query, 5).catch(() => []),
       semantic ? window.cth.searchMemory(query).catch(() => null) : Promise.resolve(null)
     ]);
-    for (const h of kg) out.push({ kind: 'memory', ...titled(h.snippet), detail: h.title });
+    for (const h of kg) out.push({ kind: 'memory', ...titled(h.snippet), detail: h.title, full: h.snippet });
     if (palace?.ok) {
       for (const h of parsePalaceSearch(palace.output).slice(0, 6)) {
         const who = roster.find((a) => a.id === h.wing)?.name ?? h.wing;
-        out.push({ kind: 'memory', ...titled(h.text), detail: `by meaning · ${who}${h.source ? ` · ${h.source}` : ''}${h.score ? ` · ${Math.round(h.score * 100)}%` : ''}` });
+        out.push({ kind: 'memory', ...titled(h.text), full: h.text, agentId: roster.some((a) => a.id === h.wing) ? h.wing : undefined, detail: `by meaning · ${who}${h.source ? ` · ${h.source}` : ''}${h.score ? ` · ${Math.round(h.score * 100)}%` : ''}` });
       }
     } else if (palace && !palace.ok && palace.error) {
       out.push({ kind: 'memory', title: 'Search by meaning is unavailable', body: palace.error });
@@ -113,7 +125,7 @@ export function MemoryView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agen
 
   // A selected concept shows its notes in the side panel.
   const conceptHits: Hit[] | null = concept
-    ? (graph.notes[concept] ?? []).map((n) => ({ kind: 'memory' as const, ...titled(n.text), detail: docLabel(n.docId), onOpen: docOpen(n.docId) }))
+    ? (graph.notes[concept] ?? []).map((n) => ({ kind: 'memory' as const, ...titled(n.text), detail: docLabel(n.docId), full: n.text, agentId: docs.find((d) => d.id === n.docId)?.agentId }))
     : null;
   const shown = conceptHits ?? hits;
   const conceptLabel = concept ? graph.concepts.find((c) => c.id === concept)?.label : null;
@@ -150,13 +162,31 @@ export function MemoryView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agen
             return (
               <section key={g.kind} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div className="pro-sub" style={{ fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase' }}>{g.label}</div>
-                {rows.map((h, i) => (
-                  <button key={i} className="pro-card" style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 4, textAlign: 'start' }} onClick={h.onOpen} disabled={!h.onOpen}>
-                    <strong style={{ fontSize: 13, lineHeight: 1.35 }}>{h.title}</strong>
-                    {h.body && <span style={{ fontSize: 12, lineHeight: 1.45, color: 'var(--cth-ink-700)', display: '-webkit-box', WebkitLineClamp: 5, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{h.body}</span>}
-                    {h.detail && <span className="pro-badge" style={{ background: KIND_BG[h.kind], alignSelf: 'flex-start', fontSize: 11 }}>{h.detail}</span>}
-                  </button>
-                ))}
+                {rows.map((h, i) => {
+                  const key = `${g.kind}-${i}-${h.title.slice(0, 24)}`;
+                  const isOpen = open === key && h.kind === 'memory';
+                  const agent = h.agentId ? roster.find((a) => a.id === h.agentId) : undefined;
+                  return (
+                    <div key={key} className="pro-card" style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6, borderColor: isOpen ? 'var(--cth-lemon)' : undefined }}>
+                      <button style={{ all: 'unset', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 4 }}
+                        onClick={() => (h.kind === 'memory' ? setOpen(isOpen ? null : key) : h.onOpen?.())}>
+                        <strong style={{ fontSize: 13, lineHeight: 1.35 }}>{h.title}</strong>
+                        {h.body && !isOpen && <span style={{ fontSize: 12, lineHeight: 1.45, color: 'var(--cth-ink-700)', display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{h.body}</span>}
+                      </button>
+                      {isOpen && (
+                        <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--cth-ink-900)', whiteSpace: 'pre-wrap', maxHeight: 280, overflowY: 'auto', overflowWrap: 'anywhere' }}>{h.full ?? h.body ?? h.title}</div>
+                      )}
+                      {h.detail && <span className="pro-badge" style={{ background: KIND_BG[h.kind], alignSelf: 'flex-start', fontSize: 11 }}>{h.detail}</span>}
+                      {isOpen && (
+                        <div className="pro-row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                          {god && <button className="pro-btn" onClick={() => askGod(h.full ?? h.title)}>Ask {god.name} about this</button>}
+                          {agent && <button className="pro-btn" onClick={() => openAgent(agent.id)}>Open {agent.name}</button>}
+                          <button className="pro-btn" onClick={() => void window.cth.copyToClipboard(h.full ?? h.title)}>Copy</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </section>
             );
           })}
