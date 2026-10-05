@@ -5,10 +5,10 @@
  * security model. Deliberately free of any `electron` import so it can be
  * smoke-tested as a plain Node module (mirrors webhook.ts's approach).
  */
-import { readFileSync, statSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, renameSync, statSync } from 'node:fs';
 import { lookup } from 'node:dns/promises';
 import { BlockList, isIP } from 'node:net';
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
 import {
   HIRE_MAX_BYTES,
   isAllowedManifestUrl,
@@ -270,4 +270,34 @@ export function readHireManifestFiles(paths: readonly string[]): {
     }
   }
   return { manifests, errors };
+}
+
+/**
+ * Hire manifests the orchestrator left for the human: <dir>/*.json, each
+ * offered once. A manifest is moved to `.offered/` once it is handed to the
+ * Add-Agent review (so a restart does not offer it again) and to `.invalid/`
+ * when it does not validate. Never spawns anything: the human confirms.
+ */
+export function collectHireManifests(dirs: readonly string[]): {
+  offered: HireManifest[];
+  invalid: Array<{ file: string; error: string }>;
+} {
+  const offered: HireManifest[] = [];
+  const invalid: Array<{ file: string; error: string }> = [];
+  for (const dir of dirs) {
+    let files: string[] = [];
+    try { files = readdirSync(dir).filter((f) => f.endsWith('.json')).sort(); } catch { continue; }
+    for (const f of files) {
+      const path = join(dir, f);
+      const res = readHireManifestFile(path);
+      const sub = res.ok ? '.offered' : '.invalid';
+      try {
+        mkdirSync(join(dir, sub), { recursive: true });
+        renameSync(path, join(dir, sub, f));
+      } catch { continue; } // could not move it: try again next pass rather than offer twice
+      if (res.ok) offered.push(res.manifest);
+      else invalid.push({ file: f, error: res.error.split(path).join(f) });
+    }
+  }
+  return { offered, invalid };
 }

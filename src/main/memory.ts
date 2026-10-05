@@ -424,6 +424,13 @@ export class MemoryManager {
         this.modelCache = null;
         void this.checkModel().then((ready) => {
           if (code === 0 && ready) { done({ ok: true }); this.start(); return; }
+          // mempalace finished fine but the model is not there: this version
+          // does not know it (EmbeddingGemma needs a newer mempalace; older
+          // ones quietly use MiniLM), so it would never arrive.
+          if (code === 0 && this.model() === 'embeddinggemma') {
+            done({ ok: false, error: 'this mempalace cannot use EmbeddingGemma. Update it (uv tool upgrade mempalace) or choose MiniLM in the Memory panel.' });
+            return;
+          }
           done({ ok: false, error: last || `the download did not finish (exit ${code})` });
         });
       });
@@ -527,6 +534,20 @@ export class MemoryManager {
         if (this.lastMined.get(id) === mtime) continue; // unchanged — skip the model load
         this.lastMined.set(id, mtime);
         await this.mineAgent(agentDir, id); // one writer at a time
+      }
+      // The shared deliverables (research/): most of what the office learns
+      // lands there, not in memory.md, so search by meaning has to see it.
+      const research = join(home, 'hive', 'research');
+      let newest = 0;
+      try {
+        for (const f of readdirSync(research)) {
+          if (!/\.(md|txt)$/i.test(f)) continue;
+          try { newest = Math.max(newest, statSync(join(research, f)).mtimeMs); } catch { /* gone */ }
+        }
+      } catch { /* no research yet */ }
+      if (newest && this.lastMined.get('research') !== newest) {
+        this.lastMined.set('research', newest);
+        await this.mineAgent(research, 'research');
       }
     } finally {
       this.mining = false;

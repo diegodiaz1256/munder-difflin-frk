@@ -157,3 +157,16 @@ button.pro-card:hover { border-color: var(--pro-line-strong); }
 .pro-desk-new { animation: pro-hire 0.8s ease-out; }
 @keyframes pro-hire { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .pro-typing, .pro-desk-new { animation: none; } }
+
+/* Orchestrator map: a delegation's line runs while the agent works, and an
+   envelope travels out when work is handed over and back with the answer. */
+.pro-route-live { animation: pro-route 0.9s linear infinite; }
+@keyframes pro-route { to { stroke-dashoffset: -7; } }
+.pro-envelope {
+  position: absolute; left: var(--x1); top: var(--y1); z-index: 2;
+  font-size: 14px; line-height: 14px; color: var(--cth-ink-900);
+  animation: pro-envelope 2.4s ease-in-out forwards;
+  pointer-events: none;
+}
+@keyframes pro-envelope { from { left: var(--x1); top: var(--y1); } to { left: var(--x2); top: var(--y2); } }
+@media (prefers-reduced-motion: reduce) { .pro-route-live, .pro-envelope { animation: none; } }
