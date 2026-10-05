@@ -260,6 +260,17 @@ export function runInDistro(distro: string, cmd: string, args: string[], cwd = '
   return execFileSync(c.file, c.args, { encoding: 'utf8', windowsHide: true, timeout: 30_000 }).trim();
 }
 
+/** runInDistro without blocking: for anything the main process does while
+ *  the UI is up (a sync wsl.exe call freezes every window until it returns). */
+export function runInDistroAsync(distro: string, cmd: string, args: string[], cwd = '~'): Promise<string> {
+  const c = wslCommand(distro, cwd, cmd, args);
+  return new Promise((resolve, reject) => {
+    execFile(c.file, c.args, { encoding: 'utf8', windowsHide: true, timeout: 30_000 }, (err, stdout) => {
+      if (err) reject(err); else resolve(String(stdout).trim());
+    });
+  });
+}
+
 /**
  * Create `~/offices/<name>` inside `distro` and return its Windows (UNC) path.
  * The name is reduced to a safe folder name.
