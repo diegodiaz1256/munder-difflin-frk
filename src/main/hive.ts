@@ -271,6 +271,18 @@ const MINE_IGNORE_LINES = ['settings.json', 'cursor.json', 'inbox/', 'outbox/', 
 
 /** Idempotently ensure `<agentDir>/.gitignore` excludes the non-memory files.
  *  Append-only: writes only the missing lines, leaving any existing entries. */
+/** The git work tree `dir` is in (where `.git` is, walking up), or null. */
+export function enclosingGitRepo(dir: string): string | null {
+  let cur = dir;
+  for (let i = 0; i < 64; i++) {
+    if (existsSync(join(cur, '.git'))) return cur;
+    const up = dirname(cur);
+    if (up === cur) return null;
+    cur = up;
+  }
+  return null;
+}
+
 function ensureMineIgnore(agentDir: string): void {
   const path = join(agentDir, '.gitignore');
   let existing = '';
@@ -1542,7 +1554,17 @@ export class HiveManager {
       if (Array.isArray(scope) && !(agentId && scope.includes(agentId))) continue;
       // Replace the `<cwd>` placeholder (filesystem/git) with the agent cwd at merge
       // time so these stay strictly workspace-scoped.
-      const args = e.spec.args.map((a) => (a === '<cwd>' ? cwd : a));
+      // The git server needs a repository: pointed at a folder outside one (an
+      // office that is not a repo) it exits at once and the agent reports
+      // "munder-git … Connection closed" at every start. Give it the repo
+      // the cwd is in, or leave it out.
+      let repoCwd = cwd;
+      if (e.id === 'git') {
+        const repo = enclosingGitRepo(cwd);
+        if (!repo) continue;
+        repoCwd = repo;
+      }
+      const args = e.spec.args.map((a) => (a === '<cwd>' ? repoCwd : a));
       servers[`munder-${e.id}`] = { command: e.spec.command, args };
     }
     // Your own servers (Manager → MCP, mcpServers.ts): keyed ones go through
