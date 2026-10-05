@@ -569,7 +569,21 @@
     "errFolder": "请先选择文件夹",
     "errCommand": "必须填写命令",
     "hireProgress": "hire 第 {{current}} / {{total}} 项",
-    "skipHire": "跳过 hire"
+    "skipHire": "跳过 hire",
+    "cv": {
+      "mission": "任务",
+      "skills": "技能",
+      "engine": "引擎",
+      "worksIn": "工作目录",
+      "change": "更改",
+      "budget": "预算",
+      "noCap": "无 token 上限",
+      "tokens": "{{count}} tokens",
+      "proposedBy": "由 {{author}} 推荐",
+      "edit": "编辑详情",
+      "hire": "雇用 {{name}}",
+      "hint": "在你雇用之前不会启动任何东西。先编辑详情可修改任何内容。"
+    }
   },
   "onboarding": {
     "titles": {

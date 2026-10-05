@@ -569,7 +569,21 @@
     "errFolder": "اختر مجلدًا أولًا",
     "errCommand": "الأمر مطلوب",
     "hireProgress": "التعيين {{current}} من {{total}}",
-    "skipHire": "تخطَّ التعيين"
+    "skipHire": "تخطَّ التعيين",
+    "cv": {
+      "mission": "المهمة",
+      "skills": "المهارات",
+      "engine": "المحرك",
+      "worksIn": "يعمل في",
+      "change": "تغيير",
+      "budget": "الميزانية",
+      "noCap": "بلا حد للرموز",
+      "tokens": "{{count}} رمز",
+      "proposedBy": "مقترح من {{author}}",
+      "edit": "تعديل التفاصيل",
+      "hire": "توظيف {{name}}",
+      "hint": "لا يبدأ شيء حتى توظّف. عدّل التفاصيل أولاً لتغيير أي شيء."
+    }
   },
   "onboarding": {
     "titles": {

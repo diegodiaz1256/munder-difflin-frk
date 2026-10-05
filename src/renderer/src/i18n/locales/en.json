@@ -569,7 +569,21 @@
     "errFolder": "Pick a folder first",
     "errCommand": "Command is required",
     "hireProgress": "hire {{current}} of {{total}}",
-    "skipHire": "skip hire"
+    "skipHire": "skip hire",
+    "cv": {
+      "mission": "Mission",
+      "skills": "Skills",
+      "engine": "Engine",
+      "worksIn": "Works in",
+      "change": "change",
+      "budget": "Budget",
+      "noCap": "no token cap",
+      "tokens": "{{count}} tokens",
+      "proposedBy": "proposed by {{author}}",
+      "edit": "Edit details",
+      "hire": "Hire {{name}}",
+      "hint": "Nothing starts until you hire. Edit details to change anything first."
+    }
   },
   "onboarding": {
     "titles": {
