@@ -1,5 +1,5 @@
-- **WSL offices:** agents, memory and git run inside Linux.
-- **Certificates:** trust company or local CAs for endpoints.
-- **Safer:** agents can't see or steer secrets.
-- **Uninstall** even when security software blocks it.
-- **Clearer errors** when WSL or a tool is missing.
+- **Memory:** offline, a graph of what agents know.
+- **Hiring:** proposals arrive as a CV to approve.
+- **Remote Control:** a button that shows its state.
+- **WSL:** the orchestrator always starts again.
+- **Smoother terminals** and readable bubbles.
