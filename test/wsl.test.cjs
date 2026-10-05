@@ -38,9 +38,14 @@ test('UNC paths inside text (prompts, settings) become Linux paths', () => {
 });
 
 test('the wsl.exe command runs through a login shell, in the right folder, with env', () => {
-  const c = wslCommand('Ubuntu', '/home/d/o', 'claude', ['--model', 'opus'], { MD_AGENT_ID: 'god', 'BAD-NAME': 'x' });
+  const c = wslCommand('Ubuntu', '/home/d/o', 'claude', ['--model', 'opus'], { MD_AGENT_ID: 'god', MD_BROKER_TOKEN: 's3cret', 'BAD-NAME': 'x' }, undefined);
   assert.equal(c.file, 'wsl.exe');
-  assert.deepEqual(c.args, ['-d', 'Ubuntu', '--cd', '/home/d/o', '--exec', 'bash', '-lc', WSL_PRELUDE, 'bash', 'env', 'MD_AGENT_ID=god', 'claude', '--model', 'opus']);
+  assert.deepEqual(c.args, ['-d', 'Ubuntu', '--cd', '/home/d/o', '--exec', 'bash', '-lc', WSL_PRELUDE, 'bash', 'claude', '--model', 'opus']);
+  // env goes through the process environment + WSLENV, never the command line
+  assert.ok(!c.args.join(' ').includes('s3cret'));
+  assert.deepEqual(c.env, { MD_AGENT_ID: 'god', MD_BROKER_TOKEN: 's3cret', WSLENV: 'MD_AGENT_ID:MD_BROKER_TOKEN' });
+  assert.equal(wslCommand('U', '/', 'x', [], { A: '1' }, 'USERPROFILE/p').env.WSLENV, 'A:USERPROFILE/p', 'keeps the user\'s own WSLENV');
+  assert.deepEqual(wslCommand('U', '/', 'x', []).env, {});
   assert.match(WSL_PRELUDE, /nvm.sh/);
   assert.ok(WSL_PRELUDE.endsWith('exec "$@"'), "the prelude ends by running the command");
 });
@@ -72,7 +77,8 @@ test('mempalace runs inside the distro for a WSL floor, with Linux paths', () =>
     { MEMPALACE_PALACE_PATH: palace, MEMPALACE_EMBEDDING_MODEL: 'minilm' }, wsl);
   assert.equal(inv.file, 'wsl.exe');
   assert.ok(inv.args.includes('/home/d/offices/shop/hive/agents/a1'));
-  assert.ok(inv.args.includes('MEMPALACE_PALACE_PATH=/home/d/offices/shop/palace'));
+  assert.equal(inv.env.MEMPALACE_PALACE_PATH, '/home/d/offices/shop/palace');
+  assert.match(inv.env.WSLENV, /MEMPALACE_PALACE_PATH/);
   assert.ok(inv.args.includes('/home/d/.local/bin/mempalace'));
   const plain = mempalaceInvocation('mempalace.exe', ['search', 'x'], {}, null);
   assert.deepEqual(plain, { file: 'mempalace.exe', args: ['search', 'x'] });

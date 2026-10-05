@@ -72,7 +72,7 @@ import * as integrations from './integrations';
 import { applyMissionRequest, type MissionLike } from '../shared/missionRequests';
 import { cleanCustomBundles } from '../shared/roleBundles';
 import { Factories } from './factories';
-import { createWslOffice, describeWslError, distroHomeUnc, fromLinuxPath, gitInvocation, listDistros, toWslUnc, mirroredNetworking, parseWslPath, probeInDistro, WSL_INSTALL } from './wsl';
+import { createWslOffice, describeWslError, distroHomeUnc, fromLinuxPath, listDistros, toWslUnc, mirroredNetworking, parseWslPath, probeInDistro, WSL_INSTALL } from './wsl';
 import { WslBridge } from './wslBridge';
 import { McpServers } from './mcpServers';
 import { EnvVault, fingerprintOf } from './envVault';
@@ -483,19 +483,29 @@ const integrationBroker = new IntegrationBroker({
       const name = (agentId && hive.registry().agents?.[agentId]?.name) || agentId || workerId;
       const head = await gitRun(pty.cwd, ['rev-parse', 'HEAD']);
       const status = await gitRun(pty.cwd, ['status', '--porcelain']);
-      return envVault.run(runnerId, { agentName: name, cwd: pty.cwd, fingerprint: fingerprintOf(head, status) });
+      // Files hidden from `status` with skip-worktree / assume-unchanged still
+      // count: their flags (and so any change to them) join the fingerprint.
+      const hidden = (await gitRun(pty.cwd, ['ls-files', '-v']))
+        .split('\n').filter((l) => /^[a-zS]/.test(l)).join('\n');
+      return envVault.run(runnerId, { agentName: name, cwd: pty.cwd, fingerprint: fingerprintOf(head, hidden ? `${status}\n${hidden}` : status) });
     }
   }
 });
 
 /** Best-effort git output for runner fingerprints ('' outside a repo). */
-function gitRun(cwd: string, args: string[]): Promise<string> {
+function gitRun(cwd: string, argsIn: string[]): Promise<string> {
   return new Promise((resolve) => {
-    // A WSL floor's repo is read by git inside the distro (gitInvocation): Windows
-    // git on \\wsl.localhost is missing or refuses it, which left the
-    // fingerprint empty and the "files changed" check silent.
-    const inv = gitInvocation(cwd, args);
-    const p = spawn(inv.file, inv.args, { cwd: inv.cwd, windowsHide: true });
+    // This fingerprint is a security gate, and the agent can write its repo's
+    // .git/config: a core.fsmonitor hook could answer `status` for it. Off.
+    const args = ['-c', 'core.fsmonitor=', '-c', 'core.untrackedCache=false', ...argsIn];
+    // A WSL floor's repo is read by git inside the distro (Windows git on
+    // \\wsl.localhost is missing or refuses it, which left the fingerprint
+    // empty). Started with --exec and NO login shell: ~/.profile, ~/.bashrc and
+    // nvm are agent-writable and could put a fake git first on PATH.
+    const w = process.platform === 'win32' ? parseWslPath(cwd) : null;
+    const p = w
+      ? spawn('wsl.exe', ['-d', w.distro, '--cd', w.linuxPath, '--exec', '/usr/bin/env', 'PATH=/usr/local/bin:/usr/bin:/bin', 'git', ...args], { windowsHide: true })
+      : spawn('git', args, { cwd, windowsHide: true });
     let out = '';
     p.stdout.on('data', (d) => { out += d; });
     p.on('error', () => resolve(''));
@@ -2832,6 +2842,21 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
   win.webContents.on('did-start-navigation', (details) => {
     if (details.isMainFrame) rendererReadyForHires = false;
   });
+  // The preload (window.cth: spawn, fs, git…) runs in whatever the main frame
+  // shows, so it must only ever show the app. A dropped link or .html file, or
+  // a page an agent wrote, would otherwise navigate here and get it. Web links
+  // open in the browser instead.
+  const sameApp = (url: string): boolean => {
+    const strip = (u: string): string => u.replace(/[?#].*$/, '');
+    return strip(url) === strip(wc.getURL());
+  };
+  const guardNavigation = (e: Electron.Event, url: string): void => {
+    if (sameApp(url)) return;
+    e.preventDefault();
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+  };
+  win.webContents.on('will-navigate', guardNavigation);
+  win.webContents.on('will-redirect', guardNavigation);
 
   if (isDev && process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL);
@@ -3444,10 +3469,23 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
         ...(slackReplyServer && slackReplyPort ? [{ name: `slack:${slackReplyPort}`, port: slackReplyPort, target: { port: slackReplyPort } }] : []),
         ...(proxy ? [{ name: `proxy:${proxy}`, port: proxy, target: { port: proxy } }] : [])
       ];
+      // "Port already taken inside WSL" means the Windows service is reachable
+      // directly ONLY with mirrored networking. Otherwise some other program
+      // holds that port and agents would hand it their tokens and API keys:
+      // refuse to start rather than point the agent there.
+      const mirrored = mirroredNetworking();
       for (const l of listeners) {
         const p = await bridge.ensure(l);
         if (l.name === 'hooks' && typeof p === 'number') opts.env = { ...(opts.env ?? {}), HIVE_SOCK: `tcp://127.0.0.1:${p}` };
-        if (typeof p === 'string' && p !== 'direct') console.warn(`[wsl-bridge] ${l.name}: ${p}`);
+        if (typeof p === 'number' || (p === 'direct' && mirrored)) continue;
+        console.warn(`[wsl-bridge] ${l.name}: ${p}`);
+        const what = l.name.split(':')[0];
+        return {
+          ok: false,
+          error: p === 'direct'
+            ? `Could not start the agent in WSL (${wslLoc.distro}): port ${l.port} (${what}) is already in use inside WSL by another program. Close it, or turn on mirrored networking, and try again.`
+            : `Could not start the agent in WSL (${wslLoc.distro}): the bridge could not open port ${l.port} (${what}): ${p}.`
+        };
       }
       // Set on the app's own env for Windows agents; a WSL agent only gets what
       // its spawn carries (pty.ts), so hand it over here (as a /mnt path).
@@ -3728,6 +3766,16 @@ function wslBridgeListeners(): Array<{ name: string; port: number; target: { por
   const tel = portOf(telemetry.endpoint?.() ?? null);
   if (tel) listeners.push({ name: `telemetry:${tel}`, port: tel, target: { port: tel } });
   return listeners;
+}
+
+/** Is `p` safe to open as far as UNC goes: not a UNC path at all, or a path
+ *  into the current floor's own WSL distro. Paths that agents or hook payloads
+ *  supply go through this before any fs call. */
+function uncAllowed(p: string): boolean {
+  if (!/^[\\/]{2}/.test(p)) return true;
+  const w = parseWslPath(p);
+  const floor = hive.wslRoot();
+  return !!(w && floor && w.distro.toLowerCase() === floor.distro.toLowerCase());
 }
 
 /** The home folder the floor's agents use: the Windows profile, or the
@@ -4561,6 +4609,8 @@ ipcMain.handle('hive:agentContext', (_evt, agentId: unknown) => {
   // An agent on a WSL floor reports the Linux path of its transcript.
   const floorWsl = hive.wslRoot();
   const file = floorWsl && tp.startsWith('/') ? fromLinuxPath(tp, floorWsl.distro) : tp;
+  // The path comes from a hook payload: no network paths (see uncAllowed).
+  if (!uncAllowed(file)) return null;
   return readContextTokens(file) ?? 0;
 });
 
@@ -5403,6 +5453,10 @@ async function processSpawnRequest(filePath: string): Promise<void> {
   const cwd = !rawCwd ? ''
     : floorWsl ? fromLinuxPath(rawCwd, floorWsl.distro, () => distroHomeUnc(floorWsl.distro))
     : expandTilde(rawCwd);
+  // A network path is refused before anything touches it: even existsSync on
+  // \\host\share makes Windows connect and offer the user's NTLM hash. The
+  // only UNC paths allowed are this floor's own distro.
+  if (cwd && !uncAllowed(cwd)) { fail(`"cwd" may not be a network path (${cwd})`); return; }
   if (!cwd || !existsSync(cwd)) { fail(`"cwd" missing or not found (${cwd || 'unset'})`); return; }
 
   // Request line → executable + argv (auto-mode inheritance, tokenization,

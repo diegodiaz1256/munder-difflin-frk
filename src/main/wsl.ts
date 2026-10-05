@@ -197,25 +197,26 @@ export function secretStdin(secrets: Record<string, string>): string {
  * The `wsl.exe` invocation that runs `file args` inside `distro`, in `cwd`
  * (a Linux path), with `env` set: a login shell plus WSL_PRELUDE, so tools a
  * user installed the usual way (nvm, ~/.local/bin, npm -g) are found.
+ *
+ * `env` never goes on the command line (process lists, EDR and audit logs
+ * record it, and agents carry API keys and broker tokens): the caller puts the
+ * returned `env` into the wsl.exe process's environment, and WSLENV, which
+ * names them, makes wsl.exe hand them to the distro. Values pass verbatim.
  */
 export function wslCommand(
   distro: string,
   cwd: string,
   file: string,
   args: string[],
-  env: Record<string, string> = {}
-): { file: string; args: string[] } {
-  const assignments = Object.entries(env)
-    .filter(([k]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(k))
-    .map(([k, v]) => `${k}=${v}`);
+  env: Record<string, string> = {},
+  inherited: string | undefined = process.env.WSLENV
+): { file: string; args: string[]; env: Record<string, string> } {
+  const vars = Object.fromEntries(Object.entries(env).filter(([k]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(k)));
+  const names = Object.keys(vars);
   return {
     file: 'wsl.exe',
-    args: [
-      '-d', distro, '--cd', cwd, '--exec',
-      'bash', '-lc', WSL_PRELUDE, 'bash',
-      ...(assignments.length ? ['env', ...assignments] : []),
-      file, ...args
-    ]
+    args: ['-d', distro, '--cd', cwd, '--exec', 'bash', '-lc', WSL_PRELUDE, 'bash', file, ...args],
+    env: names.length ? { ...vars, WSLENV: [...names, ...(inherited ? [inherited] : [])].join(':') } : {}
   };
 }
 

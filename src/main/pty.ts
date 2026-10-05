@@ -623,6 +623,8 @@ export class PtyManager {
         : null;
       let file: string;
       let spawnArgs: string[] | string;
+      /** A WSL agent's env, handed over through WSLENV (never argv). */
+      let wslEnv: Record<string, string> = {};
       if (wsl) {
         // Paths the agent is handed (its hive, its worktree) become Linux paths;
         // Windows-only values (the bundled Electron node launcher, PATH) are not
@@ -645,6 +647,7 @@ export class PtyManager {
         const inv = wslCommand(wsl.distro, wsl.linuxPath, cmd, args, env);
         file = inv.file;
         spawnArgs = inv.args;
+        wslEnv = inv.env;
       } else if (typeof opts.shellScript === 'string') {
         // Missing-CLI auto-install: run a banner + install command through the
         // platform shell so it streams to this same Terminal tab. On Windows we
@@ -726,7 +729,7 @@ export class PtyManager {
         // Inherited env minus the parent Claude session's identity markers,
         // then the app's defaults and locale, then per-agent values — see
         // ptyEnv.ts for why the strip exists and why it is prefix-based.
-        env: { ...buildPtyEnv(process.env, userPath, opts.env), ...agentIdentity().env },
+        env: { ...buildPtyEnv(process.env, userPath, opts.env), ...agentIdentity().env, ...wslEnv },
         ...agentIdentity().ids
       });
 

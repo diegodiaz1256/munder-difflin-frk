@@ -136,12 +136,14 @@ export function runHiddenClaude(prompt: string, opts: HiddenClaudeOptions): Prom
     const winWrap = !wsl && process.platform === 'win32' && !/\.(exe|com)$/i.test(exe);
     let spawnFile = winWrap ? (process.env.ComSpec || 'cmd.exe') : exe;
     let spawnArgs = winWrap ? ['/c', exe, ...args] : args;
+    let wslEnv: Record<string, string> = {};
     if (wsl) {
       const env: Record<string, string> = {};
       for (const [k, v] of Object.entries(opts.env ?? {})) if (typeof v === 'string') env[k] = linuxizeText(v, wsl.distro);
       const inv = wslCommand(wsl.distro, wsl.linuxPath, binary, args.map((a) => linuxizeText(a, wsl.distro)), env);
       spawnFile = inv.file;
       spawnArgs = inv.args;
+      wslEnv = inv.env;
     }
     let ptyProc: pty.IPty;
     try {
@@ -154,6 +156,7 @@ export function runHiddenClaude(prompt: string, opts: HiddenClaudeOptions): Prom
           ...process.env,
           PATH: userShellPath(),
           ...(opts.env ?? {}),
+          ...wslEnv,
         } as Record<string, string>,
       });
     } catch (e) {

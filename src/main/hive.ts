@@ -24,7 +24,7 @@ import {
   readdirSync, statSync, lstatSync, realpathSync, rmSync, appendFileSync,
   symlinkSync, unlinkSync, copyFileSync, cpSync, chmodSync
 } from 'node:fs';
-import { join, dirname, basename, isAbsolute, relative } from 'node:path';
+import { join, dirname, basename, isAbsolute, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes, createHash } from 'node:crypto';
@@ -211,6 +211,8 @@ export interface SpawnInjection {
   degraded?: string;
 }
 
+/** A message id / agent id usable as a file or folder name: no separators, no `..`. */
+const SAFE_MSG_ID = /^(?!\.{1,2}$)[A-Za-z0-9._-]{1,128}$/;
 const HOP_CAP = 12;
 
 function sleepSync(ms: number): void {
@@ -1082,6 +1084,9 @@ export class HiveManager {
               }
             }
             else {
+              // Still talk to the user's endpoint directly: without this a local
+              // model (Ollama, vLLM…) would silently fall back to the cloud.
+              if (opts.proxyUpstream) env[desc.baseUrlEnv] = opts.proxyUpstream;
               degraded = `${meta.name} is running without hive events: its proxy bridge did not bind after ${PROXY_BIND_ATTEMPTS} attempts. Live status, cost and inbox wake will not work for this session. Respawn the agent to try again.`;
               console.error(`[hive] proxy bridge for ${meta.id} did not bind — spawning without hive events`);
               this.appendLog({ kind: 'proxy-degraded', agentId: meta.id, name: meta.name, provider: meta.provider, attempts: PROXY_BIND_ATTEMPTS });
@@ -1857,8 +1862,11 @@ export class HiveManager {
   /** Normalize a partial message into a full HiveMessage. */
   private normalize(partial: Partial<HiveMessage>, from: string): HiveMessage {
     const act = (partial.act ?? 'inform') as MessageAct;
+    // `id` names the inbox FILE, and an agent writes its own outbox: anything
+    // but a plain name (`../../x`) would let it write JSON anywhere main can.
+    const safeId = typeof partial.id === 'string' && SAFE_MSG_ID.test(partial.id) ? partial.id : `${stamp()}-${shortRand()}`;
     return {
-      id: partial.id ?? `${stamp()}-${shortRand()}`,
+      id: safeId,
       conversation: partial.conversation ?? `conv-${shortRand()}`,
       in_reply_to: partial.in_reply_to ?? null,
       from: partial.from ?? from,
@@ -1884,7 +1892,12 @@ export class HiveManager {
    *  Returns false when the recipient has no inbox, so the caller can bounce and
    *  log the drop rather than let the message vanish. */
   private deliver(msg: HiveMessage, toId: string): boolean {
-    const inbox = join(this.agentDir(toId), 'inbox');
+    // Recipient and file name must stay inside the hive (see normalize).
+    if (!SAFE_MSG_ID.test(msg.id)) return false;
+    const agents = resolve(this.agentDir(''));
+    const target = resolve(this.agentDir(toId));
+    if (dirname(target) !== agents) return false;
+    const inbox = join(target, 'inbox');
     if (!existsSync(inbox)) return false; // unknown recipient — the caller reports it
     this.atomicWriteJson(join(inbox, `${msg.id}.json`), msg);
     return true;
@@ -3088,7 +3101,9 @@ export class HiveManager {
   // triggered it, which is what "single committer" was supposed to mean.
   private git(args: string[], cwd: string): { ok: boolean; out: string; err: string } {
     // A WSL floor's hive is committed by git inside that distro (wsl.ts).
-    const inv = gitInvocation(cwd, ['-c', 'commit.gpgsign=false', '-c', 'gc.autoDetach=false', '-c', 'user.name=Hive', '-c', 'user.email=hive@local', ...args]);
+    // Agents can write inside the hive root, .git included: never run its hooks
+    // or an fsmonitor command from there (that would be code run by the app).
+    const inv = gitInvocation(cwd, ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=', '-c', 'commit.gpgsign=false', '-c', 'gc.autoDetach=false', '-c', 'user.name=Hive', '-c', 'user.email=hive@local', ...args]);
     const res = spawnSync(inv.file, inv.args, {
       cwd: inv.cwd, encoding: 'utf8', timeout: inv.distro ? 20000 : 8000, windowsHide: true
     });

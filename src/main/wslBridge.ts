@@ -125,8 +125,9 @@ export class WslBridge {
           this.ports[m.n] = p;
           this.waiting.get(m.n)?.(p);
           this.waiting.delete(m.n);
-        } else if (m.t === 'o' && typeof m.c === 'number') {
-          this.open(m.c, m.n ?? '');
+        } else if (m.t === 'o' && Number.isSafeInteger(m.c) && (m.c as number) > 0 && !this.socks.has(m.c as number)) {
+          // A connection id is opened once: a repeated one must not rewire a live socket.
+          this.open(m.c as number, m.n ?? '');
         } else if (m.t === 'd' && typeof m.c === 'number' && m.b) {
           this.socks.get(m.c)?.write(Buffer.from(m.b, 'base64'));
         } else if (m.t === 'x' && typeof m.c === 'number') {
@@ -146,6 +147,12 @@ export class WslBridge {
    * A listener is known by its name: a new target port means a new name.
    */
   async ensure(l: { name: string; port: number; target: BridgeTarget }): Promise<number | string> {
+    // A listener that did not bind last time (port taken, error) is tried again.
+    if (this.ready && typeof this.ports[l.name] === 'string') {
+      const i = this.listeners.findIndex((x) => x.name === l.name);
+      if (i >= 0) this.listeners.splice(i, 1);
+      delete this.ports[l.name];
+    }
     if (!this.listeners.some((x) => x.name === l.name)) {
       this.listeners.push(l);
       if (this.ready) {
