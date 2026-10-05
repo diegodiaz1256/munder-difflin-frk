@@ -2,6 +2,22 @@ import { closeSync, cpSync, existsSync, fstatSync, mkdirSync, openSync, readSync
 import os from 'node:os';
 import path from 'node:path';
 import { estimateCostUsd, normalizeModel } from './pricing';
+import { distroHomeUnc, parseWslPath } from './wsl';
+
+/** Where Claude Code keeps transcripts for an agent that runs in `cwd`, and
+ *  `cwd` as Claude itself spells it. An agent on a WSL floor runs inside the
+ *  distro: its transcripts are in the distro user's ~/.claude, keyed by the
+ *  Linux path, not in the Windows profile. */
+export function claudeProjects(
+  cwd: string,
+  platform: string = process.platform,
+  homeOf: (distro: string) => string | null = distroHomeUnc
+): { root: string; cwd: string } {
+  const w = platform === 'win32' ? parseWslPath(cwd) : null;
+  const home = w ? homeOf(w.distro) : null;
+  if (w && home) return { root: path.win32.join(home, '.claude', 'projects'), cwd: w.linuxPath };
+  return { root: path.join(os.homedir(), '.claude/projects'), cwd };
+}
 
 /** Claude Code's project key: the absolute cwd with EVERY non-alphanumeric
  *  character turned into a dash — the leading slash and any dots included.
@@ -40,8 +56,8 @@ function legacyProjectKey(cwd: string): string {
  *  our own stale copies forever. When neither exists we return the CURRENT
  *  spelling, because callers that go on to create the directory must create the
  *  one Claude Code will actually read. */
-export function projectDir(cwd: string): string {
-  const root = path.join(os.homedir(), '.claude/projects');
+export function projectDir(cwdIn: string): string {
+  const { root, cwd } = claudeProjects(cwdIn);
   const current = path.join(root, projectKey(cwd));
   if (existsSync(current)) return current;
   // For cwd '/' the legacy key is the empty string, and path.join(root, '')
@@ -77,7 +93,7 @@ export function seedSessionTranscript(cwd: string, sessionId: string): boolean {
     if (!sessionId || !VALID_SESSION_ID.test(sessionId)) return false;
     const target = path.join(projectDir(cwd), `${sessionId}.jsonl`);
     if (existsSync(target)) return true;
-    const projectsRoot = path.join(os.homedir(), '.claude/projects');
+    const projectsRoot = claudeProjects(cwd).root;
     if (!existsSync(projectsRoot)) return false;
     for (const dir of readdirSync(projectsRoot)) {
       const candidate = path.join(projectsRoot, dir, `${sessionId}.jsonl`);

@@ -7,7 +7,7 @@ import { ensureKilled, hardKillTree } from './procKill';
 import { expandTilde } from './fs';
 import { buildPtyEnv } from './ptyEnv';
 import { homedir } from 'node:os';
-import { linuxizeText, parseWslPath, wslCommand } from './wsl';
+import { linuxizeText, parseWslPath, toLinuxPath, wslCommand } from './wsl';
 import {
   captureFromLoginShell,
   isSafeCommandName,
@@ -94,6 +94,8 @@ interface PtySession {
   /** WSL floors: when the agent first printed visible text (0 = not yet).
    *  wsl.exe paints escape sequences long before the agent starts. */
   wslVisibleAt?: number;
+  /** The distro a WSL floor's agent runs in. */
+  wslDistro?: string;
 }
 
 /** Visible text once escape sequences are removed. */
@@ -621,6 +623,8 @@ export class PtyManager {
         : null;
       let file: string;
       let spawnArgs: string[] | string;
+      /** A WSL agent's env, handed over through WSLENV (never argv). */
+      let wslEnv: Record<string, string> = {};
       if (wsl) {
         // Paths the agent is handed (its hive, its worktree) become Linux paths;
         // Windows-only values (the bundled Electron node launcher, PATH) are not
@@ -630,7 +634,10 @@ export class PtyManager {
         const env: Record<string, string> = { TERM: 'xterm-256color', COLORTERM: 'truecolor' };
         for (const [k, v] of Object.entries(opts.env ?? {})) {
           if (DROP.has(k) || typeof v !== 'string') continue;
-          env[k] = linuxizeText(v, wsl.distro);
+          // A value that IS a Windows path (KG_ROOT, KG_CLI…) may hold spaces.
+          env[k] = /^[A-Za-z]:[\\/]/.test(v) && !v.includes(';')
+            ? toLinuxPath(v, wsl.distro) ?? v
+            : linuxizeText(v, wsl.distro);
         }
         env.HIVE_NODE = 'node';
         const cmd = typeof opts.shellScript === 'string' ? 'bash' : opts.command;
@@ -640,6 +647,7 @@ export class PtyManager {
         const inv = wslCommand(wsl.distro, wsl.linuxPath, cmd, args, env);
         file = inv.file;
         spawnArgs = inv.args;
+        wslEnv = inv.env;
       } else if (typeof opts.shellScript === 'string') {
         // Missing-CLI auto-install: run a banner + install command through the
         // platform shell so it streams to this same Terminal tab. On Windows we
@@ -721,7 +729,7 @@ export class PtyManager {
         // Inherited env minus the parent Claude session's identity markers,
         // then the app's defaults and locale, then per-agent values — see
         // ptyEnv.ts for why the strip exists and why it is prefix-based.
-        env: { ...buildPtyEnv(process.env, userPath, opts.env), ...agentIdentity().env },
+        env: { ...buildPtyEnv(process.env, userPath, opts.env), ...agentIdentity().env, ...wslEnv },
         ...agentIdentity().ids
       });
 
@@ -742,7 +750,7 @@ export class PtyManager {
         hasOutput: false,
         tail: '',
         owner,
-        ...(wsl ? { wslVisibleAt: 0 } : {})
+        ...(wsl ? { wslVisibleAt: 0, wslDistro: wsl.distro } : {})
       };
       this.sessions.set(opts.id, session);
 
@@ -794,7 +802,10 @@ export class PtyManager {
     const s = this.sessions.get(id);
     if (!s) return { ok: false, error: `no pty: ${id}` };
     try {
-      s.proc.write(data);
+      // Text the app types into a WSL agent (attachments, Slack files, work
+      // orders) names Windows files: give their paths as the distro sees them.
+      // Single keystrokes never hold a whole path, so typing is untouched.
+      s.proc.write(s.wslDistro && data.includes(':\\') ? linuxizeText(data, s.wslDistro) : data);
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e) };

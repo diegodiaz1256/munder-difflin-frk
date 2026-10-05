@@ -38,9 +38,14 @@ test('UNC paths inside text (prompts, settings) become Linux paths', () => {
 });
 
 test('the wsl.exe command runs through a login shell, in the right folder, with env', () => {
-  const c = wslCommand('Ubuntu', '/home/d/o', 'claude', ['--model', 'opus'], { MD_AGENT_ID: 'god', 'BAD-NAME': 'x' });
+  const c = wslCommand('Ubuntu', '/home/d/o', 'claude', ['--model', 'opus'], { MD_AGENT_ID: 'god', MD_BROKER_TOKEN: 's3cret', 'BAD-NAME': 'x' }, undefined);
   assert.equal(c.file, 'wsl.exe');
-  assert.deepEqual(c.args, ['-d', 'Ubuntu', '--cd', '/home/d/o', '--exec', 'bash', '-lc', WSL_PRELUDE, 'bash', 'env', 'MD_AGENT_ID=god', 'claude', '--model', 'opus']);
+  assert.deepEqual(c.args, ['-d', 'Ubuntu', '--cd', '/home/d/o', '--exec', 'bash', '-lc', WSL_PRELUDE, 'bash', 'claude', '--model', 'opus']);
+  // env goes through the process environment + WSLENV, never the command line
+  assert.ok(!c.args.join(' ').includes('s3cret'));
+  assert.deepEqual(c.env, { MD_AGENT_ID: 'god', MD_BROKER_TOKEN: 's3cret', WSLENV: 'MD_AGENT_ID:MD_BROKER_TOKEN' });
+  assert.equal(wslCommand('U', '/', 'x', [], { A: '1' }, 'USERPROFILE/p').env.WSLENV, 'A:USERPROFILE/p', 'keeps the user\'s own WSLENV');
+  assert.deepEqual(wslCommand('U', '/', 'x', []).env, {});
   assert.match(WSL_PRELUDE, /nvm.sh/);
   assert.ok(WSL_PRELUDE.endsWith('exec "$@"'), "the prelude ends by running the command");
 });
@@ -72,8 +77,33 @@ test('mempalace runs inside the distro for a WSL floor, with Linux paths', () =>
     { MEMPALACE_PALACE_PATH: palace, MEMPALACE_EMBEDDING_MODEL: 'minilm' }, wsl);
   assert.equal(inv.file, 'wsl.exe');
   assert.ok(inv.args.includes('/home/d/offices/shop/hive/agents/a1'));
-  assert.ok(inv.args.includes('MEMPALACE_PALACE_PATH=/home/d/offices/shop/palace'));
+  assert.equal(inv.env.MEMPALACE_PALACE_PATH, '/home/d/offices/shop/palace');
+  assert.match(inv.env.WSLENV, /MEMPALACE_PALACE_PATH/);
   assert.ok(inv.args.includes('/home/d/.local/bin/mempalace'));
   const plain = mempalaceInvocation('mempalace.exe', ['search', 'x'], {}, null);
   assert.deepEqual(plain, { file: 'mempalace.exe', args: ['search', 'x'] });
+});
+
+test('Windows drive paths become /mnt paths for agents in the distro', () => {
+  const { fromLinuxPath } = loadTs('src/main/wsl.ts');
+  assert.equal(linuxizeText('run "C:\\Program Files\\Scranton Branch\\resources\\kg.cjs" search x', 'Ubuntu'),
+    'run "/mnt/c/Program Files/Scranton Branch/resources/kg.cjs" search x');
+  assert.equal(linuxizeText('KG at C:\\Users\\d\\AppData\\kg now', 'Ubuntu'), 'KG at /mnt/c/Users/d/AppData/kg now');
+  assert.equal(linuxizeText('ROOT=G:\\x', 'Ubuntu'), 'ROOT=/mnt/g/x');
+  assert.equal(linuxizeText('no paths: a:b, http://x', 'Ubuntu'), 'no paths: a:b, http://x');
+  // and back: what an agent in the distro writes, as the app opens it
+  assert.equal(fromLinuxPath('/home/d/repo', 'Ubuntu'), '\\\\wsl.localhost\\Ubuntu\\home\\d\\repo');
+  assert.equal(fromLinuxPath('~/repo/x', 'Ubuntu', () => '\\\\wsl.localhost\\Ubuntu\\home\\d'), '\\\\wsl.localhost\\Ubuntu\\home\\d\\repo\\x');
+  assert.equal(fromLinuxPath('/mnt/c/Users/d', 'Ubuntu'), 'C:\\Users\\d');
+  assert.equal(fromLinuxPath('G:\\x', 'Ubuntu'), 'G:\\x');
+  assert.equal(fromLinuxPath('~', 'Ubuntu', () => null), '~');
+});
+
+test('a WSL agent\'s Claude transcripts live in the distro home, keyed by the Linux path', () => {
+  const { claudeProjects } = loadTs('src/main/transcript.ts');
+  const loc = claudeProjects('\\\\wsl.localhost\\Ubuntu\\home\\d\\offices\\shop', 'win32', () => '\\\\wsl.localhost\\Ubuntu\\home\\d');
+  assert.equal(loc.root, '\\\\wsl.localhost\\Ubuntu\\home\\d\\.claude\\projects');
+  assert.equal(loc.cwd, '/home/d/offices/shop');
+  const plain = claudeProjects('/home/d/x', 'linux', () => { throw new Error('no wsl here'); });
+  assert.equal(plain.cwd, '/home/d/x');
 });

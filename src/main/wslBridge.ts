@@ -36,10 +36,7 @@ const listeners = JSON.parse(process.argv[1]);
 const socks = new Map();
 let next = 1;
 const out = (m) => process.stdout.write(JSON.stringify(m) + '\n');
-const ports = {};
-let pending = listeners.length;
-const done = () => { if (--pending === 0) out({ t: 'ready', ports }); };
-for (const l of listeners) {
+const listen = (l, cb) => {
   const srv = net.createServer((s) => {
     const c = next++;
     socks.set(c, s);
@@ -48,13 +45,17 @@ for (const l of listeners) {
     s.on('close', () => { if (socks.delete(c)) out({ t: 'x', c }); });
     s.on('error', () => {});
   });
-  srv.on('error', (e) => { ports[l.name] = e.code === 'EADDRINUSE' ? 'direct' : 'failed:' + e.code; done(); });
-  srv.listen(l.port, '127.0.0.1', () => { ports[l.name] = srv.address().port; done(); });
-}
+  srv.on('error', (e) => cb(e.code === 'EADDRINUSE' ? 'direct' : 'failed:' + e.code));
+  srv.listen(l.port, '127.0.0.1', () => cb(srv.address().port));
+};
+const ports = {};
+let pending = listeners.length;
+for (const l of listeners) listen(l, (p) => { ports[l.name] = p; if (--pending === 0) out({ t: 'ready', ports }); });
 if (!pending) out({ t: 'ready', ports });
 const rl = require('readline').createInterface({ input: process.stdin });
 rl.on('line', (line) => {
   let m; try { m = JSON.parse(line); } catch { return; }
+  if (m.t === 'listen') { listen(m, (p) => out({ t: 'listening', n: m.name, p })); return; }
   const s = socks.get(m.c);
   if (!s) return;
   if (m.t === 'd') s.write(Buffer.from(m.b, 'base64'));
@@ -69,6 +70,9 @@ export class WslBridge {
   private proc: ChildProcess | null = null;
   private socks = new Map<number, Socket>();
   private ready: Promise<BridgePorts> | null = null;
+  /** Where each listener ended up inside WSL (from 'ready' and 'listening'). */
+  private ports: BridgePorts = {};
+  private waiting = new Map<string, (p: number | string) => void>();
 
   constructor(
     readonly distro: string,
@@ -105,15 +109,25 @@ export class WslBridge {
         this.socks.clear();
         this.proc = null;
         this.ready = null; // next start() launches a fresh one
+        this.ports = {};
+        for (const w of this.waiting.values()) w('failed:exited');
+        this.waiting.clear();
         if (!settled) { settled = true; clearTimeout(timer); reject(new Error(`the WSL bridge into ${this.distro} stopped (exit ${code}). ${errTail.trim() ? describeWslError(errTail, this.distro) : 'It ended without a message: security software may have stopped it, or node is missing inside the distro.'}`)); }
       });
       createInterface({ input: p.stdout! }).on('line', (line) => {
         let m: { t: string; c?: number; n?: string; b?: string; ports?: BridgePorts };
         try { m = JSON.parse(line); } catch { return; }
         if (m.t === 'ready' && m.ports) {
+          this.ports = { ...m.ports };
           if (!settled) { settled = true; clearTimeout(timer); resolve(m.ports); }
-        } else if (m.t === 'o' && typeof m.c === 'number') {
-          this.open(m.c, m.n ?? '');
+        } else if (m.t === 'listening' && m.n) {
+          const p = (m as { p?: number | string }).p ?? 'failed';
+          this.ports[m.n] = p;
+          this.waiting.get(m.n)?.(p);
+          this.waiting.delete(m.n);
+        } else if (m.t === 'o' && Number.isSafeInteger(m.c) && (m.c as number) > 0 && !this.socks.has(m.c as number)) {
+          // A connection id is opened once: a repeated one must not rewire a live socket.
+          this.open(m.c as number, m.n ?? '');
         } else if (m.t === 'd' && typeof m.c === 'number' && m.b) {
           this.socks.get(m.c)?.write(Buffer.from(m.b, 'base64'));
         } else if (m.t === 'x' && typeof m.c === 'number') {
@@ -124,6 +138,38 @@ export class WslBridge {
       });
     });
     return this.ready;
+  }
+
+  /**
+   * Make sure `l` is bridged, adding it to a running bridge when it is new (a
+   * service that started after the first agent, a Slack reply server, an
+   * agent's own proxy sidecar), and resolve with where it listens inside WSL.
+   * A listener is known by its name: a new target port means a new name.
+   */
+  async ensure(l: { name: string; port: number; target: BridgeTarget }): Promise<number | string> {
+    // A listener that did not bind last time (port taken, error) is tried again.
+    if (this.ready && typeof this.ports[l.name] === 'string') {
+      const i = this.listeners.findIndex((x) => x.name === l.name);
+      if (i >= 0) this.listeners.splice(i, 1);
+      delete this.ports[l.name];
+    }
+    if (!this.listeners.some((x) => x.name === l.name)) {
+      this.listeners.push(l);
+      if (this.ready) {
+        await this.ready;
+        if (!(l.name in this.ports)) {
+          const p = await new Promise<number | string>((resolve) => {
+            this.waiting.set(l.name, resolve);
+            this.send({ t: 'listen', name: l.name, port: l.port });
+            setTimeout(() => { if (this.waiting.delete(l.name)) resolve('failed:timeout'); }, 10_000).unref?.();
+          });
+          if (typeof p === 'string' && p.startsWith('failed')) this.log(`[wsl-bridge ${this.distro}] ${l.name}: ${p}`);
+          return p;
+        }
+      }
+    }
+    const ports = await this.start();
+    return this.ports[l.name] ?? ports[l.name] ?? 'failed:unknown';
   }
 
   private send(m: unknown): void {
@@ -147,5 +193,6 @@ export class WslBridge {
     try { this.proc?.kill(); } catch { /* gone */ }
     this.proc = null;
     this.ready = null;
+    this.ports = {};
   }
 }

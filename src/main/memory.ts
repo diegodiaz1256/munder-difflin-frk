@@ -120,7 +120,7 @@ export function mempalaceInvocation(
   args: string[],
   env: Record<string, string>,
   wsl: WslLocation | null
-): { file: string; args: string[] } {
+): { file: string; args: string[]; env?: Record<string, string> } {
   if (!wsl) return { file: bin, args };
   const linuxEnv: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) if (v) linuxEnv[k] = toLinuxPath(v, wsl.distro) ?? v;
@@ -265,7 +265,7 @@ export class MemoryManager {
       MEMPALACE_EMBEDDING_MODEL: this.model(),
       ...(MEMPALACE_DEVICE ? { MEMPALACE_EMBEDDING_DEVICE: MEMPALACE_DEVICE } : {})
     }, this.wsl());
-    return { ...inv, env: this.childEnv() };
+    return { file: inv.file, args: inv.args, env: { ...this.childEnv(), ...(inv.env ?? {}) } };
   }
 
   // — lifecycle —

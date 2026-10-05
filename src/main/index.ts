@@ -72,7 +72,7 @@ import * as integrations from './integrations';
 import { applyMissionRequest, type MissionLike } from '../shared/missionRequests';
 import { cleanCustomBundles } from '../shared/roleBundles';
 import { Factories } from './factories';
-import { createWslOffice, describeWslError, listDistros, mirroredNetworking, parseWslPath, probeInDistro, WSL_INSTALL } from './wsl';
+import { createWslOffice, describeWslError, distroHomeUnc, fromLinuxPath, listDistros, toWslUnc, mirroredNetworking, parseWslPath, probeInDistro, WSL_INSTALL } from './wsl';
 import { WslBridge } from './wslBridge';
 import { McpServers } from './mcpServers';
 import { EnvVault, fingerprintOf } from './envVault';
@@ -483,15 +483,29 @@ const integrationBroker = new IntegrationBroker({
       const name = (agentId && hive.registry().agents?.[agentId]?.name) || agentId || workerId;
       const head = await gitRun(pty.cwd, ['rev-parse', 'HEAD']);
       const status = await gitRun(pty.cwd, ['status', '--porcelain']);
-      return envVault.run(runnerId, { agentName: name, cwd: pty.cwd, fingerprint: fingerprintOf(head, status) });
+      // Files hidden from `status` with skip-worktree / assume-unchanged still
+      // count: their flags (and so any change to them) join the fingerprint.
+      const hidden = (await gitRun(pty.cwd, ['ls-files', '-v']))
+        .split('\n').filter((l) => /^[a-zS]/.test(l)).join('\n');
+      return envVault.run(runnerId, { agentName: name, cwd: pty.cwd, fingerprint: fingerprintOf(head, hidden ? `${status}\n${hidden}` : status) });
     }
   }
 });
 
 /** Best-effort git output for runner fingerprints ('' outside a repo). */
-function gitRun(cwd: string, args: string[]): Promise<string> {
+function gitRun(cwd: string, argsIn: string[]): Promise<string> {
   return new Promise((resolve) => {
-    const p = spawn('git', args, { cwd, windowsHide: true });
+    // This fingerprint is a security gate, and the agent can write its repo's
+    // .git/config: a core.fsmonitor hook could answer `status` for it. Off.
+    const args = ['-c', 'core.fsmonitor=', '-c', 'core.untrackedCache=false', ...argsIn];
+    // A WSL floor's repo is read by git inside the distro (Windows git on
+    // \\wsl.localhost is missing or refuses it, which left the fingerprint
+    // empty). Started with --exec and NO login shell: ~/.profile, ~/.bashrc and
+    // nvm are agent-writable and could put a fake git first on PATH.
+    const w = process.platform === 'win32' ? parseWslPath(cwd) : null;
+    const p = w
+      ? spawn('wsl.exe', ['-d', w.distro, '--cd', w.linuxPath, '--exec', '/usr/bin/env', 'PATH=/usr/local/bin:/usr/bin:/bin', 'git', ...args], { windowsHide: true })
+      : spawn('git', args, { cwd, windowsHide: true });
     let out = '';
     p.stdout.on('data', (d) => { out += d; });
     p.on('error', () => resolve(''));
@@ -1757,6 +1771,8 @@ let slackServer: SlackWebhookServer | null = null;
 /** The loopback-only reply endpoint (lets the bundled helper post back to Slack
  *  without ever seeing the bot token). Lifecycle is tied to `slackServer`. */
 let slackReplyServer: SlackReplyServer | null = null;
+/** The reply endpoint's loopback port (bridged into WSL floors). */
+let slackReplyPort: number | null = null;
 /** Last public tunnel URL handed out — persisted so Settings can re-show the
  *  Request URL after a reopen (Slack reuses it until the server is stopped). */
 let lastSlackUrl: string | undefined;
@@ -2125,6 +2141,7 @@ async function startSlackReplyServer(): Promise<void> {
     slackReplyServer = null;
     return;
   }
+  slackReplyPort = r.port;
   try {
     writeFileSync(slackReplyConfigPath(), JSON.stringify({ port: r.port, token }), { mode: 0o600 });
   } catch (e) {
@@ -2825,6 +2842,21 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
   win.webContents.on('did-start-navigation', (details) => {
     if (details.isMainFrame) rendererReadyForHires = false;
   });
+  // The preload (window.cth: spawn, fs, git…) runs in whatever the main frame
+  // shows, so it must only ever show the app. A dropped link or .html file, or
+  // a page an agent wrote, would otherwise navigate here and get it. Web links
+  // open in the browser instead.
+  const sameApp = (url: string): boolean => {
+    const strip = (u: string): string => u.replace(/[?#].*$/, '');
+    return strip(url) === strip(wc.getURL());
+  };
+  const guardNavigation = (e: Electron.Event, url: string): void => {
+    if (sameApp(url)) return;
+    e.preventDefault();
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+  };
+  win.webContents.on('will-navigate', guardNavigation);
+  win.webContents.on('will-redirect', guardNavigation);
 
   if (isDev && process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL);
@@ -3136,14 +3168,13 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // Proxy-tier CLIs (qwen/crush) route their LLM traffic through a loopback sidecar
   // whose UPSTREAM is read from the preset's bridge.baseUrlEnv inside hive.ensureAgent.
   // For the local-LLM path, feed the user's configured base URL as that upstream so the
-  // proxy forwards to their endpoint (Ollama/LM Studio/vLLM). Set on process.env BEFORE
-  // ensureAgent reads it. (Crush's baseUrlEnv is an inert sentinel used ONLY as this
+  // proxy forwards to their endpoint (Ollama/LM Studio/vLLM). Handed to ensureAgent
+  // directly: it used to be set on process.env, which every agent spawned after it
+  // inherited (and kept after the field was cleared). (Crush's baseUrlEnv is an inert sentinel used ONLY as this
   // upstream source; its real routing is the per-agent CRUSH_GLOBAL_CONFIG base_url.)
-  if (opts.hive && (provider === 'crush' || provider === 'qwen')) {
-    const bridge = providerPreset(provider).bridge;
-    const baseUrl = readConfig().providerBaseUrls?.[provider];
-    if (bridge && bridge.kind === 'proxy' && baseUrl) process.env[bridge.baseUrlEnv] = baseUrl;
-  }
+  const proxyUpstream = opts.hive && (provider === 'crush' || provider === 'qwen')
+    ? readConfig().providerBaseUrls?.[provider]?.trim() || undefined
+    : undefined;
   // If the agent carries hive metadata, provision its workspace and add
   // provider-specific spawn injection. Non-Claude providers get shared AGENT_*
   // env only; Claude Code also gets prompt/settings hook args.
@@ -3184,6 +3215,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           // expands to nothing, so every knowledge-graph instruction was dead on a
           // Windows floor. Empty when the KG is off (the line isn't emitted then).
           kgCliPath: knowledge.env().KG_CLI,
+          proxyUpstream,
           integrations: brokerIntegrations,
           runners: runnersForAgent,
           theme: readConfig().terminalTheme ?? 'light',
@@ -3427,9 +3459,37 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   const wslLoc = process.platform === 'win32' ? parseWslPath(opts.cwd) : null;
   if (wslLoc) {
     try {
-      const ports = await wslBridgeFor(wslLoc.distro).start();
-      if (typeof ports.hooks === 'number') opts.env = { ...(opts.env ?? {}), HIVE_SOCK: `tcp://127.0.0.1:${ports.hooks}` };
-      for (const [name, v] of Object.entries(ports)) if (typeof v === 'string' && v !== 'direct') console.warn(`[wsl-bridge] ${name}: ${v}`);
+      const bridge = wslBridgeFor(wslLoc.distro);
+      // Every service as it is NOW (one that started after the first agent, the
+      // Slack reply endpoint, this agent's own proxy sidecar) — a new one is
+      // added to the running bridge. Same port numbers inside WSL where free.
+      const proxy = hive.proxyPortFor(opts.id);
+      const listeners = [
+        ...wslBridgeListeners(),
+        ...(slackReplyServer && slackReplyPort ? [{ name: `slack:${slackReplyPort}`, port: slackReplyPort, target: { port: slackReplyPort } }] : []),
+        ...(proxy ? [{ name: `proxy:${proxy}`, port: proxy, target: { port: proxy } }] : [])
+      ];
+      // "Port already taken inside WSL" means the Windows service is reachable
+      // directly ONLY with mirrored networking. Otherwise some other program
+      // holds that port and agents would hand it their tokens and API keys:
+      // refuse to start rather than point the agent there.
+      const mirrored = mirroredNetworking();
+      for (const l of listeners) {
+        const p = await bridge.ensure(l);
+        if (l.name === 'hooks' && typeof p === 'number') opts.env = { ...(opts.env ?? {}), HIVE_SOCK: `tcp://127.0.0.1:${p}` };
+        if (typeof p === 'number' || (p === 'direct' && mirrored)) continue;
+        console.warn(`[wsl-bridge] ${l.name}: ${p}`);
+        const what = l.name.split(':')[0];
+        return {
+          ok: false,
+          error: p === 'direct'
+            ? `Could not start the agent in WSL (${wslLoc.distro}): port ${l.port} (${what}) is already in use inside WSL by another program. Close it, or turn on mirrored networking, and try again.`
+            : `Could not start the agent in WSL (${wslLoc.distro}): the bridge could not open port ${l.port} (${what}): ${p}.`
+        };
+      }
+      // Set on the app's own env for Windows agents; a WSL agent only gets what
+      // its spawn carries (pty.ts), so hand it over here (as a /mnt path).
+      if (process.env.MD_SLACK_REPLY_CONFIG) opts.env = { ...(opts.env ?? {}), MD_SLACK_REPLY_CONFIG: process.env.MD_SLACK_REPLY_CONFIG };
     } catch (e) {
       console.error('[wsl-bridge] start failed:', e);
       return { ok: false, error: `Could not start the agent in WSL (${wslLoc.distro}): ${e instanceof Error ? e.message : describeWslError(e, wslLoc.distro)}` };
@@ -3688,19 +3748,41 @@ const wslBridges = new Map<string, WslBridge>();
 function wslBridgeFor(distro: string): WslBridge {
   let b = wslBridges.get(distro);
   if (b) return b;
+  b = new WslBridge(distro, [], (m) => console.log(m));
+  wslBridges.set(distro, b);
+  return b;
+}
+/** The app's services as they stand right now. Named with their port, so a
+ *  service that restarts on a new port is bridged anew. */
+function wslBridgeListeners(): Array<{ name: string; port: number; target: { port: number } | { path: string } }> {
   const listeners: Array<{ name: string; port: number; target: { port: number } | { path: string } }> = [];
   const sock = hive.sockPath();
   if (sock) listeners.push({ name: 'hooks', port: 0, target: { path: sock } });
   const portOf = (url: string | null | undefined): number => { const m = url ? /:(\d+)\/?$/.exec(url) : null; return m ? Number(m[1]) : 0; };
   const gw = portOf(mcpGateway.url());
-  if (gw) listeners.push({ name: 'gateway', port: gw, target: { port: gw } });
+  if (gw) listeners.push({ name: `gateway:${gw}`, port: gw, target: { port: gw } });
   const br = integrationBroker.running() ? portOf(integrationBroker.url()) : 0;
-  if (br) listeners.push({ name: 'broker', port: br, target: { port: br } });
+  if (br) listeners.push({ name: `broker:${br}`, port: br, target: { port: br } });
   const tel = portOf(telemetry.endpoint?.() ?? null);
-  if (tel) listeners.push({ name: 'telemetry', port: tel, target: { port: tel } });
-  b = new WslBridge(distro, listeners, (m) => console.log(m));
-  wslBridges.set(distro, b);
-  return b;
+  if (tel) listeners.push({ name: `telemetry:${tel}`, port: tel, target: { port: tel } });
+  return listeners;
+}
+
+/** Is `p` safe to open as far as UNC goes: not a UNC path at all, or a path
+ *  into the current floor's own WSL distro. Paths that agents or hook payloads
+ *  supply go through this before any fs call. */
+function uncAllowed(p: string): boolean {
+  if (!/^[\\/]{2}/.test(p)) return true;
+  const w = parseWslPath(p);
+  const floor = hive.wslRoot();
+  return !!(w && floor && w.distro.toLowerCase() === floor.distro.toLowerCase());
+}
+
+/** The home folder the floor's agents use: the Windows profile, or the
+ *  distro user's home (as a UNC path) on a WSL floor. */
+function agentsHome(): string {
+  const w = hive.wslRoot();
+  return (w && distroHomeUnc(w.distro)) || homedir();
 }
 
 ipcMain.handle('wsl:distros', async () => {
@@ -4117,7 +4199,7 @@ ipcMain.handle('skills:local', (_evt, cwd: unknown): LocalSkill[] => {
     ...(cfg.registeredRepos ?? [])
   ];
   try {
-    return listLocalSkills({ cwds, bundledDir: skillsResourceDir() });
+    return listLocalSkills({ cwds, bundledDir: skillsResourceDir(), home: agentsHome() });
   } catch (e) {
     console.error('[skills] local scan failed:', e);
     return [];
@@ -4137,14 +4219,14 @@ ipcMain.handle('skills:install', async (_evt, url: unknown, name: unknown) => {
   if (typeof url !== 'string' || typeof name !== 'string') {
     return { ok: false as const, error: 'bad request' };
   }
-  return installSkill(url, name);
+  return installSkill(url, name, agentsHome());
 });
 /** Delete an installed skill. The guard rails live in uninstallSkill — it refuses
  *  any path it cannot prove is a skill folder inside a skills root. */
 ipcMain.handle('skills:uninstall', (_evt, path: unknown) => {
   if (typeof path !== 'string') return { ok: false as const, error: 'bad request' };
   const cfg = readConfig();
-  return uninstallSkill(path, { cwds: cfg.registeredRepos ?? [] });
+  return uninstallSkill(path, { cwds: cfg.registeredRepos ?? [], home: agentsHome() });
 });
 /** Reveal a skill on disk. `openExternal` is deliberately https-only, so a
  *  file:// URL cannot (and should not) be smuggled through it. */
@@ -4524,7 +4606,12 @@ ipcMain.handle('hive:agentContext', (_evt, agentId: unknown) => {
   if (typeof agentId !== 'string') return null;
   const tp = hookServer.transcriptPath(agentId);
   if (!tp) return null;
-  return readContextTokens(tp) ?? 0;
+  // An agent on a WSL floor reports the Linux path of its transcript.
+  const floorWsl = hive.wslRoot();
+  const file = floorWsl && tp.startsWith('/') ? fromLinuxPath(tp, floorWsl.distro) : tp;
+  // The path comes from a hook payload: no network paths (see uncAllowed).
+  if (!uncAllowed(file)) return null;
+  return readContextTokens(file) ?? 0;
 });
 
 // A consolidated, NON-SENSITIVE per-agent directory for the voice read-layer
@@ -5359,7 +5446,17 @@ async function processSpawnRequest(filePath: string): Promise<void> {
 
   // Worker request files are hand/LLM-authored, so `~/…` shows up here too — expand
   // before the existence check (Node reads `~` literally).
-  const cwd = typeof raw.cwd === 'string' && raw.cwd.trim() ? expandTilde(raw.cwd) : '';
+  // A WSL floor's god runs inside the distro, so it writes Linux paths
+  // (`/home/u/repo`, `~/repo`): open them through \\wsl.localhost.
+  const floorWsl = hive.wslRoot();
+  const rawCwd = typeof raw.cwd === 'string' ? raw.cwd.trim() : '';
+  const cwd = !rawCwd ? ''
+    : floorWsl ? fromLinuxPath(rawCwd, floorWsl.distro, () => distroHomeUnc(floorWsl.distro))
+    : expandTilde(rawCwd);
+  // A network path is refused before anything touches it: even existsSync on
+  // \\host\share makes Windows connect and offer the user's NTLM hash. The
+  // only UNC paths allowed are this floor's own distro.
+  if (cwd && !uncAllowed(cwd)) { fail(`"cwd" may not be a network path (${cwd})`); return; }
   if (!cwd || !existsSync(cwd)) { fail(`"cwd" missing or not found (${cwd || 'unset'})`); return; }
 
   // Request line → executable + argv (auto-mode inheritance, tokenization,
@@ -5386,7 +5483,14 @@ async function processSpawnRequest(filePath: string): Promise<void> {
   }
   // Missing-CLI → FAIL FAST. A headless worker has no human to watch an installer,
   // so we never run the cc49e1e install banner here — we reject and tell god.
-  if (!ptyManager.isCommandAvailable(bin)) { fail(`engine CLI "${bin}" is not installed`); return; }
+  // On a WSL floor the worker runs inside the distro: look for the CLI there.
+  const cwdWsl = process.platform === 'win32' ? parseWslPath(cwd) : null;
+  if (cwdWsl) {
+    const there = bin.startsWith('/')
+      ? existsSync(toWslUnc(cwdWsl.distro, bin))
+      : !!(await probeInDistro(cwdWsl.distro, [bin]))[bin];
+    if (!there) { fail(`engine CLI "${bin}" is not installed inside WSL (${cwdWsl.distro})`); return; }
+  } else if (!ptyManager.isCommandAvailable(bin)) { fail(`engine CLI "${bin}" is not installed`); return; }
 
   const isolate = raw.isolate !== false; // default true
   // Base branch the worktree will be cut from (for the ahead-of-base safety check).

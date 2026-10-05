@@ -31,6 +31,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readAgentUsage } from './transcript';
+import { distroHomeUnc, parseWslPath } from './wsl';
 import { normalizeModel } from './pricing';
 
 // ─── The locked cross-lane contract (do not change without re-agreeing) ───────
@@ -486,7 +487,10 @@ export class TelemetryCollector {
     const cwd = this.resolveCwd?.(agentId);
     const sessionId = this.resolveSessionId?.(agentId);
     if (!cwd || !sessionId) return null;
-    const file = join(homedir(), '.grok', 'sessions', encodeURIComponent(cwd), sessionId, 'usage.json');
+    // A WSL floor's Grok runs in the distro: its home, its (Linux) cwd.
+    const w = process.platform === 'win32' ? parseWslPath(cwd) : null;
+    const home = (w && distroHomeUnc(w.distro)) || homedir();
+    const file = join(home, '.grok', 'sessions', encodeURIComponent(w ? w.linuxPath : cwd), sessionId, 'usage.json');
     try {
       const parsed = JSON.parse(readFileSync(file, 'utf8')) as {
         updatedAt?: unknown;

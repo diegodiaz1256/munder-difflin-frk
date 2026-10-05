@@ -58,10 +58,40 @@ export function toLinuxPath(p: string, distro: string): string | null {
   return p;
 }
 
-/** Rewrite every UNC path of `distro` inside a string (prompts, settings, env values). */
+/**
+ * A path an agent INSIDE `distro` wrote (a request file, a hook payload) as
+ * the Windows app must open it: `/home/u/x` → `\\wsl.localhost\<distro>\home\u\x`,
+ * `~` / `~/x` under the distro user's home, `/mnt/c/x` → `C:\x`. Anything else
+ * (already a Windows or UNC path, or relative) is returned unchanged.
+ */
+export function fromLinuxPath(p: string, distro: string, home?: () => string | null): string {
+  const t = p.trim();
+  if (t === '~' || t.startsWith('~/')) {
+    const h = home?.();
+    if (!h) return t;
+    return t === '~' ? h : `${h.replace(/[\\/]+$/, '')}\\${t.slice(2).replace(/\//g, '\\')}`;
+  }
+  const mnt = /^\/mnt\/([a-z])(?:\/(.*))?$/i.exec(t);
+  if (mnt) return `${mnt[1].toUpperCase()}:\\${(mnt[2] ?? '').replace(/\//g, '\\')}`;
+  if (t.startsWith('/')) return toWslUnc(distro, t);
+  return t;
+}
+
+/** Rewrite every UNC path of `distro` inside a string (prompts, settings, env
+ *  values), and every Windows drive path to its /mnt/<drive> path: inside the
+ *  distro that is the only way to reach it (the app's resources, userData). A
+ *  quoted drive path may hold spaces ("C:\Program Files\…"); an unquoted one
+ *  ends at the first space. */
 export function linuxizeText(text: string, distro: string): string {
   const re = new RegExp(`[\\\\/]{2}(?:wsl\\.localhost|wsl\\$)[\\\\/]${distro.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}((?:[\\\\/][^\\s"'\`<>|]*)?)`, 'gi');
-  return text.replace(re, (_m, rest: string) => (rest ? rest.replace(/\\/g, '/') : '/'));
+  const drive = (d: string, rest: string): string => {
+    const r = rest.replace(/\\/g, '/').replace(/\/+$/, '');
+    return `/mnt/${d.toLowerCase()}${r ? `/${r}` : ''}`;
+  };
+  return text
+    .replace(re, (_m, rest: string) => (rest ? rest.replace(/\\/g, '/') : '/'))
+    .replace(/(["'`])([A-Za-z]):\\([^"'`\r\n]*)\1/g, (_m, q: string, d: string, rest: string) => `${q}${drive(d, rest)}${q}`)
+    .replace(/(^|[\s=(:,;])([A-Za-z]):\\([^\s"'`<>|]*)/g, (_m, pre: string, d: string, rest: string) => `${pre}${drive(d, rest)}`);
 }
 
 /**
@@ -167,25 +197,26 @@ export function secretStdin(secrets: Record<string, string>): string {
  * The `wsl.exe` invocation that runs `file args` inside `distro`, in `cwd`
  * (a Linux path), with `env` set: a login shell plus WSL_PRELUDE, so tools a
  * user installed the usual way (nvm, ~/.local/bin, npm -g) are found.
+ *
+ * `env` never goes on the command line (process lists, EDR and audit logs
+ * record it, and agents carry API keys and broker tokens): the caller puts the
+ * returned `env` into the wsl.exe process's environment, and WSLENV, which
+ * names them, makes wsl.exe hand them to the distro. Values pass verbatim.
  */
 export function wslCommand(
   distro: string,
   cwd: string,
   file: string,
   args: string[],
-  env: Record<string, string> = {}
-): { file: string; args: string[] } {
-  const assignments = Object.entries(env)
-    .filter(([k]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(k))
-    .map(([k, v]) => `${k}=${v}`);
+  env: Record<string, string> = {},
+  inherited: string | undefined = process.env.WSLENV
+): { file: string; args: string[]; env: Record<string, string> } {
+  const vars = Object.fromEntries(Object.entries(env).filter(([k]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(k)));
+  const names = Object.keys(vars);
   return {
     file: 'wsl.exe',
-    args: [
-      '-d', distro, '--cd', cwd, '--exec',
-      'bash', '-lc', WSL_PRELUDE, 'bash',
-      ...(assignments.length ? ['env', ...assignments] : []),
-      file, ...args
-    ]
+    args: ['-d', distro, '--cd', cwd, '--exec', 'bash', '-lc', WSL_PRELUDE, 'bash', file, ...args],
+    env: names.length ? { ...vars, WSLENV: [...names, ...(inherited ? [inherited] : [])].join(':') } : {}
   };
 }
 

@@ -128,8 +128,8 @@ function scanPluginDir(dir: string, provider: LocalSkill['provider'], scope: Loc
  * winning — a project skill shadows the user's, which shadows the bundled copy,
  * which is the same precedence the CLIs themselves apply.
  */
-export function listLocalSkills(opts: { cwds: string[]; bundledDir: string | null }): LocalSkill[] {
-  const home = homedir();
+export function listLocalSkills(opts: { cwds: string[]; bundledDir: string | null; home?: string }): LocalSkill[] {
+  const home = opts.home ?? homedir();
   const found: LocalSkill[] = [
     ...(opts.bundledDir ? scanSkillDir(opts.bundledDir, 'claude', 'bundled') : []),
     ...scanSkillDir(join(home, '.claude', 'skills'), 'claude', 'user'),
@@ -397,7 +397,9 @@ async function resolveSourceUrl(url: string): Promise<string | null> {
  */
 export async function installSkill(
   entryUrl: string,
-  entryName: string
+  entryName: string,
+  /** The agents' home: the Windows profile, or the distro's on a WSL floor. */
+  home: string = homedir()
 ): Promise<{ ok: true; path: string } | { ok: false; error: string; unsupported?: boolean }> {
   const source = await resolveSourceUrl(entryUrl);
   if (!source) {
@@ -429,7 +431,7 @@ export async function installSkill(
   const dirName = safeSkillDirName(skillPath || entryName);
   if (!dirName) return { ok: false, error: 'That skill has a name this app will not create a folder for.' };
 
-  const root = join(homedir(), '.claude', 'skills');
+  const root = join(home, '.claude', 'skills');
   const dest = join(root, dirName);
   if (existsSync(dest)) return { ok: false, error: `Already installed at ${dest}` };
 
@@ -495,16 +497,17 @@ export async function installSkill(
  */
 export function uninstallSkill(
   skillPath: string,
-  opts: { cwds: string[] }
+  opts: { cwds: string[]; home?: string }
 ): { ok: true } | { ok: false; error: string } {
+  const home = opts.home ?? homedir();
   if (typeof skillPath !== 'string' || !skillPath.trim()) return { ok: false, error: 'no path given' };
   let target: string;
   try { target = resolve(skillPath); } catch { return { ok: false, error: 'unreadable path' }; }
 
   const roots = [
-    join(homedir(), '.claude', 'skills'),
-    join(homedir(), '.config', 'opencode', 'plugin'),
-    join(homedir(), '.codex', 'plugins'),
+    join(home, '.claude', 'skills'),
+    join(home, '.config', 'opencode', 'plugin'),
+    join(home, '.codex', 'plugins'),
     ...opts.cwds.filter(Boolean).flatMap((c) => [
       join(c, '.claude', 'skills'),
       join(c, '.opencode', 'plugin')
