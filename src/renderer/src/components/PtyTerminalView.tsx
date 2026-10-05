@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import '@xterm/xterm/css/xterm.css';
 import { Icon } from './Icon';
-import { acquireTerminal, attachTerminal, detachTerminal, reflowTerminal } from './terminalPool';
+import { acquireTerminal, attachTerminal, detachTerminal, reflowTerminal, scrollToPrompt } from './terminalPool';
 import {
   DEFAULT_TERMINAL_FONT_SIZE,
   MAX_TERMINAL_FONT_SIZE,
@@ -151,7 +151,7 @@ export function PtyTerminalView({ ptyId, onStreamData, onUserPrompt, onToggleFul
     entry.onPrompt = (text) => onUserPromptRef.current?.(text);
 
     // Snap to bottom immediately on re-attach before fit settles
-    try { entry.term.scrollToBottom(); } catch { /* not yet open */ }
+    try { scrollToPrompt(entry.term); } catch { /* not yet open */ }
 
     // `scrollToEnd` is true only for the initial attach (switching agents /
     // toggling fullscreen) so we land on the most recent output. Re-parenting
@@ -201,6 +201,7 @@ export function PtyTerminalView({ ptyId, onStreamData, onUserPrompt, onToggleFul
           // re-syncs the DOM scrollTop itself, atomically with its flag.
           entry.term.scrollLines(-1);
           entry.term.scrollToBottom();
+          scrollToPrompt(entry.term);
         } catch { /* noop */ }
       }
     };

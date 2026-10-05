@@ -34,7 +34,7 @@ import {
 import {
   canAutomateTerminal,
   opensInteractiveTerminalUi,
-  shouldFollowTerminalOutput,
+  shouldFollowTerminalOutput, blankRowsBelowContent,
   terminalAutomationBlock,
   type TerminalAutomationBlock
 } from './terminalAutomation';
@@ -120,6 +120,23 @@ function notifyThemeChange(ptyId: string, theme: 'light' | 'dark'): void {
   const entry = pool.get(ptyId);
   if (!entry || entry.exited || !entry.themeNotify) return;
   window.cth.writePty(ptyId, `\x1b[?997;${theme === 'dark' ? 1 : 2}n`);
+}
+
+/** Scroll to the bottom, less the blank rows a TUI left under its prompt
+ *  (see blankRowsBelowContent), so the prompt sits at the bottom edge.
+ *  Returns how many rows the viewport sits above the true bottom. */
+export function scrollToPrompt(term: Terminal): number {
+  const lift = promptLift(term);
+  term.scrollToLine(term.buffer.active.baseY - lift);
+  return lift;
+}
+
+/** How many blank rows sit under the prompt right now. */
+function promptLift(term: Terminal): number {
+  const buf = term.buffer.active;
+  const blank: boolean[] = [];
+  for (let r = 0; r < term.rows; r++) blank.push(!(buf.getLine(buf.baseY + r)?.translateToString(true).trim()));
+  return blankRowsBelowContent(blank, buf.cursorY, buf.baseY);
 }
 
 /** Get (or lazily create) the persistent terminal for a pty. Theme/font are
@@ -223,10 +240,10 @@ export function acquireTerminal(ptyId: string, theme?: ThemeMap, fontSize = 14):
       }
     }
     const active = term.buffer.active;
-    const follow = shouldFollowTerminalOutput(active.viewportY, active.baseY);
+    const follow = shouldFollowTerminalOutput(active.viewportY, active.baseY, promptLift(term));
     term.write(chunk, () => {
       if (follow) {
-        try { term.scrollToBottom(); } catch { /* terminal may be detaching */ }
+        try { scrollToPrompt(term); } catch { /* terminal may be detaching */ }
       }
       if (!menuTimer) menuTimer = setTimeout(checkMenu, 250);
     });
