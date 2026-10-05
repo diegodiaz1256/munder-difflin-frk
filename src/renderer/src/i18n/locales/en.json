@@ -288,7 +288,16 @@
       "adding": "adding…",
       "addFiles": "add files…",
       "docCount": "{{count}} document indexed",
-      "docCountPlural": "{{count}} documents indexed"
+      "docCountPlural": "{{count}} documents indexed",
+      "modelTitle": "Memory model",
+      "modelReady": "{{model}} is downloaded. Memory runs offline.",
+      "modelMissing": "{{model}} is not downloaded. Memory search and saving wait for it.",
+      "modelDownload": "Download model",
+      "modelUpdate": "Update model",
+      "modelDownloading": "Downloading… one time, up to a few hundred MB",
+      "modelFailed": "Download failed: {{error}}",
+      "modelDone": "Model ready.",
+      "modelOffline": "Memory never goes online by itself: this button is the only time it does."
     },
     "connections": {
       "slack": "Slack",
@@ -467,7 +476,14 @@
     "openIssue": "GitHub Issue #{{num}}: {{title}}",
     "deliveryResumeAria": "Resume automatic delivery for the whole floor",
     "deliveryHoldAria": "Hold automatic delivery for the whole floor",
-    "openIdeAria": "Open the IDE"
+    "openIdeAria": "Open the IDE",
+    "remoteControl": "remote",
+    "remoteControlTitle": "Remote Control: reach this session from claude.ai or the Claude app on your phone. Claude asks you to confirm in the terminal.",
+    "remoteControlAria": "Turn on Remote Control for the orchestrator",
+    "remoteControlOnTitle": "Remote Control is on. Click to open this session ({{url}}); it is also in the Claude app on your phone.",
+    "remoteControlFailedTitle": "Remote Control is off: {{reason}}. Click to try again.",
+    "remoteControlOnLabel": "remote on",
+    "remoteControlConnecting": "connecting…"
   },
   "addAgent": {
     "title": "ADD AGENT",
@@ -569,7 +585,21 @@
     "errFolder": "Pick a folder first",
     "errCommand": "Command is required",
     "hireProgress": "hire {{current}} of {{total}}",
-    "skipHire": "skip hire"
+    "skipHire": "skip hire",
+    "cv": {
+      "mission": "Mission",
+      "skills": "Skills",
+      "engine": "Engine",
+      "worksIn": "Works in",
+      "change": "change",
+      "budget": "Budget",
+      "noCap": "no token cap",
+      "tokens": "{{count}} tokens",
+      "proposedBy": "proposed by {{author}}",
+      "edit": "Edit details",
+      "hire": "Hire {{name}}",
+      "hint": "Nothing starts until you hire. Edit details to change anything first."
+    }
   },
   "onboarding": {
     "titles": {
@@ -1417,5 +1447,14 @@
     "viewSource": "view source",
     "loading": "loading image…",
     "decodeFailed": "could not decode this image — the file may be corrupt or misnamed"
+  },
+  "floor": {
+    "clockOut": "Clock out?",
+    "clockOutDetail": "This closes Scranton Branch. Agents that are running get asked to stop first.",
+    "clockOutOk": "Clock out"
+  },
+  "app": {
+    "godFailed": "The orchestrator could not start:",
+    "godRetry": "Retry"
   }
 }

@@ -20,6 +20,8 @@ const FILL_COLOR = colors.cream[50];   // light cloud
 const OUTLINE_COLOR = colors.ink[900];
 const TEXT_COLOR = '#3d2e4a';           // ink-700
 const FONT_SIZE = 12;
+/** Screen zoom the bubble text never drops below (12 px type at half scale). */
+export const MIN_TEXT_ZOOM = 2;
 const RENDER_SCALE = 0.5;               // render at 2x, scale down for crispness
 const OFFSET_Y = -38;                   // a touch higher than the tool bubble
 const FADE_IN_DURATION = 0.15;
@@ -147,9 +149,12 @@ export class ThoughtBubble {
     this.container.scale.set(this.compensation());
   }
 
-  /** World-units multiplier that cancels a < 1 camera zoom (1 at zoom ≥ 1). */
+  /** World-units multiplier that keeps the text readable: the bubble renders
+   *  at half scale (12 px type → 6 world px), so it is held at no less than
+   *  MIN_TEXT_ZOOM× on screen (~12 px) however small the floor is; above that
+   *  it scales with the world as before. */
   private compensation(): number {
-    return 1 / Math.min(this.zoom, 1);
+    return Math.max(1, MIN_TEXT_ZOOM / this.zoom);
   }
 
   /** The world rect the bubble must stay inside (the map size, in px). */

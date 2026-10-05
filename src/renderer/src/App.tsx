@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
 import { useStore, selectedAgent } from '@/store/store';
 import { startMockLoop, stopMockLoop } from '@/store/mockEvents';
@@ -53,6 +54,8 @@ export function App() {
   const setAddAgentOpen = useStore(s => s.setAddAgentOpen);
   const clearPendingHires = useStore(s => s.clearPendingHires);
   const godStatus = useStore(s => s.godStatus);
+  const godError = useStore(s => s.godError);
+  const { t } = useTranslation();
   const fullscreenAgentId = useStore(s => s.fullscreenAgentId);
   const appThemeNow = useAppTheme();
   const sidebarWidth = useStore(s => s.sidebarWidth);
@@ -418,6 +421,21 @@ export function App() {
           <OfficeFloor />
           <MemoryPanel />
           {agentCount === 0 && godStatus === 'booting' && <MichaelBooting />}
+          {/* The orchestrator failed to start: say so, whoever else is on the
+              floor (it used to fail silently while workers carried on alone). */}
+          {godStatus === 'failed' && godError && (
+            <div role="alert" style={{
+              position: 'absolute', top: 12, left: 12, right: 12, zIndex: 30,
+              padding: '10px 12px', display: 'flex', gap: 12, alignItems: 'center',
+              background: 'var(--cth-coral-light)', boxShadow: 'inset 0 0 0 1.5px var(--cth-coral)',
+              fontSize: 13, color: 'var(--cth-ink-900)'
+            }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <strong>{t('app.godFailed')}</strong> {godError}
+              </span>
+              <PixelButton variant="primary" size="sm" onClick={() => window.location.reload()}>{t('app.godRetry')}</PixelButton>
+            </div>
+          )}
           {agentCount === 0 && godStatus !== 'booting' && (
             <div style={{
               position: 'absolute', inset: 0,

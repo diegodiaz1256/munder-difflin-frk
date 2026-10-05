@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 import { Application, Container, Graphics, Ticker, Texture } from 'pixi.js';
 // PixiJS uses new Function() internally, blocked by Electron CSP — this patches it.
 import 'pixi.js/unsafe-eval';
@@ -1127,7 +1128,11 @@ export function OfficeFloor() {
       clockG.zIndex = 3 * ts0;
       clockG.on('pointertap', (ev) => {
         ev.stopPropagation();
-        window.close(); // intercepted by the main process while PTYs are alive
+        // Ask first: a click on a wall clock closing the whole app read as a
+        // crash. Confirmed, the real close flow runs (window.close() → the
+        // main process intercepts while agents run).
+        void window.cth.confirm(i18n.t('floor.clockOut'), { detail: i18n.t('floor.clockOutDetail'), ok: i18n.t('floor.clockOutOk') })
+          .then((yes) => { if (yes) window.close(); });
       });
       charLayer.addChild(clockG);
 

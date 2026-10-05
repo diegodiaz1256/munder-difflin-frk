@@ -7,7 +7,7 @@ export type IconName =
   | 'gear' | 'plus' | 'x' | 'check' | 'arrow-right' | 'pause' | 'play'
   | 'bell' | 'folder' | 'terminal' | 'code' | 'web' | 'mcp' | 'sparkle'
   | 'expand' | 'minimize' | 'clock' | 'mic' | 'ledger' | 'info' | 'sidebar'
-  | 'image' | 'edit' | 'git';
+  | 'image' | 'edit' | 'git' | 'cloud';
 
 interface IconDef {
   ink: string;     // primary color path d
@@ -124,6 +124,11 @@ const paths: Record<IconName, IconDef> = {
     ink:   'M2 1h12v14H2V1zM3 2v12h10V2H3zM5 4h6v1H5zM5 7h6v1H5zM5 10h4v1H5z'
   },
   // Microphone: a solid capsule head, an open cradle, a stem, and a base.
+  // A pixel cloud: Remote Control (the session reachable from claude.ai / phone).
+  cloud: {
+    accentColor: 'var(--cth-sky)',
+    ink:   'M6 4h4v1h1v2h2v1h1v3h-1v1H3v-1H2V9h1V8h2V6h1V4z'
+  },
   mic: {
     accentColor: 'var(--cth-coral)',
     ink:   'M6 2h4v7H6V2z M4 9h1v2H4z M11 9h1v2h-1z M4 11h8v1H4z M7 12h2v2H7z M5 14h6v1H5z'

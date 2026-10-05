@@ -13,11 +13,12 @@
  *
  * Runs in the Electron main process.
  */
-import { existsSync, statSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, statSync, readdirSync, readFileSync, writeFileSync, rmSync, mkdtempSync, mkdirSync } from 'node:fs';
+import { join, sep as pathSep } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
 import { ensureKilled } from './procKill';
-import { parseWslPath, runInDistro, toLinuxPath, wslCommand, type WslLocation } from './wsl';
+import { parseWslPath, runInDistro, runInDistroAsync, toLinuxPath, wslCommand, type WslLocation } from './wsl';
 import { quarantineDirsToReap, quarantineStampMs, nextMineDelayMs } from './palaceReap';
 
 /** Non-memory files `mempalace mine` must not ingest: the Claude Code hooks
@@ -55,6 +56,8 @@ export interface MemorySettings {
 
 export interface MemoryStatus {
   available: boolean;        // mempalace CLI found on PATH
+  modelReady: boolean;       // the embedding model is on disk (where mempalace runs)
+  downloading: boolean;      // a Settings "download model" is in flight
   enabled: boolean;          // user setting
   active: boolean;           // available && enabled && have a home
   initialized: boolean;      // palace directory exists
@@ -115,6 +118,23 @@ const MEMPALACE_DEVICE = mempalaceDevice(process.platform, process.env.MEMPALACE
  *  distro (wsl.exe) when the floor lives in WSL. There the CLI, the palace and
  *  the agents' own `mempalace` calls all sit on the same side, so a single
  *  writer works on the real Linux filesystem, not through \\wsl.localhost. */
+/**
+ * mempalace never goes online by itself. Without these, the Hugging Face
+ * library checks for a newer model on every load (each search, each mine):
+ * slower, a warning on stderr, and a failure with no network or when the hub
+ * rate-limits. The model is fetched only from Settings (downloadModel).
+ */
+export const OFFLINE_ENV: Record<string, string> = { HF_HUB_OFFLINE: '1', TRANSFORMERS_OFFLINE: '1' };
+
+/** Where each model lives once downloaded, relative to the home folder of
+ *  whoever runs mempalace (the distro's for a WSL floor). */
+export const MODEL_DIRS: Record<EmbeddingModel, string[]> = {
+  embeddinggemma: ['.cache', 'huggingface', 'hub', 'models--onnx-community--embeddinggemma-300m-ONNX', 'snapshots'],
+  minilm: ['.cache', 'chroma', 'onnx_models', 'all-MiniLM-L6-v2']
+};
+
+export const MODEL_MISSING = 'The memory model is not downloaded yet. Download it in Settings → Memory & Knowledge.';
+
 export function mempalaceInvocation(
   bin: string,
   args: string[],
@@ -141,6 +161,11 @@ export class MemoryManager {
    *  quarantined again. A count would be useless: the reaper deletes them. */
   private lastQuarantineTs = 0;
   private initStarted = false;
+  /** In-flight Settings download, so a second click joins it. */
+  private downloadRun: Promise<{ ok: boolean; error?: string }> | null = null;
+  /** Model presence, re-checked at most every few seconds (a WSL check is a wsl.exe call). */
+  private modelCache: { key: string; ready: boolean; at: number } | null = null;
+  private modelCheck: Promise<boolean> | null = null;
   /** True while a mineNow() pass is in flight — serializes palace writers. */
   private mining = false;
   /** agentId → memory.md mtimeMs at last successful mine (skip unchanged). */
@@ -229,6 +254,8 @@ export class MemoryManager {
     const palace = this.palacePath();
     return {
       available: this.available(),
+      modelReady: this.available() && this.modelReady(),
+      downloading: this.downloadRun !== null,
       enabled: this.enabled(),
       active: this.active(),
       initialized: !!palace && existsSync(palace),
@@ -245,7 +272,8 @@ export class MemoryManager {
     return {
       MEMPALACE_PALACE_PATH: palace,
       MEMPALACE_EMBEDDING_MODEL: this.model(),
-      ...(MEMPALACE_DEVICE ? { MEMPALACE_EMBEDDING_DEVICE: MEMPALACE_DEVICE } : {})
+      ...(MEMPALACE_DEVICE ? { MEMPALACE_EMBEDDING_DEVICE: MEMPALACE_DEVICE } : {}),
+      ...OFFLINE_ENV
     };
   }
 
@@ -254,7 +282,8 @@ export class MemoryManager {
       ...process.env,
       MEMPALACE_PALACE_PATH: this.palacePath() ?? '',
       MEMPALACE_EMBEDDING_MODEL: this.model(),
-      ...(MEMPALACE_DEVICE ? { MEMPALACE_EMBEDDING_DEVICE: MEMPALACE_DEVICE } : {})
+      ...(MEMPALACE_DEVICE ? { MEMPALACE_EMBEDDING_DEVICE: MEMPALACE_DEVICE } : {}),
+      ...OFFLINE_ENV
     };
   }
 
@@ -263,9 +292,123 @@ export class MemoryManager {
     const inv = mempalaceInvocation(bin, args, {
       MEMPALACE_PALACE_PATH: this.palacePath() ?? '',
       MEMPALACE_EMBEDDING_MODEL: this.model(),
-      ...(MEMPALACE_DEVICE ? { MEMPALACE_EMBEDDING_DEVICE: MEMPALACE_DEVICE } : {})
+      ...(MEMPALACE_DEVICE ? { MEMPALACE_EMBEDDING_DEVICE: MEMPALACE_DEVICE } : {}),
+      ...OFFLINE_ENV
     }, this.wsl());
     return { file: inv.file, args: inv.args, env: { ...this.childEnv(), ...(inv.env ?? {}) } };
+  }
+
+  // — the embedding model —
+
+  /** Is the chosen model on disk where mempalace runs? Answers from the
+   *  last check and refreshes it in the background when stale: on a WSL floor
+   *  the check is a wsl.exe call, and the status poll runs on the main thread. */
+  modelReady(): boolean {
+    const c = this.modelCache;
+    if (!c || c.key !== this.modelKey() || Date.now() - c.at >= (c.ready ? 60_000 : 3_000)) void this.checkModel();
+    return c?.key === this.modelKey() ? c.ready : false;
+  }
+
+  private modelKey(): string { return `${this.wsl()?.distro ?? ''}|${this.model()}`; }
+
+  /** Look for the model now (deduplicated). */
+  checkModel(): Promise<boolean> {
+    if (this.modelCheck) return this.modelCheck;
+    const key = this.modelKey();
+    const rel = MODEL_DIRS[this.model()];
+    const w = this.wsl();
+    const look = async (): Promise<boolean> => {
+      if (w) {
+        try {
+          const path = '$HOME/' + rel.join('/');
+          return (await runInDistroAsync(w.distro, 'sh', ['-c', `[ -n "$(ls -A "${path}" 2>/dev/null)" ] && echo yes || true`])) === 'yes';
+        } catch { return false; }
+      }
+      const dir = this.model() === 'embeddinggemma' && (process.env.HF_HUB_CACHE || process.env.HF_HOME)
+        ? join(process.env.HF_HUB_CACHE ?? join(process.env.HF_HOME as string, 'hub'), ...rel.slice(3))
+        : join(homedir(), ...rel);
+      try { return existsSync(dir) && readdirSync(dir).length > 0; } catch { return false; }
+    };
+    this.modelCheck = look().then((ready) => {
+      this.modelCache = { key, ready, at: Date.now() };
+      return ready;
+    }).finally(() => { this.modelCheck = null; });
+    return this.modelCheck;
+  }
+
+  /**
+   * Download (or update) the chosen model: the one time mempalace may go
+   * online, from Settings. Mines one short note (long enough not to be skipped) into a throwaway palace, which
+   * makes mempalace fetch the model, then deletes it.
+   */
+  downloadModel(): Promise<{ ok: boolean; error?: string }> {
+    if (this.downloadRun) return this.downloadRun;
+    const bin = this.bin();
+    if (!bin) return Promise.resolve({ ok: false, error: 'mempalace is not installed' });
+    const w = this.wsl();
+    const run = new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      let work: string;
+      let cleanup: () => void;
+      try {
+        if (w) {
+          work = runInDistro(w.distro, 'sh', ['-c', 'd=$(mktemp -d) && mkdir -p "$d/notes" && echo "Scranton Branch downloads the memory model by filing this note. Pam reviewed the checkout page, Jim fixed the order history, and Michael merged both branches after the tests passed." > "$d/notes/note.md" && echo "$d"']);
+          if (!work.startsWith('/')) throw new Error('could not prepare a folder in ' + w.distro);
+          cleanup = () => { try { runInDistro(w.distro, 'rm', ['-rf', work]); } catch { /* best effort */ } };
+        } else {
+          work = mkdtempSync(join(tmpdir(), 'sb-model-'));
+          mkdirSync(join(work, 'notes'));
+          writeFileSync(join(work, 'notes', 'note.md'), 'Scranton Branch downloads the memory model by filing this note. Pam reviewed the checkout page, Jim fixed the order history, and Michael merged both branches after the tests passed.\n');
+          cleanup = () => { try { rmSync(work, { recursive: true, force: true }); } catch { /* best effort */ } };
+        }
+      } catch (e) {
+        resolve({ ok: false, error: e instanceof Error ? e.message : String(e) });
+        return;
+      }
+      const sep = w ? '/' : pathSep;
+      const env = {
+        MEMPALACE_PALACE_PATH: `${work}${sep}palace`,
+        MEMPALACE_EMBEDDING_MODEL: this.model(),
+        ...(MEMPALACE_DEVICE ? { MEMPALACE_EMBEDDING_DEVICE: MEMPALACE_DEVICE } : {})
+      };
+      const inv = mempalaceInvocation(bin, ['mine', `${work}${sep}notes`], env, w);
+      const childEnv: NodeJS.ProcessEnv = { ...process.env, ...env, ...(inv.env ?? {}) };
+      delete childEnv.HF_HUB_OFFLINE;
+      delete childEnv.TRANSFORMERS_OFFLINE;
+      let err = '';
+      let proc: ReturnType<typeof spawn>;
+      try {
+        proc = spawn(inv.file, inv.args, { env: childEnv, stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true });
+      } catch (e) {
+        cleanup();
+        resolve({ ok: false, error: e instanceof Error ? e.message : String(e) });
+        return;
+      }
+      proc.stderr?.on('data', (d) => { err += d.toString(); });
+      const timer = setTimeout(() => {
+        try { proc.kill('SIGTERM'); } catch { /* gone */ }
+        ensureKilled(proc.pid);
+      }, MINE_TIMEOUT_MS);
+      timer.unref?.();
+      const done = (r: { ok: boolean; error?: string }) => { clearTimeout(timer); cleanup(); resolve(r); };
+      proc.on('error', (e) => done({ ok: false, error: e.message }));
+      proc.on('close', (code) => {
+        const last = err.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/^Warning:|onnxruntime/i.test(l)).slice(-3).join(' ');
+        this.modelCache = null;
+        void this.checkModel().then((ready) => {
+          if (code === 0 && ready) { done({ ok: true }); this.start(); return; }
+          // mempalace finished fine but the model is not there: this version
+          // does not know it (EmbeddingGemma needs a newer mempalace; older
+          // ones quietly use MiniLM), so it would never arrive.
+          if (code === 0 && this.model() === 'embeddinggemma') {
+            done({ ok: false, error: 'this mempalace cannot use EmbeddingGemma. Update it (uv tool upgrade mempalace) or choose MiniLM in the Memory panel.' });
+            return;
+          }
+          done({ ok: false, error: last || `the download did not finish (exit ${code})` });
+        });
+      });
+    });
+    this.downloadRun = run.finally(() => { this.downloadRun = null; });
+    return this.downloadRun;
   }
 
   // — lifecycle —
@@ -345,6 +488,9 @@ export class MemoryManager {
     const bin = this.bin();
     if (!this.active() || !home || !bin) return;
     if (this.mining) return; // a previous pass is still running — let it finish
+    // No model on disk: mining would fail offline (or, before, download it
+    // unasked). Wait for the Settings download.
+    if (!(await this.checkModel())) return;
     const agentsDir = join(home, 'hive', 'agents');
     if (!existsSync(agentsDir)) return;
     let ids: string[];
@@ -466,7 +612,8 @@ export class MemoryManager {
    *  with a 120s timeout — on a cold model load that BLOCKED the Electron main
    *  process (renderer IPC, timers, every window) for up to two minutes. Same
    *  contract, but the event loop keeps breathing and a wedged CLI is swept. */
-  private runCli(args: string[], label: string): Promise<{ ok: boolean; output: string; error?: string }> {
+  private async runCli(args: string[], label: string): Promise<{ ok: boolean; output: string; error?: string }> {
+    if (this.active() && this.bin() && !(await this.checkModel())) return { ok: false, output: '', error: MODEL_MISSING };
     return new Promise((resolve) => {
       const bin = this.bin();
       if (!this.active() || !bin) { resolve({ ok: false, output: '', error: 'semantic memory not active' }); return; }

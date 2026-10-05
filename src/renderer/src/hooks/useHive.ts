@@ -126,6 +126,36 @@ async function waitForTerminalReady(
  * input box. Without them, every "\n" in a multi-line message acted as Enter —
  * the message submitted line-by-line in fragments (the agent saw only the last
  * chunk). The closing Enter, sent a tick later, submits the whole block. (#24) */
+/** Turn on Remote Control for the orchestrator's session (the cloud button
+ *  in the Command Center). Goes through the same submit chain as everything
+ *  else typed into his terminal. False when his engine has no such command. */
+export async function enableRemoteControl(provider: AgentProvider, sessionName: string): Promise<boolean> {
+  const cmd = remoteControlCommandForProvider(provider, sessionName);
+  if (!cmd) return false;
+  useStore.getState().markRemoteControlAsked(GOD_PTY);
+  // Show "connecting…" from the click: the session takes a few seconds to
+  // come up, and until now the button looked as if nothing had happened.
+  const prev = useStore.getState().remoteControl[GOD_PTY];
+  if (prev?.state !== 'on') {
+    const since = Date.now();
+    useStore.getState().setRemoteControl(GOD_PTY, { state: 'connecting', since });
+    setTimeout(() => {
+      const now = useStore.getState().remoteControl[GOD_PTY];
+      if (now?.state === 'connecting' && now.since === since) {
+        useStore.getState().setRemoteControl(GOD_PTY, { state: 'off', reason: 'no answer from Remote Control after 30 s' });
+      }
+    }, 30_000);
+  }
+  await submitToPty(GOD_PTY, cmd, provider, REMOTE_CONTROL_SETTLE_MS);
+  return true;
+}
+
+/** How long to wait between typing `text` into a TUI and pressing Enter. */
+export function preEnterDelayMs(text: string): number {
+  if (text.startsWith('/')) return 450;
+  return Math.min(1100, 140 + Math.floor(text.length / 3));
+}
+
 function submitToPty(
   ptyId: string,
   text: string,
@@ -147,7 +177,11 @@ function submitToPty(
     // immune (the prev.catch above absorbs it for the next writer).
     const wrote = await window.cth.writePty(ptyId, payload);
     if (!wrote?.ok) throw new Error(wrote?.error ?? `pty write failed: ${ptyId}`);
-    await new Promise((r) => setTimeout(r, 140));
+    // Give the TUI time to take the text in before Enter. A long paste (the
+    // boot prompt) or a slash command (its autocomplete opens) takes longer,
+    // most of all on Windows, and an Enter that arrives early is lost: the
+    // text sat in the input until someone pressed Enter by hand.
+    await new Promise((r) => setTimeout(r, preEnterDelayMs(text)));
     const submitted = await window.cth.writePty(ptyId, '\r');
     if (!submitted?.ok) throw new Error(submitted?.error ?? `pty write failed: ${ptyId}`);
     await new Promise((r) => setTimeout(r, settleMs));
@@ -417,7 +451,13 @@ export function useHive(config: HarnessConfig | null): void {
         hive: { id: GOD_ID, name: godName, provider: godProvider, cwd: config.harnessHome!, isGod: true, role: 'orchestrator (god)' }
       });
       if (cancelled) { godSpawning.current = false; return; }
-      if (!res.ok) { godSpawning.current = false; useStore.getState().setGodStatus('failed'); return; }
+      if (!res.ok) {
+        godSpawning.current = false;
+        useStore.getState().setGodError(res.error ?? 'the orchestrator did not start');
+        useStore.getState().setGodStatus('failed');
+        return;
+      }
+      useStore.getState().setGodError(null);
       const god: Agent = {
         id: GOD_ID,
         name: godName,
@@ -454,12 +494,9 @@ export function useHive(config: HarnessConfig | null): void {
       bootGraceUntil.current[GOD_ID] = Date.now() + BOOT_GRACE_MS;
       void (async () => {
         try {
-          const remoteCommand = remoteControlCommandForProvider(godProvider, godName);
-          if (remoteCommand) {
-            // settleMs pauses the chain ~1.5s after /remote-control before the
-            // orientation prompt (fresh spawns only) is submitted next.
-            await submitToPty(GOD_PTY, remoteCommand, godProvider, REMOTE_CONTROL_SETTLE_MS);
-          }
+          // Remote Control is no longer turned on at every boot: Claude asks
+          // to confirm it, which stalled the orientation prompt behind a
+          // question. It is a button on the orchestrator (enableRemoteControl).
           if (!cancelled && !resumedGod) {
             // A type-into-tui god (Crush) can't ride its hive protocol on argv, so the
             // main process hands it back as seedPrompt — type it FIRST (identity), then
