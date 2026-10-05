@@ -326,7 +326,7 @@ export function App() {
           fontSize: 13,
           color: 'var(--cth-ink-500)'
         }}>
-          {config.autoMode ? 'auto mode on' : 'auto mode off'}
+          {config.autoMode ? t('titleBar.autoOn') : t('titleBar.autoOff')}
         </span>
         <UsageWindowsChip />
         {/* v0.3.4: theme + fullscreen live HERE (top right), not buried in the

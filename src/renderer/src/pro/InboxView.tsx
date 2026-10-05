@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '@/store/store';
 import { AskMeTab } from '@/components/AskMeTab';
 import { TriggerHistoryTab } from '@/components/triggers/TriggerHistoryTab';
@@ -22,6 +23,7 @@ const SYSTEM = new Set(['heartbeat', 'scheduler', 'breaker', 'system']);
  * approve or reject (the trigger history, which owns that decision).
  */
 export function InboxView({ tasks }: { tasks: KeyedTask[] }) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('you');
   const [openAgent, setOpenAgent] = useState<string | null>(null);
   const agents = useStore((s) => s.agents);
@@ -35,17 +37,17 @@ export function InboxView({ tasks }: { tasks: KeyedTask[] }) {
   const outsideMail = real.filter((m) => OUTSIDE.has(m.from) || m.from.startsWith('team:'));
   const slackWaiting = Object.entries(queues).flatMap(([id, q]) => q.filter((m) => m.slack).map((m) => ({ ...m, agentId: id })));
 
-  const name = (id: string) => byId.get(id)?.name ?? (id === 'human' ? 'You' : id);
+  const name = (id: string) => byId.get(id)?.name ?? (id === 'human' ? t('pro.inbox.you') : id);
 
   const list = (rows: Message[]) => rows.length === 0
-    ? <p className="pro-sub">Nothing here yet.</p>
+    ? <p className="pro-sub">{t('pro.inbox.nothing')}</p>
     : rows.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 120).map((m) => (
       <article key={`${m.id}-${m.direction}`} className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div className="pro-row" style={{ fontSize: 12 }}>
           <Avatar agent={byId.get(m.from)} />
           <strong>{name(m.from)}</strong><span className="pro-sub">→ {name(m.to)}</span>
           <span className="pro-chip">{m.act}</span>
-          {m.requires_reply && <span className="pro-badge" style={{ background: 'var(--cth-peach-light)' }}>needs reply</span>}
+          {m.requires_reply && <span className="pro-badge" style={{ background: 'var(--cth-peach-light)' }}>{t('pro.inbox.needsReply')}</span>}
           <span className="pro-sub" style={{ marginInlineStart: 'auto' }}>{new Date(m.created_at).toLocaleString()}</span>
         </div>
         <strong style={{ fontSize: 13 }}>{m.subject}</strong>
@@ -63,26 +65,26 @@ export function InboxView({ tasks }: { tasks: KeyedTask[] }) {
   return (
     <div className="pro-page">
       <div className="pro-head">
-        <h2>Inbox</h2>
+        <h2>{t('pro.nav.inbox')}</h2>
         <div className="pro-tabs" role="tablist" style={{ marginInlineStart: 8 }}>
-          <button role="tab" aria-selected={tab === 'you'} onClick={() => setTab('you')}>For you{asks ? ` · ${asks}` : ''}</button>
-          <button role="tab" aria-selected={tab === 'team'} onClick={() => setTab('team')}>Your team</button>
-          <button role="tab" aria-selected={tab === 'everyone'} onClick={() => setTab('everyone')}>Everyone</button>
-          <button role="tab" aria-selected={tab === 'outside'} onClick={() => setTab('outside')}>Outside</button>
+          <button role="tab" aria-selected={tab === 'you'} onClick={() => setTab('you')}>{t('pro.inbox.forYou')}{asks ? ` · ${asks}` : ''}</button>
+          <button role="tab" aria-selected={tab === 'team'} onClick={() => setTab('team')}>{t('pro.inbox.yourTeam')}</button>
+          <button role="tab" aria-selected={tab === 'everyone'} onClick={() => setTab('everyone')}>{t('pro.inbox.everyone')}</button>
+          <button role="tab" aria-selected={tab === 'outside'} onClick={() => setTab('outside')}>{t('pro.inbox.outside')}</button>
         </div>
       </div>
 
       {tab === 'you' && (
         <>
           <div className="pro-embed" style={{ minHeight: 280 }}><AskMeTab /></div>
-          {forYou.length > 0 && <h3 style={{ margin: '8px 0 0', fontSize: 14 }}>Addressed to you</h3>}
+          {forYou.length > 0 && <h3 style={{ margin: '8px 0 0', fontSize: 14 }}>{t('pro.inbox.addressedToYou')}</h3>}
           {forYou.length > 0 && list(forYou)}
         </>
       )}
 
       {tab === 'team' && (openAgent ? (
         <>
-          <button className="pro-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setOpenAgent(null)}>← All agents</button>
+          <button className="pro-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setOpenAgent(null)}>← {t('pro.inbox.allAgents')}</button>
           {list(team.find((r) => r.agent.id === openAgent)?.mine ?? [])}
         </>
       ) : team.map(({ agent, count, last }) => (
@@ -91,7 +93,7 @@ export function InboxView({ tasks }: { tasks: KeyedTask[] }) {
           <div style={{ minWidth: 0, flex: 1 }}>
             <p className="pro-title">{agent.name}</p>
             <p className="pro-text" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {last ? `${name(last.from)}: ${last.subject}` : 'No messages yet'}
+              {last ? `${name(last.from)}: ${last.subject}` : t('pro.inbox.noMessages')}
             </p>
           </div>
           <span className="pro-chip">{count}</span>
@@ -102,18 +104,18 @@ export function InboxView({ tasks }: { tasks: KeyedTask[] }) {
 
       {tab === 'outside' && (
         <>
-          {slackWaiting.length > 0 && <h3 style={{ margin: 0, fontSize: 14 }}>Slack, waiting in a queue</h3>}
+          {slackWaiting.length > 0 && <h3 style={{ margin: 0, fontSize: 14 }}>{t('pro.inbox.slackWaiting')}</h3>}
           {slackWaiting.map((m) => (
             <article key={m.id} className="pro-card">
               <div className="pro-row" style={{ fontSize: 12 }}>
-                <span className="pro-chip">slack</span><span className="pro-sub">for {name(m.agentId)} · queued {new Date(m.ts).toLocaleTimeString()}</span>
+                <span className="pro-chip">slack</span><span className="pro-sub">{t('pro.inbox.queuedFor', { name: name(m.agentId), time: new Date(m.ts).toLocaleTimeString() })}</span>
               </div>
               <p className="pro-text" style={{ marginTop: 6 }}>{m.text}</p>
             </article>
           ))}
-          {outsideMail.length > 0 && <h3 style={{ margin: 0, fontSize: 14 }}>Webhook mail</h3>}
+          {outsideMail.length > 0 && <h3 style={{ margin: 0, fontSize: 14 }}>{t('pro.inbox.webhookMail')}</h3>}
           {outsideMail.length > 0 && list(outsideMail)}
-          <h3 style={{ margin: 0, fontSize: 14 }}>Requests and approvals</h3>
+          <h3 style={{ margin: 0, fontSize: 14 }}>{t('pro.inbox.requests')}</h3>
           <div className="pro-embed" style={{ minHeight: 320 }}><TriggerHistoryTab /></div>
         </>
       )}

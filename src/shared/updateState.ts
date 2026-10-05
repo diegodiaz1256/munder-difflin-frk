@@ -80,6 +80,11 @@ export interface UpdateBadgeView {
   /** Tooltip — the only place the underlying error is ever surfaced verbatim. */
   title: string;
   busy: boolean;
+  /** The same label and title as i18n keys (`updateBadge.*`) and their values,
+   *  for the title bar; label/title stay the English text. */
+  labelKey?: string;
+  titleKey?: string;
+  params?: Record<string, string | number>;
 }
 
 /** `1.2.3` / `v1.2.3` -> [1,2,3]; null for anything that isn't semver-ish. */
@@ -214,7 +219,9 @@ export function describeUpdate(status: UpdateStatus | null, currentVersion: stri
     // nothing else, so the two paths are not raced against each other.
     return {
       label: `downloading ${clampPercent(status.percent)}%`, action: 'none', tone: 'busy', busy: true,
-      title: `Downloading v${status.version}… ${clampPercent(status.percent)}%`
+      title: `Downloading v${status.version}… ${clampPercent(status.percent)}%`,
+      labelKey: 'updateBadge.downloading', titleKey: 'updateBadge.downloadingTitle',
+      params: { percent: clampPercent(status.percent), version: status.version }
     };
   }
   const pending = pendingVersion(status, v);
@@ -227,37 +234,43 @@ export function describeUpdate(status: UpdateStatus | null, currentVersion: stri
     if (status?.state === 'downloaded') {
       return {
         label: `v${pending} · restart`, action: 'restart', tone: 'ready', busy: false,
-        title: `Click to restart and install v${pending}`
+        title: `Click to restart and install v${pending}`,
+        labelKey: 'updateBadge.restart', titleKey: 'updateBadge.restartTitle', params: { version: pending }
       };
     }
     if (status?.state === 'available') {
       return {
         label: `v${pending} · update`, action: 'download', tone: 'ready', busy: false,
-        title: `Downloading v${pending} in the background; click to start it if it has not begun`
+        title: `Downloading v${pending} in the background; click to start it if it has not begun`,
+        labelKey: 'updateBadge.update', titleKey: 'updateBadge.updateTitle', params: { version: pending }
       };
     }
     const why = status?.state === 'available-manual' && status.reason
       ? ` (this install could not update itself: ${status.reason})` : '';
     return {
       label: `v${pending} · download`, action: 'manual', tone: 'ready', busy: false,
-      title: `Click to download v${pending}, then replace the app you have${why}`
+      title: `Click to download v${pending}, then replace the app you have${why}`,
+      labelKey: 'updateBadge.download',
+      titleKey: status?.state === 'available-manual' && status.reason ? 'updateBadge.downloadTitleWhy' : 'updateBadge.downloadTitle',
+      params: { version: pending, reason: status?.state === 'available-manual' ? status.reason ?? '' : '' }
     };
   }
   switch (status?.state) {
     case 'checking':
-      return { label: 'checking…', action: 'none', tone: 'busy', busy: true, title: `Checking for updates (you're on v${v})` };
+      return { label: 'checking…', action: 'none', tone: 'busy', busy: true, title: `Checking for updates (you're on v${v})`, labelKey: 'updateBadge.checking', titleKey: 'updateBadge.checkingTitle', params: { v } };
     case 'error':
       return {
         label: 'update check failed', action: 'check', tone: 'warn', busy: false,
-        title: `${status.message} — click to try again`
+        title: `${status.message} — click to try again`,
+        labelKey: 'updateBadge.failed', titleKey: 'updateBadge.failedTitle', params: { message: status.message }
       };
     case 'not-available':
     case 'just-updated':
       // A check has confirmed it, so say so. Idle (no check yet) stays bare.
-      return { label: 'latest', action: 'check', tone: 'idle', busy: false, title: `v${v} is the latest version — click to check again` };
+      return { label: 'latest', action: 'check', tone: 'idle', busy: false, title: `v${v} is the latest version — click to check again`, labelKey: 'updateBadge.latest', titleKey: 'updateBadge.latestTitle', params: { v } };
     case 'idle':
     default:
-      return { label: null, action: 'check', tone: 'idle', busy: false, title: `v${v} — click to check for updates` };
+      return { label: null, action: 'check', tone: 'idle', busy: false, title: `v${v} — click to check for updates`, titleKey: 'updateBadge.idleTitle', params: { v } };
   }
 }
 

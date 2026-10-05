@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { HarnessConfig } from '@/store/config';
 import type { Agent } from '@/store/store';
 import { AgentDetailPanel } from '@/components/AgentDetailPanel';
@@ -32,6 +33,7 @@ export function effectiveServers(config: HarnessConfig, agentId: string): string
  * the floor's spend against its cap.
  */
 export function AgentView({ agent, roster, tasks, directory, config, onOpen }: Props) {
+  const { t } = useTranslation();
   const setView = useProStore((s) => s.setView);
   const dir = directory[agent.id];
   const st = agentState(agent, false);
@@ -44,7 +46,7 @@ export function AgentView({ agent, roster, tasks, directory, config, onOpen }: P
         <Avatar agent={agent} />
         <h2>{agent.name}</h2>
         {agent.isGod
-          ? <span className="pro-badge" style={{ background: 'var(--cth-lemon-light)' }}>orchestrator</span>
+          ? <span className="pro-badge" style={{ background: 'var(--cth-lemon-light)' }}>{t('pro.nav.orchestrator')}</span>
           : <StateBadge {...st} />}
       </div>
 
@@ -55,19 +57,19 @@ export function AgentView({ agent, roster, tasks, directory, config, onOpen }: P
           <AgentDetailPanel agent={agent} />
         </div>
         <aside style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Fact label="Goal">{agent.goal || agent.description || '—'}</Fact>
-          <Fact label="Engine">{[agent.provider ?? 'claude', agent.model].filter(Boolean).join(' · ')}</Fact>
-          <Fact label="Usage">
+          <Fact label={t('pro.agent.goal')}>{agent.goal || agent.description || '—'}</Fact>
+          <Fact label={t('pro.agent.engine')}>{[agent.provider ?? 'claude', agent.model].filter(Boolean).join(' · ')}</Fact>
+          <Fact label={t('pro.agent.usage')}>
             {dir ? `${fmtTokens(dir.tokens)} tokens · $${dir.usd.toFixed(2)}` : '—'}
-            <div className="pro-sub" style={{ fontSize: 12 }}>{cap ? `cap ${fmtTokens(cap)}` : 'workspace budget'}</div>
+            <div className="pro-sub" style={{ fontSize: 12 }}>{cap ? t('pro.agent.cap', { cap: fmtTokens(cap) }) : t('pro.agent.workspaceBudget')}</div>
           </Fact>
-          <Fact label="Capabilities">
+          <Fact label={t('pro.nav.capabilities')}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {servers.length ? servers.map((id) => <span key={id} className="pro-chip">{mcpLabel(id)}</span>) : '—'}
             </div>
-            <button className="pro-btn" style={{ marginTop: 8 }} onClick={() => setView({ kind: 'section', section: 'capabilities' })}>Manage</button>
+            <button className="pro-btn" style={{ marginTop: 8 }} onClick={() => setView({ kind: 'section', section: 'capabilities' })}>{t('pro.agent.manage')}</button>
           </Fact>
-          {agent.worktreePath && <Fact label="Worktree"><span className="pro-mono" style={{ wordBreak: 'break-all' }}>{agent.worktreePath}</span></Fact>}
+          {agent.worktreePath && <Fact label={t('pro.agent.worktree')}><span className="pro-mono" style={{ wordBreak: 'break-all' }}>{agent.worktreePath}</span></Fact>}
         </aside>
       </div>
     </div>
@@ -104,13 +106,14 @@ function useDelegations(godId: string): { list: Delegation[]; now: number } {
  *  work. An envelope travels out when he delegates and back when the agent
  *  answers; in between the line runs and he waits. The floor spend under it. */
 function RoutingMap({ god, roster, tasks, directory, config, onOpen }: Omit<Props, 'agent'> & { god: Agent }) {
+  const { t: tr } = useTranslation();
   const { list: handed, now } = useDelegations(god.id);
   const byId = new Map(handed.map((d) => [d.agentId, d]));
   const shown = new Set<string>(handed.map((d) => d.agentId));
   for (const a of roster) if (!a.isGod && (isActive(a) || currentTicket(tasks, a.id)?.status === 'doing')) shown.add(a.id);
   const others = roster.filter((a) => !a.isGod && shown.has(a.id));
   const waitingOn = others.filter((a) => byId.get(a.id)?.phase === 'working' || byId.get(a.id)?.phase === 'sent');
-  const spend = spendLine(directory, config);
+  const spend = spendLine(directory, config, tr);
   const breaker = directory[god.id]?.breaker || 'healthy';
   const godTicket = currentTicket(tasks, god.id);
   const rowH = 56;
@@ -151,13 +154,13 @@ function RoutingMap({ god, roster, tasks, directory, config, onOpen }: Omit<Prop
           <Avatar agent={god} />
           <strong style={{ fontSize: 13 }}>{god.name}</strong>
           {waitingOn.length > 0 && !isActive(god) && (
-            <span className="pro-sub" style={{ fontSize: 11 }}>waiting on {waitingOn.map((a) => a.name).join(', ')}</span>
+            <span className="pro-sub" style={{ fontSize: 11 }}>{tr('pro.agent.waitingOn', { names: waitingOn.map((a) => a.name).join(', ') })}</span>
           )}
         </button>
         {others.map((a, i) => {
           const t = currentTicket(tasks, a.id);
           const d = byId.get(a.id);
-          const line = d ? (d.phase === 'returned' ? `↩ ${d.reply || d.replyAct || 'answered'}` : d.subject) : t?.title;
+          const line = d ? (d.phase === 'returned' ? `↩ ${d.reply || d.replyAct || tr('pro.agent.answered')}` : d.subject) : t?.title;
           return (
             <button key={a.id} className="pro-card" onClick={() => onOpen(a.id)}
               style={{ position: 'absolute', insetInlineStart: '62%', top: rowY(i) - (rowH - 8) / 2, height: rowH - 8, width: '34%', padding: '0 10px', display: 'flex', alignItems: 'center', gap: 8, minWidth: 0,
@@ -176,12 +179,12 @@ function RoutingMap({ god, roster, tasks, directory, config, onOpen }: Omit<Prop
         <div className="pro-row" style={{ fontSize: 13 }}>
           <span>{spend.main} <span className="pro-sub">{spend.sub}</span></span>
           <span className="pro-badge" style={{ marginInlineStart: 'auto', background: breaker === 'healthy' ? 'var(--cth-mint-light)' : 'var(--cth-coral-light)' }}>
-            <span className="pro-dot" style={{ background: breaker === 'healthy' ? 'var(--cth-mint)' : 'var(--cth-coral)' }} /> Circuit breaker
+            <span className="pro-dot" style={{ background: breaker === 'healthy' ? 'var(--cth-mint)' : 'var(--cth-coral)' }} /> {tr('pro.agents.breaker')}
           </span>
         </div>
         <Bar value={spend.ratio} tone={spend.ratio > 0.85 ? 'red' : 'gold'} />
       </div>
-      {others.length === 0 && <p className="pro-sub" style={{ margin: 0 }}>Nobody has work in progress right now.</p>}
+      {others.length === 0 && <p className="pro-sub" style={{ margin: 0 }}>{tr('pro.agent.nobodyWorking')}</p>}
     </section>
   );
 }

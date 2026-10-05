@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useStore, type Agent } from '@/store/store';
 import { Avatar, Bar, ago, fmtTokens, usePoll, type WorkerList } from './data';
 
@@ -12,6 +13,7 @@ const EMPTY: WorkerList = { live: [], preserved: [], maxWorkers: 4 };
  * stay listed as preserved worktrees.
  */
 export function TempsView({ roster }: { roster: Agent[] }) {
+  const { t } = useTranslation();
   const [, setTick] = useState(0);
   const data = usePoll(() => window.cth.listWorkers(), 3000, EMPTY);
   const agents = useStore((s) => s.agents);
@@ -27,7 +29,7 @@ export function TempsView({ roster }: { roster: Agent[] }) {
     setBusy(true); setError(null);
     const res = await window.cth.hireTemp({ objective, cwd, name: name || undefined }).catch((e) => ({ ok: false, error: String(e) }));
     setBusy(false);
-    if (!res.ok) { setError(res.error ?? 'Could not hire the temp.'); return; }
+    if (!res.ok) { setError(res.error ?? t('pro.temps.couldNotHire')); return; }
     setHiring(false); setObjective(''); setName(''); setTick((n) => n + 1);
   };
 
@@ -36,29 +38,29 @@ export function TempsView({ roster }: { roster: Agent[] }) {
   return (
     <div className="pro-page">
       <div className="pro-head">
-        <h2>Temps</h2>
-        <span className="pro-sub">{data.live.length} of {data.maxWorkers} desks</span>
+        <h2>{t('pro.nav.temps')}</h2>
+        <span className="pro-sub">{t('pro.temps.desks', { used: data.live.length, max: data.maxWorkers })}</span>
         <div className="pro-head-end">
-          <button className="pro-btn pro-btn-primary" onClick={() => setHiring((v) => !v)}>Hire a temp</button>
+          <button className="pro-btn pro-btn-primary" onClick={() => setHiring((v) => !v)}>{t('pro.temps.hire')}</button>
         </div>
       </div>
 
       {hiring && (
         <div className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <input className="pro-input" placeholder="The job, e.g. Check the broken links on the docs site" value={objective} onChange={(e) => setObjective(e.target.value)} autoFocus />
+          <input className="pro-input" placeholder={t('pro.temps.jobPlaceholder')} value={objective} onChange={(e) => setObjective(e.target.value)} autoFocus />
           <div className="pro-row">
-            <input className="pro-input" style={{ flex: 2 }} placeholder="Folder (a git repo)" value={cwd} onChange={(e) => setCwd(e.target.value)} />
-            <button className="pro-btn" onClick={() => { void window.cth.chooseFolder().then((r) => { if (r.ok) setCwd(r.path); }); }}>Browse</button>
-            <input className="pro-input" style={{ flex: 1 }} placeholder="Name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
-            <button className="pro-btn pro-btn-primary" disabled={busy || !objective.trim() || !cwd.trim()} onClick={() => void hire()}>{busy ? 'Hiring…' : 'Hire'}</button>
+            <input className="pro-input" style={{ flex: 2 }} placeholder={t('pro.temps.folderPlaceholder')} value={cwd} onChange={(e) => setCwd(e.target.value)} />
+            <button className="pro-btn" onClick={() => { void window.cth.chooseFolder().then((r) => { if (r.ok) setCwd(r.path); }); }}>{t('pro.temps.browse')}</button>
+            <input className="pro-input" style={{ flex: 1 }} placeholder={t('pro.temps.namePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} />
+            <button className="pro-btn pro-btn-primary" disabled={busy || !objective.trim() || !cwd.trim()} onClick={() => void hire()}>{busy ? t('pro.temps.hiring') : t('pro.temps.hireBtn')}</button>
           </div>
           {error && <p className="pro-text" style={{ color: 'var(--cth-coral)' }}>{error}</p>}
-          <p className="pro-sub" style={{ fontSize: 12, margin: 0 }}>The temp works on its own branch in a fresh worktree and hands the result to {god?.name ?? 'the orchestrator'}.</p>
+          <p className="pro-sub" style={{ fontSize: 12, margin: 0 }}>{t('pro.temps.how', { name: god?.name ?? t('pro.nav.orchestrator') })}</p>
         </div>
       )}
 
       {data.live.length === 0 && !hiring && (
-        <p className="pro-sub">No temps at work. {god?.name ?? 'The orchestrator'} hires them for one-off jobs once &ldquo;may start agents&rdquo; is on, or hire one yourself.</p>
+        <p className="pro-sub">{t('pro.temps.none', { name: god?.name ?? t('pro.nav.orchestrator') })}</p>
       )}
 
       {data.live.map((w) => {
@@ -75,16 +77,16 @@ export function TempsView({ roster }: { roster: Agent[] }) {
               </div>
               <Bar value={w.tokenCap ? ratio : 1} tone={w.releasing ? 'grey' : 'green'} indeterminate={!w.tokenCap && !w.releasing} />
               <span className="pro-sub pro-mono" style={{ fontSize: 11 }}>
-                {fmtTokens(w.tokensUsed)} tok{w.tokenCap ? ` of ${fmtTokens(w.tokenCap)}` : ''}{w.idleMs !== null ? ` · idle ${ago(w.idleMs)}` : ''}
+                {fmtTokens(w.tokensUsed)} tok{w.tokenCap ? ` / ${fmtTokens(w.tokenCap)}` : ''}{w.idleMs !== null ? ` · ${t('pro.temps.idle', { age: ago(w.idleMs) })}` : ''}
               </span>
             </div>
             <span className="pro-mono pro-sub">{ago(w.ageMs)}</span>
-            <button className="pro-btn" disabled={w.releasing} onClick={() => stop(w.workerId)}>{w.releasing ? 'Leaving…' : 'Stop'}</button>
+            <button className="pro-btn" disabled={w.releasing} onClick={() => stop(w.workerId)}>{w.releasing ? t('pro.temps.leaving') : t('pro.temps.stop')}</button>
           </article>
         );
       })}
 
-      {data.preserved.length > 0 && <h3 style={{ margin: '6px 0 0', fontSize: 14 }}>Finished, waiting to be integrated</h3>}
+      {data.preserved.length > 0 && <h3 style={{ margin: '6px 0 0', fontSize: 14 }}>{t('pro.temps.preserved')}</h3>}
       {data.preserved.map((p) => (
         <article key={p.workerId} className="pro-card pro-card-muted pro-row">
           <p className="pro-title">{p.workerId}</p>
