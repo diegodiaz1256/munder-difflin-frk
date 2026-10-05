@@ -1581,6 +1581,9 @@ export class HiveManager {
       keyed.push(...mine.gateway);
       for (const [id, entry] of Object.entries(mine.plain)) servers[`munder-${id}`] = entry;
     }
+    // The office memory, for every agent while semantic memory is on.
+    const mem = agentId ? this.memoryMcp() : null;
+    if (mem) servers['munder-memory'] = mem;
     // No gateway (tests, or it failed to bind) → no keyed servers at all: the
     // fallback is "without GitHub", never "with the key in the agent's env".
     const gw = keyed.length && agentId ? this.mcpGateway(agentId, keyed) : null;
@@ -1611,6 +1614,13 @@ export class HiveManager {
 
   /** Your own MCP servers for one agent (mcpServers.ts). Injected by main;
    *  unset means none. */
+  /** The office memory as an MCP server (memory.ts mcpServer). Injected by
+   *  main; unset or null means memory is off. */
+  private memoryMcp: () => McpServerEntry | null = () => null;
+  setMemoryMcp(get: () => McpServerEntry | null): void {
+    this.memoryMcp = get;
+  }
+
   private customMcp: (agentId: string) => { gateway: string[]; plain: Record<string, McpServerEntry> } = () => ({ gateway: [], plain: {} });
   setCustomMcp(get: (agentId: string) => { gateway: string[]; plain: Record<string, McpServerEntry> }): void {
     this.customMcp = get;
@@ -1839,7 +1849,7 @@ export class HiveManager {
       // The palace location is named, not spelled as `$MEMPALACE_PALACE_PATH`:
       // `mempalace` reads that env var itself, and the POSIX `$` form was noise
       // (or an empty expansion) for a Windows agent that tried to use it literally.
-      ? 'Semantic memory: the whole hive shares a searchable MemPalace at the path in your MEMPALACE_PALACE_PATH environment variable. To recall relevant past knowledge across the team, run `mempalace search "<query>"`; run `mempalace wake-up` at the start of a task for a memory digest. Your notes in memory.md are mined into the palace automatically — write durable facts there.'
+      ? 'Semantic memory: the whole hive shares a searchable MemPalace at the path in your MEMPALACE_PALACE_PATH environment variable. To recall what the office already knows, search it FIRST with the munder-memory MCP tools (search by meaning over every agent’s notes and the research/ deliverables) before reading files or redoing work; `mempalace search "<query>"` in the shell does the same, and `mempalace wake-up` gives a digest at the start of a task. Your notes in memory.md are mined into the palace automatically — write durable facts there.'
       : '';
     // Enterprise Knowledge Graph (opt-in). Volatile-free: the bundled-node launcher
     // and the KG CLI are both fixed absolute paths for an install, so baking them

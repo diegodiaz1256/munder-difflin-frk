@@ -3777,6 +3777,7 @@ ipcMain.handle('config:setAgentMcpGrant', (_evt, agentId: unknown, servers: unkn
 // Keyed MCP servers run under MAIN, never under an agent: the gateway holds
 // the key and an agent gets a capability token (mcpGateway.ts).
 hive.setMcpKeyCheck(connectionKeyStored);
+hive.setMemoryMcp(() => memory.mcpServer());
 hive.setCustomMcp((agentId) => mcpServers.forAgent(agentId));
 hive.setMcpInstances(instancesOf);
 hive.setMcpGateway((agentId, serverIds) =>
