@@ -14,6 +14,9 @@ Memory by project and personal lists, control over models and tools per agent, a
 - **Claude's own tools are capabilities too.** Capabilities → *Who has what* now has **Web**, **Shell** and **Sub-agents** per agent; switched off, the agent cannot use them (an agent without web search no longer searches anyway).
 - **"Asks you".** When an agent's CLI shows a menu in its terminal (trust this folder, a model picker, a confirmation), its card says *asks you* with the question, and you get a desktop notification when the app is in the background.
 
+### Subscription usage
+- **Your 5-hour and weekly windows in the title bar** (*5h 64% · week 61%*), amber near the limit and red close to it; hover for when each resets and the per-model weekly caps. On a Claude subscription these, not dollars, are what runs out. Each agent's status line shows the 5-hour window too.
+
 ### Terminals
 - **The prompt stays at the bottom.** After a menu closed, or coming back from Manager, the terminal could show blank space under Claude's prompt.
 - **Open a terminal here** works on Windows (Windows Terminal or cmd) and in WSL offices (inside the distribution); it failed with `spawn open ENOENT`.

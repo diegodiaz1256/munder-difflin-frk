@@ -3586,6 +3586,9 @@ process.stdin.on('end', () => {
       const pct = Math.round((used / size) * 100);
       process.stdout.write('ctx ' + Math.round(used / 1000) + 'k/' + Math.round(size / 1000) + 'k (' + pct + '%)');
     }
+    // The subscription's 5-hour window, when Claude reports it.
+    const fh = payload.rate_limits && payload.rate_limits.five_hour;
+    if (fh && typeof fh.used_percentage === 'number') process.stdout.write(' · 5h ' + Math.round(fh.used_percentage) + '%');
     if (sock) {
       try {
         const c = net.createConnection((String(sock).startsWith('tcp://') ? { host: '127.0.0.1', port: Number(String(sock).slice(String(sock).lastIndexOf(':') + 1)) } : sock), () => { c.end(JSON.stringify(payload) + '\\n'); });

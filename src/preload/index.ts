@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import type { AgentProvider } from '../shared/agentProvider';
 import type { HireManifest } from '../shared/hire';
+import type { RateLimits } from '../shared/rateLimits';
 export type { HireManifest } from '../shared/hire';
 import type { IntegrationRecord, IntegrationTemplate } from '../shared/integrations';
 export type { IntegrationRecord, IntegrationTemplate } from '../shared/integrations';
@@ -1002,6 +1003,13 @@ const api = {
     const listener = (_e: IpcRendererEvent, payload: { agentId: string; tokens: number; limit: number }) => cb(payload);
     ipcRenderer.on('hive:contextUpdate', listener);
     return () => ipcRenderer.removeListener('hive:contextUpdate', listener);
+  },
+  /** Subscription usage windows (5-hour / weekly), last reported by a status line. */
+  rateLimits: (): Promise<RateLimits | null> => ipcRenderer.invoke('usage:rateLimits'),
+  onRateLimits: (cb: (r: RateLimits) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, r: RateLimits) => cb(r);
+    ipcRenderer.on('hive:rateLimits', listener);
+    return () => ipcRenderer.removeListener('hive:rateLimits', listener);
   },
   onHiveMessage: (cb: (e: HiveRouteEvent) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, payload: HiveRouteEvent) => cb(payload);

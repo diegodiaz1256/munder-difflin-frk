@@ -1476,5 +1476,15 @@
   "app": {
     "godFailed": "协调者无法启动：",
     "godRetry": "重试"
+  },
+  "usage": {
+    "title": "订阅用量",
+    "fiveHour": "5 小时窗口",
+    "week": "本周",
+    "weekOpus": "本周（Opus）",
+    "weekSonnet": "本周（Sonnet）",
+    "fiveHourShort": "5小时",
+    "weekShort": "本周",
+    "resetsIn": "{{time}} 后重置"
   }
 }
