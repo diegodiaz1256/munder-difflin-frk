@@ -19,6 +19,7 @@ import { SetupPanel } from './SetupPanel';
 import { Icon } from './Icon';
 import { OfficeThemePicker } from './OfficeThemePicker';
 import { McpDefaultsSettings } from './McpDefaultsSettings';
+import { MemoryModelSettings } from './MemoryModelSettings';
 import { IntegrationsRegistry } from './IntegrationsRegistry';
 import { LEGACY_ORG_TRIGGER, PRODUCT_ANALYTICS } from '@shared/fork';
 import { AiEnginesSettings } from './AiEnginesSettings';
@@ -91,10 +92,10 @@ const slackLabelStyle: CSSProperties = {
 /** The exact connect walkthrough shown behind the i icon. Steps 6 & 7 spell out
  *  the both-lists requirement: subscribe to message.channels / message.groups in
  *  BOTH "Subscribe to bot events" AND "Subscribe to events on behalf of users". */
-const SLACK_CONNECT_STEPS = `Connect Munder Difflin to Slack
+const SLACK_CONNECT_STEPS = `Connect Scranton Branch to Slack
 
 1. api.slack.com/apps -> Create New App -> From scratch. Name it
-   "Munder Difflin" and pick your workspace.
+   "Scranton Branch" and pick your workspace.
 2. Basic Information -> Signing Secret -> copy it into the
    "Signing secret" field here.
 3. OAuth & Permissions -> Bot Token Scopes: add
@@ -1385,6 +1386,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                             {semMemOn ? t('common.on') : t('common.off')}
                           </PixelButton>
                         </div>
+                        {semMemOn && <MemoryModelSettings />}
                       </div>
 
                       <div style={{ height: 1, background: 'var(--cth-ink-300)' }} />

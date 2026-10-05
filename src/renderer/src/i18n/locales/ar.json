@@ -288,7 +288,16 @@
       "adding": "جارٍ الإضافة…",
       "addFiles": "أضف ملفات…",
       "docCount": "{{count}} مستند مفهرَس",
-      "docCountPlural": "{{count}} مستندات مفهرَسة"
+      "docCountPlural": "{{count}} مستندات مفهرَسة",
+      "modelTitle": "نموذج الذاكرة",
+      "modelReady": "تم تنزيل {{model}}. تعمل الذاكرة دون اتصال.",
+      "modelMissing": "لم يتم تنزيل {{model}}. ينتظره البحث في الذاكرة والحفظ.",
+      "modelDownload": "تنزيل النموذج",
+      "modelUpdate": "تحديث النموذج",
+      "modelDownloading": "جارٍ التنزيل… مرة واحدة، حتى بضع مئات من الميغابايت",
+      "modelFailed": "فشل التنزيل: {{error}}",
+      "modelDone": "النموذج جاهز.",
+      "modelOffline": "لا تتصل الذاكرة بالإنترنت من تلقاء نفسها: هذا الزر هو المرة الوحيدة."
     },
     "connections": {
       "slack": "Slack",
@@ -467,7 +476,14 @@
     "openIssue": "مشكلة GitHub رقم {{num}}: {{title}}",
     "deliveryResumeAria": "استأنف التسليم التلقائي للأرضية كلها",
     "deliveryHoldAria": "احتجز التسليم التلقائي للأرضية كلها",
-    "openIdeAria": "افتح بيئة التطوير"
+    "openIdeAria": "افتح بيئة التطوير",
+    "remoteControl": "عن بُعد",
+    "remoteControlTitle": "التحكم عن بُعد: الوصول إلى هذه الجلسة من claude.ai أو تطبيق Claude على هاتفك. سيطلب Claude التأكيد في الطرفية.",
+    "remoteControlAria": "تشغيل التحكم عن بُعد للمنسق",
+    "remoteControlOnTitle": "التحكم عن بُعد مفعّل. انقر لفتح هذه الجلسة ({{url}})؛ وهي أيضًا في تطبيق Claude على هاتفك.",
+    "remoteControlFailedTitle": "التحكم عن بُعد متوقف: {{reason}}. انقر للمحاولة مجددًا.",
+    "remoteControlOnLabel": "عن بُعد: مفعّل",
+    "remoteControlConnecting": "جارٍ الاتصال…"
   },
   "addAgent": {
     "title": "إضافة وكيل",
@@ -1431,5 +1447,14 @@
     "viewSource": "عرض المصدر",
     "loading": "جارٍ تحميل الصورة…",
     "decodeFailed": "تعذّر فك ترميز هذه الصورة — قد يكون الملف تالفًا أو امتداده خاطئًا"
+  },
+  "floor": {
+    "clockOut": "تسجيل الخروج؟",
+    "clockOutDetail": "سيؤدي هذا إلى إغلاق Scranton Branch. يُطلب من الوكلاء العاملين التوقف أولاً.",
+    "clockOutOk": "تسجيل الخروج"
+  },
+  "app": {
+    "godFailed": "تعذّر تشغيل المنسق:",
+    "godRetry": "إعادة المحاولة"
   }
 }

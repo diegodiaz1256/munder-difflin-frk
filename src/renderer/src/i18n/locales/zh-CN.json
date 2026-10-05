@@ -288,7 +288,16 @@
       "adding": "添加中…",
       "addFiles": "添加文件…",
       "docCount": "已索引 {{count}} 个文档",
-      "docCountPlural": "已索引 {{count}} 个文档"
+      "docCountPlural": "已索引 {{count}} 个文档",
+      "modelTitle": "记忆模型",
+      "modelReady": "{{model}} 已下载。记忆离线运行。",
+      "modelMissing": "{{model}} 尚未下载。记忆搜索和保存将等待它。",
+      "modelDownload": "下载模型",
+      "modelUpdate": "更新模型",
+      "modelDownloading": "正在下载…仅一次，最多几百 MB",
+      "modelFailed": "下载失败：{{error}}",
+      "modelDone": "模型已就绪。",
+      "modelOffline": "记忆不会自行联网：只有这个按钮会。"
     },
     "connections": {
       "slack": "Slack",
@@ -467,7 +476,14 @@
     "openIssue": "GitHub Issue #{{num}}：{{title}}",
     "deliveryResumeAria": "恢复整个楼层的自动投递",
     "deliveryHoldAria": "暂停整个楼层的自动投递",
-    "openIdeAria": "打开 IDE"
+    "openIdeAria": "打开 IDE",
+    "remoteControl": "远程",
+    "remoteControlTitle": "远程控制：从 claude.ai 或手机上的 Claude 应用访问此会话。Claude 会在终端中请你确认。",
+    "remoteControlAria": "为协调者开启远程控制",
+    "remoteControlOnTitle": "远程控制已开启。点击打开此会话（{{url}}）；它也在你手机上的 Claude 应用中。",
+    "remoteControlFailedTitle": "远程控制已关闭：{{reason}}。点击重试。",
+    "remoteControlOnLabel": "远程已开",
+    "remoteControlConnecting": "连接中…"
   },
   "addAgent": {
     "title": "添加智能体",
@@ -1431,5 +1447,14 @@
     "viewSource": "查看源码",
     "loading": "正在加载图片…",
     "decodeFailed": "无法解码此图片——文件可能已损坏或扩展名有误"
+  },
+  "floor": {
+    "clockOut": "下班打卡？",
+    "clockOutDetail": "这将关闭 Scranton Branch。正在运行的智能体会先被要求停止。",
+    "clockOutOk": "下班"
+  },
+  "app": {
+    "godFailed": "协调者无法启动：",
+    "godRetry": "重试"
   }
 }

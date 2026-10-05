@@ -36,7 +36,13 @@ const listeners = JSON.parse(process.argv[1]);
 const socks = new Map();
 let next = 1;
 const out = (m) => process.stdout.write(JSON.stringify(m) + '\n');
+const bound = new Map();
 const listen = (l, cb) => {
+  // Asked again for a listener this bridge already has (the app lost track
+  // of it): answer with it. Listening twice failed with EADDRINUSE, which the
+  // app reads as "another program holds the port" and refuses the agent.
+  if (bound.has(l.name)) return cb(bound.get(l.name));
+  for (const p of bound.values()) if (l.port && p === l.port) return cb(p);
   const srv = net.createServer((s) => {
     const c = next++;
     socks.set(c, s);
@@ -46,7 +52,7 @@ const listen = (l, cb) => {
     s.on('error', () => {});
   });
   srv.on('error', (e) => cb(e.code === 'EADDRINUSE' ? 'direct' : 'failed:' + e.code));
-  srv.listen(l.port, '127.0.0.1', () => cb(srv.address().port));
+  srv.listen(l.port, '127.0.0.1', () => { bound.set(l.name, srv.address().port); cb(srv.address().port); });
 };
 const ports = {};
 let pending = listeners.length;
@@ -105,6 +111,12 @@ export class WslBridge {
       });
       p.on('exit', (code) => {
         this.log(`[wsl-bridge ${this.distro}] exited (${code})`);
+        // A bridge that was already replaced must not wipe its successor's
+        // state (its exit can be reported after the new one started).
+        if (this.proc !== p) {
+          if (!settled) { settled = true; clearTimeout(timer); reject(new Error(`the WSL bridge into ${this.distro} was replaced`)); }
+          return;
+        }
         for (const s of this.socks.values()) s.destroy();
         this.socks.clear();
         this.proc = null;
@@ -169,7 +181,20 @@ export class WslBridge {
       }
     }
     const ports = await this.start();
-    return this.ports[l.name] ?? ports[l.name] ?? 'failed:unknown';
+    const got = this.ports[l.name] ?? ports[l.name];
+    if (got !== undefined) return got;
+    // Known but not bound by the running bridge: it was restarted after
+    // exiting, or started while this listener was being added. Ask it now
+    // instead of failing the agent's start ("failed:unknown").
+    return this.listenNow(l);
+  }
+
+  private listenNow(l: { name: string; port: number }): Promise<number | string> {
+    return new Promise<number | string>((resolve) => {
+      this.waiting.set(l.name, resolve);
+      this.send({ t: 'listen', name: l.name, port: l.port });
+      setTimeout(() => { if (this.waiting.delete(l.name)) resolve('failed:timeout'); }, 10_000).unref?.();
+    });
   }
 
   private send(m: unknown): void {

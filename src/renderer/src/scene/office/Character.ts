@@ -2,7 +2,7 @@ import { Container, Graphics, Text, Texture } from 'pixi.js';
 import { CharacterSprite, type Direction, type AnimState } from './CharacterSprite';
 import { findPath } from './pathfinding';
 import type { TiledMapRenderer } from './TiledMapRenderer';
-import { ThoughtBubble } from './ThoughtBubble';
+import { MIN_TEXT_ZOOM, ThoughtBubble } from './ThoughtBubble';
 import { colors } from '@/design/tokens';
 
 // Adapted from shahar061/the-office (office/characters/Character.ts).
@@ -424,6 +424,12 @@ export class Character {
    *  its on-screen text size when the window (and thus the world) shrinks. */
   setBubbleZoom(z: number): void {
     this.thoughtBubble.setZoom(z);
+    // The nameplate's 6 px type is unreadable below ~2× zoom: hold it at
+    // that on-screen size when the floor is small.
+    if (z > 0) {
+      const s = Math.max(1, MIN_TEXT_ZOOM / z);
+      if (this.nameTag.scale.x !== s) this.nameTag.scale.set(s);
+    }
   }
 
   /** Update the nameplate text (a rename mid-session, e.g. god's name). No-op
