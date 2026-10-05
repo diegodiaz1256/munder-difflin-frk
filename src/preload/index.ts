@@ -419,6 +419,8 @@ export interface HarnessConfig {
 
 export interface MemoryStatus {
   available: boolean;
+  modelReady: boolean;
+  downloading: boolean;
   enabled: boolean;
   active: boolean;
   initialized: boolean;
@@ -911,6 +913,7 @@ const api = {
   memoryWakeUp: (wing?: string): Promise<{ ok: boolean; output: string; error?: string }> =>
     ipcRenderer.invoke('hive:memoryWakeUp', wing),
   mineNow: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('hive:mineNow'),
+  memoryDownloadModel: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('hive:memoryDownloadModel'),
   /** Condense agent memory.md files (the janitor's missing half). With an id,
    *  condense that agent on demand; without, run a full threshold scan. Returns
    *  the per-agent outcomes ({ id, condensed, reason, oldBytes?, newBytes? }). */

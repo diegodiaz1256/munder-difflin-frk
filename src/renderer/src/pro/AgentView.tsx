@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { HarnessConfig } from '@/store/config';
 import type { Agent } from '@/store/store';
 import { AgentDetailPanel } from '@/components/AgentDetailPanel';
@@ -6,6 +7,7 @@ import { mcpLabel } from '@shared/roleBundles';
 import { useProStore } from './proStore';
 import { Avatar, Bar, StateBadge, agentState, fmtTokens, isActive, type AgentDirectoryEntry, type KeyedTask } from './data';
 import { currentTicket, spendLine } from './AgentsView';
+import { delegations, envelopeReturning, type Delegation, type LogMessage } from '@shared/delegations';
 
 interface Props {
   agent: Agent;
@@ -81,38 +83,90 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-/** God on the left, a dashed line to every agent with work in progress (a ticket
- *  in `doing`, or busy right now), each labelled with that ticket: yellow while
- *  the agent is at it, light green otherwise. The floor spend under it. */
+/** The hive's message log, polled: what the orchestrator handed to whom. */
+function useDelegations(godId: string): { list: Delegation[]; now: number } {
+  const [log, setLog] = useState<LogMessage[]>([]);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      void window.cth.hiveLog(300).then((l) => { if (alive) setLog(l as LogMessage[]); }).catch(() => {});
+      setNow(Date.now());
+    };
+    load();
+    const id = setInterval(load, 2000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+  return { list: delegations(log, godId, now), now };
+}
+
+/** God on the left; to the right everyone he handed work to, or who is at
+ *  work. An envelope travels out when he delegates and back when the agent
+ *  answers; in between the line runs and he waits. The floor spend under it. */
 function RoutingMap({ god, roster, tasks, directory, config, onOpen }: Omit<Props, 'agent'> & { god: Agent }) {
-  const others = roster.filter((a) => !a.isGod && (isActive(a) || currentTicket(tasks, a.id)?.status === 'doing'));
+  const { list: handed, now } = useDelegations(god.id);
+  const byId = new Map(handed.map((d) => [d.agentId, d]));
+  const shown = new Set<string>(handed.map((d) => d.agentId));
+  for (const a of roster) if (!a.isGod && (isActive(a) || currentTicket(tasks, a.id)?.status === 'doing')) shown.add(a.id);
+  const others = roster.filter((a) => !a.isGod && shown.has(a.id));
+  const waitingOn = others.filter((a) => byId.get(a.id)?.phase === 'working' || byId.get(a.id)?.phase === 'sent');
   const spend = spendLine(directory, config);
   const breaker = directory[god.id]?.breaker || 'healthy';
   const godTicket = currentTicket(tasks, god.id);
-  const rowH = 44;
-  const h = Math.max(120, others.length * rowH + 16);
+  const rowH = 56;
+  const h = Math.max(130, others.length * rowH + 16);
+  const godY = h / 2;
+  const rowY = (i: number) => 8 + i * rowH + rowH / 2;
   return (
     <section className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ position: 'relative', height: h }}>
         <svg width="100%" height={h} style={{ position: 'absolute', inset: 0 }} aria-hidden="true" preserveAspectRatio="none" viewBox={`0 0 100 ${h}`}>
-          {others.map((a, i) => (
-            <line key={a.id} x1={22} y1={h / 2} x2={62} y2={8 + i * rowH + rowH / 2}
-              stroke="var(--cth-ink-300)" strokeDasharray="2 2" strokeWidth={0.3} vectorEffect="non-scaling-stroke" />
-          ))}
+          {others.map((a, i) => {
+            const d = byId.get(a.id);
+            const live = d && d.phase !== 'returned';
+            return (
+              <line key={a.id} x1={22} y1={godY} x2={62} y2={rowY(i)}
+                className={live ? 'pro-route-live' : undefined}
+                stroke={d ? (live ? 'var(--cth-lemon)' : 'var(--cth-mint)') : 'var(--cth-ink-300)'}
+                strokeDasharray={live ? '4 3' : '2 2'} strokeWidth={live ? 0.8 : 0.3} vectorEffect="non-scaling-stroke" />
+            );
+          })}
         </svg>
+        {others.map((a, i) => {
+          const d = byId.get(a.id);
+          if (!d) return null;
+          const out = d.phase === 'sent';
+          const back = envelopeReturning(d, now);
+          if (!out && !back) return null;
+          const from = out ? { x: '22%', y: godY } : { x: '62%', y: rowY(i) };
+          const to = out ? { x: '62%', y: rowY(i) } : { x: '22%', y: godY };
+          return (
+            <span key={`env-${a.id}-${out ? d.sentAt : d.repliedAt}`} className="pro-envelope" title={out ? d.subject : d.reply}
+              style={{ ['--x1' as string]: from.x, ['--y1' as string]: `${from.y - 7}px`, ['--x2' as string]: to.x, ['--y2' as string]: `${to.y - 7}px` }}>✉</span>
+          );
+        })}
         <button className="pro-card" onClick={() => onOpen(god.id)}
-          style={{ position: 'absolute', insetInlineStart: '4%', top: h / 2 - 42, width: '18%', minWidth: 110, height: 84, background: 'var(--cth-lemon-light)', borderColor: 'var(--cth-lemon)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+          style={{ position: 'absolute', insetInlineStart: '4%', top: godY - 46, width: '18%', minWidth: 110, height: 92, background: 'var(--cth-lemon-light)', borderColor: 'var(--cth-lemon)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
           {godTicket?.key && <TicketChip id={godTicket.key} live={isActive(god)} />}
           <Avatar agent={god} />
           <strong style={{ fontSize: 13 }}>{god.name}</strong>
+          {waitingOn.length > 0 && !isActive(god) && (
+            <span className="pro-sub" style={{ fontSize: 11 }}>waiting on {waitingOn.map((a) => a.name).join(', ')}</span>
+          )}
         </button>
         {others.map((a, i) => {
           const t = currentTicket(tasks, a.id);
+          const d = byId.get(a.id);
+          const line = d ? (d.phase === 'returned' ? `↩ ${d.reply || d.replyAct || 'answered'}` : d.subject) : t?.title;
           return (
             <button key={a.id} className="pro-card" onClick={() => onOpen(a.id)}
-              style={{ position: 'absolute', insetInlineStart: '62%', top: 8 + i * rowH + 2, height: rowH - 6, width: '34%', padding: '0 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              style={{ position: 'absolute', insetInlineStart: '62%', top: rowY(i) - (rowH - 8) / 2, height: rowH - 8, width: '34%', padding: '0 10px', display: 'flex', alignItems: 'center', gap: 8, minWidth: 0,
+                borderColor: d && d.phase !== 'returned' ? 'var(--cth-lemon)' : undefined }}>
               <Avatar agent={a} />
-              <strong style={{ fontSize: 13 }}>{a.name}</strong>
+              <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, textAlign: 'start' }}>
+                <strong style={{ fontSize: 13 }}>{a.name}</strong>
+                {line && <span className="pro-sub" style={{ fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{line}</span>}
+              </span>
               {t?.key && <span style={{ marginInlineStart: 'auto' }}><TicketChip id={t.key} live={isActive(a)} /></span>}
             </button>
           );
