@@ -1,4 +1,5 @@
 import type { RemoteControlState } from '@shared/remoteControl';
+import { ownerOf } from '@shared/pathWithin';
 import type { TerminalMenu } from '@shared/terminalMenu';
 import { create } from 'zustand';
 import type { AccentColorName } from '@/design/tokens';
@@ -1060,7 +1061,8 @@ export const useStore = create<State>((set, get) => ({
     // Resolve the OWNING agent here rather than in each caller: a terminal link
     // or a Files-tab click often has nothing selected, and the IDE would
     // otherwise fall back to the selection and open the wrong workspace.
-    const owner = s.agents.find((a) => absPath === a.cwd || absPath.startsWith(a.cwd + '/'));
+    // Separator- and case-aware: `cwd + '/'` never matched a Windows path.
+    const owner = ownerOf(absPath, s.agents);
     set({ ideInitialFile: absPath, ideOpen: true, ideAgentId: owner?.id ?? null });
   },
   // Closing CLEARS the target: the id is scoped to one IDE session, and a stale
