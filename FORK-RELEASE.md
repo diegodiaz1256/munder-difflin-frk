@@ -14,6 +14,15 @@ Memory by project and personal lists, control over models and tools per agent, a
 - **Claude's own tools are capabilities too.** Capabilities → *Who has what* now has **Web**, **Shell** and **Sub-agents** per agent; switched off, the agent cannot use them (an agent without web search no longer searches anyway).
 - **"Asks you".** When an agent's CLI shows a menu in its terminal (trust this folder, a model picker, a confirmation), its card says *asks you* with the question, and you get a desktop notification when the app is in the background.
 
+### Español
+- **The whole app in Spanish** (Settings → General → Language), including the Manager screens, the office picker and the floor’s bubbles. Those screens are now translatable in every language (English, 简体中文, العربية too).
+
+### Files and the IDE
+- **Click a file an agent printed and it opens** in the IDE, on Windows and WSL offices: it opened empty on Windows, needed Ctrl+click, and long paths (wrapped over several lines) were not links at all.
+
+### Capabilities
+- **Web off means no web.** Turning off an agent’s Web capability also takes away the Fetch and Web Search servers it was still using to search. With Shell on, commands can still reach the web; turn both off for an agent with no internet.
+
 ### Subscription usage
 - **Your 5-hour and weekly windows in the title bar** (*5h 64% · week 61%*), amber near the limit and red close to it; hover for when each resets and the per-model weekly caps. On a Claude subscription these, not dollars, are what runs out. Each agent's status line shows the 5-hour window too.
 
