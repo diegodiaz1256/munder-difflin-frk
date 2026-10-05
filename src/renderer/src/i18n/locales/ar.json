@@ -57,7 +57,9 @@
     "ghost": "غادر",
     "compacting": "يضغط السياق",
     "looping": "يدور في حلقة",
-    "typing": "مسودّتك"
+    "typing": "مسودّتك",
+    "asks": "يسألك",
+    "asksDetail": "يطرح سؤالًا في الطرفية"
   },
   "agentControl": {
     "deliveryPaused": "الرسائل المصفوفة محتجزة (الأرضية كلها)",

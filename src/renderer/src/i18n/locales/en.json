@@ -57,7 +57,9 @@
     "ghost": "gone",
     "compacting": "compacting",
     "looping": "looping",
-    "typing": "your draft"
+    "typing": "your draft",
+    "asks": "asks you",
+    "asksDetail": "is asking something in its terminal"
   },
   "agentControl": {
     "deliveryPaused": "queued messages held (whole floor)",

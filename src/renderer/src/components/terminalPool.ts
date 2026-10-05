@@ -40,6 +40,7 @@ import {
 } from './terminalAutomation';
 import { sanitizeTerminalSelection } from './terminalSelection';
 import { detectRemoteControl, isRemoteControlMenu } from '@shared/remoteControl';
+import { detectMenu } from '@shared/terminalMenu';
 import { useStore } from '@/store/store';
 import { terminalKeySequence } from './terminalKeys';
 import '@xterm/xterm/css/xterm.css';
@@ -189,6 +190,18 @@ export function acquireTerminal(ptyId: string, theme?: ThemeMap, fontSize = 14):
   // Subscribe to the pty stream ONCE for the terminal's whole lifetime, so the
   // buffer keeps filling even while this terminal isn't mounted in any view.
   let rcTail = '';
+  // Is the CLI asking something (a numbered menu, a y/n)? Read from the bottom
+  // of the rendered screen, not the raw stream, where redraws pile up. At most
+  // a few times a second.
+  let menuTimer: ReturnType<typeof setTimeout> | null = null;
+  const checkMenu = (): void => {
+    menuTimer = null;
+    const buf = term.buffer.active;
+    const lines: string[] = [];
+    for (let i = Math.max(0, buf.length - 24); i < buf.length; i++) lines.push(buf.getLine(i)?.translateToString(true) ?? '');
+    useStore.getState().setTerminalMenu(ptyId, detectMenu(lines.join('\n')));
+  };
+  entry.unsub.push(() => { if (menuTimer) clearTimeout(menuTimer); useStore.getState().setTerminalMenu(ptyId, null); });
   entry.unsub.push(window.cth.onPtyData(ptyId, (rawChunk) => {
     const chunk = normalizePtyChunk(rawChunk);
     if (!chunk) return;
@@ -215,6 +228,7 @@ export function acquireTerminal(ptyId: string, theme?: ThemeMap, fontSize = 14):
       if (follow) {
         try { term.scrollToBottom(); } catch { /* terminal may be detaching */ }
       }
+      if (!menuTimer) menuTimer = setTimeout(checkMenu, 250);
     });
     entry.onData?.(chunk);
   }));

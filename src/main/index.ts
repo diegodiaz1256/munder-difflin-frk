@@ -5048,6 +5048,17 @@ ipcMain.handle('github:ciRuns', (_evt, cwd: unknown) =>
 
 // ─── IPC: desktop notifications toggle ──────────────────────────────────────
 ipcMain.handle('app:setNotifications', (_evt, val) => writeConfig({ notifications: val === true }));
+// An agent's CLI showing a menu in its terminal (renderer reads its screen).
+ipcMain.handle('app:notifyMenu', (_evt, agent: unknown, question: unknown) => {
+  if (!readConfig().notifications || !Notification.isSupported()) return;
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win?.isFocused()) return;
+  try {
+    const n = new Notification({ title: `${String(agent).slice(0, 60)} is asking you`, body: String(question).slice(0, 200) });
+    n.on('click', () => { if (win) { win.show(); win.focus(); } });
+    n.show();
+  } catch { /* unsupported */ }
+});
 
 // ─── IPC: onboarding reliability — open Settings deep-link + login-item toggle ─
 /** Open a System Settings deep-link (or https URL) in the OS default handler.

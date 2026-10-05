@@ -1246,6 +1246,9 @@ const api = {
 
   // ─── Desktop notifications ───────────────────────────────────────────────────
   /** Toggle native desktop notifications for agent lifecycle events. */
+  /** Desktop notification: an agent's CLI is asking something in its terminal. */
+  notifyMenu: (agent: string, question: string): Promise<void> =>
+    ipcRenderer.invoke('app:notifyMenu', agent, question),
   setNotifications: (v: boolean): Promise<HarnessConfig> =>
     ipcRenderer.invoke('app:setNotifications', v),
 
