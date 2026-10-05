@@ -4,6 +4,7 @@ import { PixelPanel } from './PixelPanel';
 import { PixelBadge, StatusKind } from './PixelBadge';
 import { useHasTerminalDraft } from './terminalPool';
 import { useStore } from '@/store/store';
+import { actionLabel } from '@/scene/office/actionLabel';
 import { SpritePortrait } from './SpritePortrait';
 import { RealtimeMichaelToggle } from './RealtimeMichaelToggle';
 import { CostHud } from '@/realtime/CostHud';
@@ -128,7 +129,7 @@ export function AgentCard({
     .filter(Boolean).join(', ') || 'none';
 
   // One context line: what it's DOING while working, WHERE it lives while idle.
-  const infoLine = menu ? (menu.question || t('badge.asksDetail')) : (status !== 'idle' && action) ? action : project;
+  const infoLine = menu ? (menu.question || t('badge.asksDetail')) : (status !== 'idle' && action) ? actionLabel(action, t) : project;
   const noteFirstLine = (note ?? '').split('\n').find((l) => l.trim()) ?? '';
 
   return (
