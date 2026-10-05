@@ -1,5 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { pathWithin } from '@shared/pathWithin';
 import { useStore, type Agent } from '@/store/store';
 import { FileTree } from '@/components/FileTree';
 import { Icon } from '@/components/Icon';
@@ -244,9 +245,9 @@ export function IdePanel() {
     const abs = useStore.getState().ideInitialFile;
     if (!abs) return;
     useStore.getState().setIdeInitialFile(null);
-    const prefix = root.endsWith('/') ? root : `${root}/`;
-    if (!abs.startsWith(prefix)) return; // different workspace — tree still lets them browse
-    const rel = abs.slice(prefix.length);
+    // pathWithin, not startsWith(root + '/'): a Windows root never matched.
+    const rel = pathWithin(abs, root);
+    if (!rel) return; // different workspace — tree still lets them browse
     // Same routing as a tree click — an "open in IDE" on a screenshot must land
     // on the preview, not on a tab that refuses to display it.
     openEdit(rel);

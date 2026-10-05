@@ -34,7 +34,7 @@ import {
 import {
   canAutomateTerminal,
   opensInteractiveTerminalUi,
-  shouldFollowTerminalOutput, blankRowsBelowContent,
+  shouldFollowTerminalOutput, blankRowsBelowContent, continuesRow, wrappedSpanRange, type LineRow,
   terminalAutomationBlock,
   type TerminalAutomationBlock
 } from './terminalAutomation';
@@ -1055,8 +1055,27 @@ function registerMarkdownLinkProvider(term: Terminal, ptyId: string): void {
   try {
     term.registerLinkProvider({
       provideLinks(bufferLineNumber, callback) {
-        const line = term.buffer.active.getLine(bufferLineNumber - 1);
-        const text = line ? line.translateToString(true) : '';
+        // The whole logical line: a long path wraps over several rows, and
+        // matched row by row it was never a link. Rows marked isWrapped
+        // continue the one above; all but the last are a full row wide.
+        const buf = term.buffer.active;
+        const rowText = (r: number) => buf.getLine(r)?.translateToString(true) ?? '';
+        const joins = (r: number) => r > 0 && !!buf.getLine(r) && continuesRow(rowText(r - 1), rowText(r), !!buf.getLine(r)?.isWrapped, term.cols);
+        let first = bufferLineNumber - 1;
+        while (first > 0 && bufferLineNumber - 1 - first < 8 && joins(first)) first--;
+        let last = bufferLineNumber - 1;
+        while (last - first < 8 && joins(last + 1)) last++;
+        const rows: LineRow[] = [];
+        for (let r = first; r <= last; r++) {
+          let t = rowText(r);
+          let x0 = 0;
+          // A continuation row loses its indent, soft wrap or not: Claude fills
+          // the row to the edge and indents the next, and xterm may still mark
+          // it wrapped, which split a printed path in two.
+          if (r > first) { x0 = t.length - t.trimStart().length; t = t.slice(x0); }
+          rows.push({ text: t, row: r + 1, x0 });
+        }
+        const text = rows.map((r) => r.text).join('');
         // A URL host need not carry a dot (`https://localhost:3000/x`), so the
         // cheap bail-out has to let `://` through as well.
         if (!text || (!text.includes('.') && !text.includes('://'))) { callback(undefined); return; }
@@ -1066,10 +1085,7 @@ function registerMarkdownLinkProvider(term: Terminal, ptyId: string): void {
         // @shared/terminalPaths so it can be unit-tested; this only turns a
         // span into an xterm link and decides what a click does.
         for (const span of terminalLinkSpans(text)) {
-          const range = {
-            start: { x: span.start + 1, y: bufferLineNumber },
-            end: { x: span.start + span.raw.length, y: bufferLineNumber }
-          };
+          const range = wrappedSpanRange(rows, span.start, span.raw.length);
           if (span.kind === 'url') {
             const url = span.token;
             links!.push({
@@ -1092,9 +1108,11 @@ function registerMarkdownLinkProvider(term: Terminal, ptyId: string): void {
           links!.push({
             range, text: span.raw,
             decorations: { underline: true, pointerCursor: true },
+            // A plain click opens it too: the agent CLIs here ignore the mouse,
+            // and people clicked a printed file and saw nothing. Only a reveal
+            // (a file browser) still wants the modifier. URLs keep ⌘/Ctrl.
             activate: (event: MouseEvent | undefined) => {
-              // ⌘/Ctrl+click only — a plain click must keep going to the TUI.
-              if (event && !(event.metaKey || event.ctrlKey)) return;
+              if (action === 'reveal' && event && !(event.metaKey || event.ctrlKey)) return;
               void activatePath(abs, action);
             }
           });

@@ -22,3 +22,14 @@ test('a lifted viewport still counts as following the output', () => {
   assert.equal(shouldFollowTerminalOutput(80, 100, 4), false);
   assert.equal(shouldFollowTerminalOutput(99, 100), true);
 });
+
+test('a path Claude wrapped over two rows is one link across them', () => {
+  const { wrappedSpanRange, continuesRow } = loadTs('src/renderer/src/components/terminalAutomation.ts');
+  // 20 columns; Claude ended row 10 at the edge and indented row 11 by two.
+  assert.equal(continuesRow('● C:/a/very/long/pa', '  th/report.md', false, 20), true);
+  assert.equal(continuesRow('short line', '  indented', false, 20), false, 'a short row ends the line');
+  assert.equal(continuesRow('x', 'y', true, 20), true, 'a soft wrap always continues');
+  const rows = [{ text: '● C:/a/very/long/pa', row: 10, x0: 0 }, { text: 'th/report.md', row: 11, x0: 2 }];
+  // "C:/a/very/long/path/report.md" starts at index 2 and is 29 chars long.
+  assert.deepEqual(wrappedSpanRange(rows, 2, 29), { start: { x: 3, y: 10 }, end: { x: 14, y: 11 } });
+});

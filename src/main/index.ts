@@ -4083,6 +4083,17 @@ ipcMain.handle('fs:statAbs', (_evt, p: unknown) => {
   if (typeof p !== 'string' || p.length > 4096 || p.includes('\0')) {
     return { exists: false, isFile: false, path: '' };
   }
+  // On a WSL floor agents print Linux paths (/home/u/…, ~/…). Seen from
+  // Windows those do not exist, so a clicked file did nothing: read them
+  // through the distro's \\wsl.localhost share.
+  const floor = process.platform === 'win32' ? parseWslPath(readConfig().harnessHome) : null;
+  if (floor && /^(\/|~(\/|$))/.test(p)) {
+    const home = p.startsWith('~') ? distroHomeUnc(floor.distro) : null;
+    const unc = p.startsWith('~')
+      ? (home ? home + p.slice(1).replace(/\//g, '\\') : null)
+      : toWslUnc(floor.distro, p);
+    if (unc) return statAbs(unc);
+  }
   return statAbs(p);
 });
 
