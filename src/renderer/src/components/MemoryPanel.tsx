@@ -7,6 +7,8 @@ import { useRtl } from '@/i18n/useDirection';
 
 interface MemoryStatus {
   available: boolean;
+  modelReady: boolean;
+  downloading: boolean;
   enabled: boolean;
   active: boolean;
   initialized: boolean;
