@@ -5,4 +5,6 @@ rem The script is copied out first: this folder may be the one being removed,
 rem and the last line runs as one block, so nothing is read from it afterwards.
 set "MD_UNINSTALL_PS1=%TEMP%\uninstall-scranton-branch-%RANDOM%.ps1"
 copy /y "%~dp0uninstall-scranton-branch.ps1" "%MD_UNINSTALL_PS1%" >nul
+rem Leave the app folder: a window standing in it keeps it "in use".
+cd /d "%TEMP%"
 (powershell -NoProfile -ExecutionPolicy Bypass -File "%MD_UNINSTALL_PS1%" %* & echo. & pause & del "%MD_UNINSTALL_PS1%" & exit /b)
