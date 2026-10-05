@@ -1426,5 +1426,10 @@
     "viewSource": "view source",
     "loading": "loading image…",
     "decodeFailed": "could not decode this image — the file may be corrupt or misnamed"
+  },
+  "floor": {
+    "clockOut": "Clock out?",
+    "clockOutDetail": "This closes Scranton Branch. Agents that are running get asked to stop first.",
+    "clockOutOk": "Clock out"
   }
 }
