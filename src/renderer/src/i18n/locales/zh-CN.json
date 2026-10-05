@@ -57,7 +57,9 @@
     "ghost": "已退出",
     "compacting": "压缩中",
     "looping": "循环中",
-    "typing": "你的草稿"
+    "typing": "你的草稿",
+    "asks": "在问你",
+    "asksDetail": "正在终端里问你问题"
   },
   "agentControl": {
     "deliveryPaused": "队列消息已暂停投递（整个楼层）",

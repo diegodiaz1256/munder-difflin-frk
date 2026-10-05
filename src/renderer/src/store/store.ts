@@ -1,4 +1,5 @@
 import type { RemoteControlState } from '@shared/remoteControl';
+import type { TerminalMenu } from '@shared/terminalMenu';
 import { create } from 'zustand';
 import type { AccentColorName } from '@/design/tokens';
 import type { OfficeCharacterName } from '@/scene/office/cast';
@@ -215,6 +216,9 @@ interface State {
    *  if it opens right after, is ours to close. */
   remoteControlAskedAt: Record<string, number>;
   markRemoteControlAsked: (ptyId: string) => void;
+  /** A question the agent's CLI is showing in its terminal (shared/terminalMenu.ts). */
+  terminalMenus: Record<string, TerminalMenu>;
+  setTerminalMenu: (ptyId: string, menu: TerminalMenu | null) => void;
   sidebarTab: SidebarTab;
   godStatus: GodStatus;
   /** Per-agent outgoing message queue (agent id → messages awaiting delivery).
@@ -704,6 +708,22 @@ export const useStore = create<State>((set, get) => ({
   sidebarWidth: initialSidebarWidth,
   remoteControl: {},
   remoteControlAskedAt: {},
+  terminalMenus: {},
+  setTerminalMenu: (ptyId, menu) => set((s) => {
+    const prev = s.terminalMenus[ptyId];
+    if (!menu) {
+      if (!prev) return s;
+      const { [ptyId]: _gone, ...rest } = s.terminalMenus;
+      return { terminalMenus: rest };
+    }
+    if (prev && prev.question === menu.question) return s;
+    // A new question: a desktop notification too (main gates it on the setting).
+    if (!prev) {
+      const who = s.agents.find((a) => a.ptyId === ptyId)?.name ?? 'An agent';
+      void window.cth.notifyMenu?.(who, menu.question || 'is asking you something in its terminal').catch(() => {});
+    }
+    return { terminalMenus: { ...s.terminalMenus, [ptyId]: menu } };
+  }),
   markRemoteControlAsked: (ptyId) => set((s) => ({ remoteControlAskedAt: { ...s.remoteControlAskedAt, [ptyId]: Date.now() } })),
   setRemoteControl: (ptyId, state) => set((s) => {
     const prev = s.remoteControl[ptyId];
