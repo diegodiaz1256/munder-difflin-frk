@@ -64,6 +64,31 @@ export function linuxizeText(text: string, distro: string): string {
   return text.replace(re, (_m, rest: string) => (rest ? rest.replace(/\\/g, '/') : '/'));
 }
 
+/**
+ * A failed wsl.exe call as a sentence a person can act on. `raw` is whatever
+ * the failure carried (Error, stderr text or Buffer): wsl.exe writes UTF-16, so
+ * NULs are stripped before matching. Unknown failures keep their first line.
+ */
+export function describeWslError(raw: unknown, distro?: string): string {
+  const decode = (b: unknown): string => (Buffer.isBuffer(b) ? (b.includes(0) ? b.toString('utf16le') : b.toString('utf8')) : String(b ?? ''));
+  let text: string;
+  if (raw instanceof Error) {
+    const e = raw as Error & { code?: string; stderr?: unknown };
+    text = `${e.code ?? ''} ${decode(e.stderr)} ${e.message}`;
+  } else text = decode(raw);
+  text = text.replace(/\uFEFF/g, '').replace(/\0/g, '').trim();
+  const where = distro ? ` (${distro})` : '';
+  if (/ENOENT/.test(text)) return 'wsl.exe was not found. WSL is not installed or is disabled on this computer (Windows features: "Windows Subsystem for Linux").';
+  if (/EPERM|EACCES|access is denied|blocked/i.test(text)) return 'Windows refused to start wsl.exe. Security software (EDR/antivirus) or a company policy may be blocking it: ask IT to allow it, then try again.';
+  if (/ETIMEDOUT|timed out|did not start/i.test(text)) return `WSL${where} took too long to answer. It may be starting up or slowed by security software: wait a moment and try again, or run "wsl --shutdown" and retry.`;
+  if (/WSL_E_DISTRO_NOT_FOUND|no distribution with the supplied name|there is no distribution/i.test(text)) return `The WSL distribution${where || ''} was not found. Check the name with "wsl -l -v".`;
+  if (/no installed distributions|has no installed/i.test(text)) return 'WSL has no installed distribution. Install one with "wsl --install -d Ubuntu" from an administrator PowerShell.';
+  if (/virtualization|HCS_E|0x80370102|0x80370114|0x8007019e/i.test(text)) return 'WSL could not start: virtualization is off (enable it in the BIOS) or the "Virtual Machine Platform" Windows feature is disabled.';
+  if (/not found|command not found/i.test(text) && /node/.test(text)) return `node is not installed inside WSL${where}. Install it there (for example with nvm) and try again.`;
+  const first = text.split(/\r?\n/).map((l) => l.trim()).find(Boolean);
+  return first ? first.slice(0, 300) : 'WSL failed without an error message.';
+}
+
 /** Run before every command inside a distro: a login shell already has
  *  ~/.local/bin and npm -g on PATH, but node version managers set themselves up
  *  only in interactive shells (nvm in ~/.bashrc), so load them explicitly. */
@@ -91,12 +116,13 @@ export function wslSecretRun(distro: string, cwd: string, command: string): { fi
 
 /** Where each of `bins` resolves inside `distro` (null when missing), with
  *  the same login shell + version managers agents get. One wsl.exe call. */
-export function probeInDistro(distro: string, bins: string[]): Promise<Record<string, string | null>> {
+export function probeInDistro(distro: string, bins: string[], onError?: (message: string) => void): Promise<Record<string, string | null>> {
   const safe = bins.filter((b) => /^[A-Za-z0-9._-]+$/.test(b));
   const script = [...WSL_SETUP, 'for b in "$@"; do printf "%s\\t%s\\n" "$b" "$(command -v "$b" 2>/dev/null)"; done'].join('; ');
   return new Promise((resolve) => {
-    execFile('wsl.exe', ['-d', distro, '--exec', 'bash', '-lc', script, 'bash', ...safe], { timeout: 20000, windowsHide: true }, (err, stdout) => {
+    execFile('wsl.exe', ['-d', distro, '--exec', 'bash', '-lc', script, 'bash', ...safe], { timeout: 45000, windowsHide: true }, (err, stdout) => {
       const out: Record<string, string | null> = Object.fromEntries(safe.map((b) => [b, null]));
+      if (err) onError?.(describeWslError(err, distro));
       if (!err) for (const line of String(stdout).split(/\r?\n/)) {
         const [b, p] = line.split('\t');
         if (b && b in out) out[b] = p?.trim() || null;
@@ -185,10 +211,11 @@ export function parseDistroList(raw: Buffer | string): string[] {
 export function listDistros(): Promise<{ ok: boolean; distros: string[]; error?: string }> {
   if (process.platform !== 'win32') return Promise.resolve({ ok: false, distros: [], error: 'WSL is a Windows feature' });
   return new Promise((resolve) => {
-    execFile('wsl.exe', ['-l', '-q'], { encoding: 'buffer', windowsHide: true, timeout: 15_000 }, (err, stdout, stderr) => {
+    execFile('wsl.exe', ['-l', '-q'], { encoding: 'buffer', windowsHide: true, timeout: 30_000 }, (err, stdout, stderr) => {
       if (err) {
-        const msg = Buffer.isBuffer(stderr) && stderr.length ? parseDistroList(stderr).join(' ') : err.message;
-        resolve({ ok: false, distros: [], error: msg || 'WSL is not available' });
+        const out = Buffer.isBuffer(stderr) && stderr.length ? stderr : Buffer.isBuffer(stdout) && stdout.length ? stdout : null;
+        const code = (err as NodeJS.ErrnoException).code;
+        resolve({ ok: false, distros: [], error: describeWslError(code && !out ? err : out ?? err) });
         return;
       }
       resolve({ ok: true, distros: parseDistroList(stdout) });
@@ -216,7 +243,7 @@ export function createWslOffice(distro: string, name: string): { ok: boolean; pa
     runInDistro(distro, 'mkdir', ['-p', linux]);
     return { ok: true, path: toWslUnc(distro, linux) };
   } catch (e) {
-    return { ok: false, error: `${distro}: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}` };
+    return { ok: false, error: `${distro}: ${describeWslError(e, distro)}` };
   }
 }
 
