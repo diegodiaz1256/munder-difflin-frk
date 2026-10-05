@@ -621,7 +621,10 @@ const initialSidebarWidth = (() => {
     const n = v ? parseInt(v, 10) : NaN;
     if (!Number.isNaN(n) && n >= 320 && n <= 1200) return n;
   } catch { /* noop */ }
-  return 420;
+  // About 80 terminal columns: agent TUIs (Claude Code above all) wrap and
+  // pile up in anything narrower. Never more than half the window.
+  const half = typeof window !== 'undefined' ? Math.floor(window.innerWidth / 2) : 640;
+  return Math.max(420, Math.min(640, half));
 })();
 const initialSidebarTab: SidebarTab = (() => {
   try {

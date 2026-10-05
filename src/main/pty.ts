@@ -96,7 +96,20 @@ interface PtySession {
   wslVisibleAt?: number;
   /** The distro a WSL floor's agent runs in. */
   wslDistro?: string;
+  /** Output not yet sent to the window (see OUTPUT_FLUSH_MS). */
+  pending?: string;
+  flushTimer?: NodeJS.Timeout | null;
 }
+
+/**
+ * Output is sent to the window at most once per frame per terminal. A TUI
+ * like Claude Code writes many small chunks (far more of them through
+ * wsl.exe), and each one used to be its own IPC message, xterm write and
+ * scroll-to-bottom: hundreds a second, enough to make scrolling stutter.
+ */
+export const OUTPUT_FLUSH_MS = 16;
+/** Send right away once this much is waiting, so a burst never piles up. */
+export const OUTPUT_FLUSH_BYTES = 256 * 1024;
 
 /** Visible text once escape sequences are removed. */
 const ESCAPES = /\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]/g;
@@ -412,6 +425,15 @@ export class PtyManager {
    *  PTY fires onExit asynchronously — by then app.quit() may have destroyed the
    *  window, and `.send()` on a destroyed webContents throws "Object has been
    *  destroyed", which surfaces as the main-process crash dialog. Guard it. */
+  /** Send a session's waiting output in one message. */
+  private flushOutput(id: string, session: PtySession): void {
+    if (session.flushTimer) { clearTimeout(session.flushTimer); session.flushTimer = null; }
+    const data = session.pending;
+    session.pending = '';
+    if (!data || this.sessions.get(id) !== session) return;
+    this.safeSend(`pty:data:${id}`, data, session.owner);
+  }
+
   private safeSend(channel: string, payload: unknown, target?: WebContents | null): void {
     // Route to the session's owner window when known (multi-window: keeps each
     // floor's stream private); fall back to the default attached sink otherwise.
@@ -764,10 +786,16 @@ export class PtyManager {
         // Keep only the trailing window; slice AFTER appending so a single
         // oversized write still leaves us its end (the part that explains a death).
         session.tail = (session.tail + data).slice(-TAIL_MAX);
-        // Route to the session's owner window (multi-window owner routing).
-        this.safeSend(`pty:data:${opts.id}`, data, session.owner);
+        // Route to the session's owner window (multi-window owner routing),
+        // batched per frame (OUTPUT_FLUSH_MS).
+        session.pending = (session.pending ?? '') + data;
+        if (session.pending.length >= OUTPUT_FLUSH_BYTES) this.flushOutput(opts.id, session);
+        else if (!session.flushTimer) session.flushTimer = setTimeout(() => this.flushOutput(opts.id, session), OUTPUT_FLUSH_MS);
       });
       proc.onExit(({ exitCode, signal }) => {
+        // Last output first: the window must see what the process printed
+        // before it learns the process is gone.
+        if (this.sessions.get(opts.id) === session) this.flushOutput(opts.id, session);
         // Stale exit from a process whose id was reclaimed (kill()+respawn) — do
         // NOT touch the live session or tell the renderer the new pty died.
         if (this.sessions.get(opts.id) !== session) return;
