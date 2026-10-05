@@ -1426,5 +1426,10 @@
     "viewSource": "查看源码",
     "loading": "正在加载图片…",
     "decodeFailed": "无法解码此图片——文件可能已损坏或扩展名有误"
+  },
+  "floor": {
+    "clockOut": "下班打卡？",
+    "clockOutDetail": "这将关闭 Scranton Branch。正在运行的智能体会先被要求停止。",
+    "clockOutOk": "下班"
   }
 }
