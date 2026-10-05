@@ -1,44 +1,31 @@
-# Scranton Branch 0.4.6-fork.24
+# Scranton Branch 0.4.6-fork.25
 
-Fixes and features from a customer test on a WSL office, checked with real agents on WSL and on Windows.
+Memory by project and personal lists, control over models and tools per agent, and terminals that tell you when an agent is waiting on you.
 
 ## What's new
 
 ### Memory
-- **Works offline.** Memory never goes to the internet by itself. The model downloads (or updates) only from **Settings → Memory & Knowledge**, which shows whether it is on disk. Without it, search tells you so instead of showing Hugging Face errors.
-- **A graph of what the office knows.** The Memory screen now draws the concepts in your agents' notes and in their deliverables (factions, products, files, people…), linked when they appear together. Click one to read the notes behind it.
-- **Readable search.** Results by meaning show the note, who wrote it and how well it matches, instead of raw command output. A memory opens in place, with *Ask the orchestrator about this*, *Open agent* and *Copy*.
-- **Deliverables are remembered.** Documents agents write in `research/` are indexed, not only their memory notes.
-- **Agents use it as a tool.** Every agent gets the office memory as an MCP tool (`munder-memory`), so they look things up instead of re-reading files.
-- An older mempalace that cannot use the chosen model now says so, and how to fix it.
+- **Memory by project.** Each project gets its own memory with sections that fit what it is (code, data, infrastructure, docs or research), and the Memory screen lets you look at the whole office or one project.
+- **Things, with their other names.** Factions, products, people… gathered from notes into an Entities tab, with aliases and spelling slips matched ("deth gaurd" finds Death Guard).
+- **Your lists.** Memory → Lists keeps what you own, want or plan (a collection, a wishlist…), one column per state. Tell the orchestrator "I bought Mortarion" and it moves it from *Want* to *Have* (agents use the new `munder-lists` tool).
 
-### Orchestrator and hiring
-- **Delegating means an agent on the floor.** The orchestrator no longer starts hidden helpers inside its own session; when you have not let it hire, it asks you (*Start it / Always allow / Decline*) instead of waiting unseen.
-- **Permanent hires reach you.** When the orchestrator proposes a hire, it opens for review **as a CV** (role, mission, skills, engine, budget), with *Hire* and *Edit details*. The folder defaults to the office.
-- **See the hand-offs.** In Manager → the orchestrator's page, an envelope goes out when he delegates, the line runs while the agent works, he shows who he is waiting on, and the envelope comes back with the answer.
-- New offices start the orchestrator on **Opus 5.5** and workers on **Sonnet 5.5**.
+### Agents
+- **Model and effort per role.** Settings → Agents & Models → *Per role*: a model and a thinking effort for the orchestrator, your agents and temps (e.g. temps on Haiku, low effort). Unset, Claude Code uses its own default, which is often *high*.
+- **Claude's own tools are capabilities too.** Capabilities → *Who has what* now has **Web**, **Shell** and **Sub-agents** per agent; switched off, the agent cannot use them (an agent without web search no longer searches anyway).
+- **"Asks you".** When an agent's CLI shows a menu in its terminal (trust this folder, a model picker, a confirmation), its card says *asks you* with the question, and you get a desktop notification when the app is in the background.
 
-### Remote Control
-- No longer sent at every start (Claude asks to confirm it, which held up the first prompt). A **cloud button** turns it on and shows its state: *connecting…*, *remote on ●* (click to open the session) or why it failed. Claude's own Remote Control menu is answered for you when the button asked.
-
-### Terminals and the floor
-- **Smoother terminals.** Output is sent once per frame, scrollback is lighter, and the side panel opens wide enough for about 80 columns.
-- **Text that is typed is sent.** Long prompts and slash commands wait long enough before Enter (on Windows the first prompt sometimes needed Enter by hand).
-- **Readable bubbles and name tags** on a small floor, not only full screen.
-- Agent cards switch on press (a click that moved a little did nothing). The wall clock asks before closing the app.
-- The startup screen says Scranton Branch.
+### Terminals
+- **The prompt stays at the bottom.** After a menu closed, or coming back from Manager, the terminal could show blank space under Claude's prompt.
+- **Open a terminal here** works on Windows (Windows Terminal or cmd) and in WSL offices (inside the distribution); it failed with `spawn open ENOENT`.
 
 ### WSL offices
-- **The orchestrator always starts.** Reopening a WSL office could leave it out ("port … is already in use inside WSL") while workers carried on alone; the WSL bridge now reuses its own ports, recovers from a restart, and a failed start is shown with *Retry*.
-- `munder-git` is only given to agents inside a git repository (it failed at every start in an office that is not one).
-
-### Under the hood
-- A closed console (the terminal that launched the app went away) no longer makes the app spin at full CPU.
+- **The orchestrator and a worker starting together both start.** One of them could hang at "WSL bridge" until the 90 s timeout.
 
 ## Earlier releases
 
 | Version | Highlights |
 |---|---|
+| fork.24 | Memory offline with a concept graph, hires as a CV, Remote Control button, WSL orchestrator always starts. |
 | fork.23 | Upgrades install over the previous version instead of running its uninstaller. |
 | fork.22 | Offices in deeply nested folders keep their agents' hooks. |
 | fork.21 | The fallback uninstaller no longer stops on "in use"; the WSL folder picker opens in Linux. |
@@ -55,26 +42,26 @@ Fixes and features from a customer test on a WSL office, checked with real agent
 ### macOS
 | | |
 |---|---|
-| Universal (Apple Silicon + Intel) | [`Scranton-Branch-0.4.6-fork.24-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.24-mac-universal.dmg) |
+| Universal (Apple Silicon + Intel) | [`Scranton-Branch-0.4.6-fork.25-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.25-mac-universal.dmg) |
 
 ### Windows
 | | |
 |---|---|
-| Installer (x64), *recommended* | [`Scranton-Branch-0.4.6-fork.24-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.24-win-x64-setup.exe) |
-| Portable (x64, no install) | [`Scranton-Branch-0.4.6-fork.24-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.24-win-x64-portable.exe) |
+| Installer (x64), *recommended* | [`Scranton-Branch-0.4.6-fork.25-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.25-win-x64-setup.exe) |
+| Portable (x64, no install) | [`Scranton-Branch-0.4.6-fork.25-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.25-win-x64-portable.exe) |
 
 ### Linux
 | | |
 |---|---|
-| AppImage (x86_64) | [`Scranton-Branch-0.4.6-fork.24-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.24-linux-x86_64.AppImage) |
-| Server, no GUI (x64) | [`scranton-branch-server-0.4.6-fork.24-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.24-linux-x64.tar.gz) |
-| Server, no GUI (arm64) | [`scranton-branch-server-0.4.6-fork.24-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.24-linux-arm64.tar.gz) |
+| AppImage (x86_64) | [`Scranton-Branch-0.4.6-fork.25-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.25-linux-x86_64.AppImage) |
+| Server, no GUI (x64) | [`scranton-branch-server-0.4.6-fork.25-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.25-linux-x64.tar.gz) |
+| Server, no GUI (arm64) | [`scranton-branch-server-0.4.6-fork.25-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.25-linux-arm64.tar.gz) |
 
 Server: unpack, then run `sudo ./install.sh`. Setup, Docker and secrets are in [SERVER.md](https://github.com/diegodiaz1256/scranton-branch/blob/main/SERVER.md).
 
 Builds are not code-signed yet: macOS asks you to allow the app in System Settings → Privacy & Security, and Windows SmartScreen asks you to confirm ("More info" → "Run anyway").
 
-Source: [`v0.4.6-fork.24`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v0.4.6-fork.24.tar.gz)
+Source: [`v0.4.6-fork.25`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v0.4.6-fork.25.tar.gz)
 
 ## About this fork
 
