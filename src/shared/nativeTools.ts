@@ -9,7 +9,7 @@
 export interface NativeToolGroup { id: string; label: string; description: string; tools: string[] }
 
 export const NATIVE_TOOL_GROUPS: NativeToolGroup[] = [
-  { id: 'web', label: 'Web', description: "Claude's own web search and page fetch (WebSearch, WebFetch)", tools: ['WebSearch', 'WebFetch'] },
+  { id: 'web', label: 'Web', description: "Web search and page fetch: Claude's own (WebSearch, WebFetch) and the Fetch and Web Search servers. With Shell on, commands can still reach the web.", tools: ['WebSearch', 'WebFetch'] },
   { id: 'shell', label: 'Shell', description: 'Run commands (Bash, PowerShell)', tools: ['Bash', 'PowerShell'] },
   { id: 'subagents', label: 'Sub-agents', description: "Claude's own helpers inside the session, which the office never sees (Agent, Task)", tools: ['Agent', 'Task'] }
 ];
@@ -27,4 +27,14 @@ export function disallowedTools(blocked: unknown, isGod: boolean): string[] {
   const groups = new Set(cleanToolBlocks(blocked));
   if (isGod) groups.add('subagents');
   return NATIVE_TOOL_GROUPS.filter((g) => groups.has(g.id)).flatMap((g) => g.tools);
+}
+
+/** MCP catalog servers whose job is reading the open web. Taking Web away
+ *  drops them too: with only WebSearch/WebFetch blocked, an agent asked to
+ *  search went through the Fetch server instead (seen live). */
+export const WEB_MCP_SERVERS: readonly string[] = ['fetch', 'search-with-key'];
+
+/** Catalog ids this agent must not get because of its blocked groups. */
+export function blockedMcpServers(blocked: unknown): Set<string> {
+  return new Set(cleanToolBlocks(blocked).includes('web') ? WEB_MCP_SERVERS : []);
 }

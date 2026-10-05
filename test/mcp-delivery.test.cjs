@@ -142,3 +142,15 @@ test('several connections of one service: each its own server, switch, agents an
   const granted = hive.buildDefaultMcpServers(home, cfg, ['time'], 'dwight', scopes).servers;
   assert.equal(granted['munder-github-token'], undefined, 'a Capabilities grant without GitHub excludes all its connections');
 });
+
+test('an agent without Web gets no web-reading servers either', (t) => {
+  // Live: with WebSearch/WebFetch blocked, an agent asked to search the web
+  // went through the Fetch server instead.
+  const { hive, home } = floor(t);
+  const cfg = { fetch: { enabled: true }, time: { enabled: true } };
+  const open = hive.buildDefaultMcpServers(home, cfg, undefined, 'jim', undefined).servers;
+  assert.ok(open['munder-fetch'], 'fetch is there by default');
+  const shut = hive.buildDefaultMcpServers(home, cfg, undefined, 'jim', undefined, ['web']).servers;
+  assert.equal(shut['munder-fetch'], undefined);
+  assert.ok(shut['munder-time'], 'other servers stay');
+});
