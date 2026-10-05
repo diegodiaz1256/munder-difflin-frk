@@ -5,7 +5,9 @@
  */
 export type RemoteControlState =
   | { state: 'on'; url: string }
-  | { state: 'off'; reason?: string };
+  | { state: 'off'; reason?: string }
+  /** Asked for, not answered yet (Claude creates the session online). */
+  | { state: 'connecting'; since: number };
 
 const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]/g;
 const URL_RE = /https:\/\/claude\.ai\/code\/session_[A-Za-z0-9]+/g;

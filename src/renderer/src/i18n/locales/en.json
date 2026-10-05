@@ -473,7 +473,8 @@
     "remoteControlAria": "Turn on Remote Control for the orchestrator",
     "remoteControlOnTitle": "Remote Control is on. Click to open this session ({{url}}); it is also in the Claude app on your phone.",
     "remoteControlFailedTitle": "Remote Control is off: {{reason}}. Click to try again.",
-    "remoteControlOnLabel": "remote on"
+    "remoteControlOnLabel": "remote on",
+    "remoteControlConnecting": "connecting…"
   },
   "addAgent": {
     "title": "ADD AGENT",

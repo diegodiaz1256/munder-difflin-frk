@@ -133,6 +133,19 @@ export async function enableRemoteControl(provider: AgentProvider, sessionName: 
   const cmd = remoteControlCommandForProvider(provider, sessionName);
   if (!cmd) return false;
   useStore.getState().markRemoteControlAsked(GOD_PTY);
+  // Show "connecting…" from the click: the session takes a few seconds to
+  // come up, and until now the button looked as if nothing had happened.
+  const prev = useStore.getState().remoteControl[GOD_PTY];
+  if (prev?.state !== 'on') {
+    const since = Date.now();
+    useStore.getState().setRemoteControl(GOD_PTY, { state: 'connecting', since });
+    setTimeout(() => {
+      const now = useStore.getState().remoteControl[GOD_PTY];
+      if (now?.state === 'connecting' && now.since === since) {
+        useStore.getState().setRemoteControl(GOD_PTY, { state: 'off', reason: 'no answer from Remote Control after 30 s' });
+      }
+    }, 30_000);
+  }
   await submitToPty(GOD_PTY, cmd, provider, REMOTE_CONTROL_SETTLE_MS);
   return true;
 }

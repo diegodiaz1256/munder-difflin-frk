@@ -213,7 +213,7 @@ export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent
           {/* Remote Control on demand (it used to be sent at every boot, and
               Claude stops to ask for confirmation). Only engines that have it. */}
           {remoteControlCommandForProvider(inferAgentProvider(agent.command, agent.provider), agent.name) && (
-            <PixelButton variant={rc?.state === 'on' ? 'primary' : 'secondary'} size="sm" onClick={() => {
+            <PixelButton variant={rc?.state === 'on' ? 'primary' : 'secondary'} size="sm" disabled={rc?.state === 'connecting'} onClick={() => {
               // On: open the session (sending the command again would open
               // Claude's own Remote Control menu in the terminal). Off: turn it on.
               if (rc?.state === 'on') void window.cth.openExternal(rc.url);
@@ -227,8 +227,8 @@ export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent
                 aria-label={t('commandCenter.remoteControlAria')}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
               >
-                <Icon name="cloud" /> {rc?.state === 'on' ? t('commandCenter.remoteControlOnLabel') : t('commandCenter.remoteControl')}
-                <span aria-hidden="true" style={{ width: 6, height: 6, background: rc?.state === 'on' ? 'var(--cth-mint)' : rc?.state === 'off' && rc.reason ? 'var(--cth-coral)' : 'var(--cth-ink-300)' }} />
+                <Icon name="cloud" /> {rc?.state === 'on' ? t('commandCenter.remoteControlOnLabel') : rc?.state === 'connecting' ? t('commandCenter.remoteControlConnecting') : t('commandCenter.remoteControl')}
+                <span aria-hidden="true" style={{ width: 6, height: 6, background: rc?.state === 'on' ? 'var(--cth-mint)' : rc?.state === 'connecting' ? 'var(--cth-lemon)' : rc?.state === 'off' && rc.reason ? 'var(--cth-coral)' : 'var(--cth-ink-300)' }} />
               </span>
             </PixelButton>
           )}

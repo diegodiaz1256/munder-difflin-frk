@@ -701,7 +701,7 @@ export const useStore = create<State>((set, get) => ({
   markRemoteControlAsked: (ptyId) => set((s) => ({ remoteControlAskedAt: { ...s.remoteControlAskedAt, [ptyId]: Date.now() } })),
   setRemoteControl: (ptyId, state) => set((s) => {
     const prev = s.remoteControl[ptyId];
-    if (prev && prev.state === state.state && (prev.state !== 'on' || state.state !== 'on' || prev.url === state.url)) return s;
+    if (prev && prev.state === state.state && state.state !== 'connecting' && (prev.state !== 'on' || state.state !== 'on' || prev.url === state.url)) return s;
     return { remoteControl: { ...s.remoteControl, [ptyId]: state } };
   }),
   sidebarTab: initialSidebarTab,

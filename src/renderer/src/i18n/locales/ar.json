@@ -473,7 +473,8 @@
     "remoteControlAria": "تشغيل التحكم عن بُعد للمنسق",
     "remoteControlOnTitle": "التحكم عن بُعد مفعّل. انقر لفتح هذه الجلسة ({{url}})؛ وهي أيضًا في تطبيق Claude على هاتفك.",
     "remoteControlFailedTitle": "التحكم عن بُعد متوقف: {{reason}}. انقر للمحاولة مجددًا.",
-    "remoteControlOnLabel": "عن بُعد: مفعّل"
+    "remoteControlOnLabel": "عن بُعد: مفعّل",
+    "remoteControlConnecting": "جارٍ الاتصال…"
   },
   "addAgent": {
     "title": "إضافة وكيل",

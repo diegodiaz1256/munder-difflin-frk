@@ -473,7 +473,8 @@
     "remoteControlAria": "为协调者开启远程控制",
     "remoteControlOnTitle": "远程控制已开启。点击打开此会话（{{url}}）；它也在你手机上的 Claude 应用中。",
     "remoteControlFailedTitle": "远程控制已关闭：{{reason}}。点击重试。",
-    "remoteControlOnLabel": "远程已开"
+    "remoteControlOnLabel": "远程已开",
+    "remoteControlConnecting": "连接中…"
   },
   "addAgent": {
     "title": "添加智能体",
