@@ -105,6 +105,12 @@ export class WslBridge {
       });
       p.on('exit', (code) => {
         this.log(`[wsl-bridge ${this.distro}] exited (${code})`);
+        // A bridge that was already replaced must not wipe its successor's
+        // state (its exit can be reported after the new one started).
+        if (this.proc !== p) {
+          if (!settled) { settled = true; clearTimeout(timer); reject(new Error(`the WSL bridge into ${this.distro} was replaced`)); }
+          return;
+        }
         for (const s of this.socks.values()) s.destroy();
         this.socks.clear();
         this.proc = null;
@@ -169,7 +175,20 @@ export class WslBridge {
       }
     }
     const ports = await this.start();
-    return this.ports[l.name] ?? ports[l.name] ?? 'failed:unknown';
+    const got = this.ports[l.name] ?? ports[l.name];
+    if (got !== undefined) return got;
+    // Known but not bound by the running bridge: it was restarted after
+    // exiting, or started while this listener was being added. Ask it now
+    // instead of failing the agent's start ("failed:unknown").
+    return this.listenNow(l);
+  }
+
+  private listenNow(l: { name: string; port: number }): Promise<number | string> {
+    return new Promise<number | string>((resolve) => {
+      this.waiting.set(l.name, resolve);
+      this.send({ t: 'listen', name: l.name, port: l.port });
+      setTimeout(() => { if (this.waiting.delete(l.name)) resolve('failed:timeout'); }, 10_000).unref?.();
+    });
   }
 
   private send(m: unknown): void {
