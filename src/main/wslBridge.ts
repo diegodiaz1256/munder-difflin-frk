@@ -79,6 +79,11 @@ export class WslBridge {
   /** Where each listener ended up inside WSL (from 'ready' and 'listening'). */
   private ports: BridgePorts = {};
   private waiting = new Map<string, (p: number | string) => void>();
+  /** Listen requests in flight, by listener name. Two agents starting at once
+   *  both ask for the gateway: they must share one answer. With a single
+   *  resolver per name, the second request replaced the first, whose agent
+   *  then waited forever (the orchestrator never started). */
+  private pendingListens = new Map<string, Promise<number | string>>();
 
   constructor(
     readonly distro: string,
@@ -124,6 +129,7 @@ export class WslBridge {
         this.ports = {};
         for (const w of this.waiting.values()) w('failed:exited');
         this.waiting.clear();
+        this.pendingListens.clear();
         if (!settled) { settled = true; clearTimeout(timer); reject(new Error(`the WSL bridge into ${this.distro} stopped (exit ${code}). ${errTail.trim() ? describeWslError(errTail, this.distro) : 'It ended without a message: security software may have stopped it, or node is missing inside the distro.'}`)); }
       });
       createInterface({ input: p.stdout! }).on('line', (line) => {
@@ -170,11 +176,7 @@ export class WslBridge {
       if (this.ready) {
         await this.ready;
         if (!(l.name in this.ports)) {
-          const p = await new Promise<number | string>((resolve) => {
-            this.waiting.set(l.name, resolve);
-            this.send({ t: 'listen', name: l.name, port: l.port });
-            setTimeout(() => { if (this.waiting.delete(l.name)) resolve('failed:timeout'); }, 10_000).unref?.();
-          });
+          const p = await this.listenNow(l);
           if (typeof p === 'string' && p.startsWith('failed')) this.log(`[wsl-bridge ${this.distro}] ${l.name}: ${p}`);
           return p;
         }
@@ -189,12 +191,20 @@ export class WslBridge {
     return this.listenNow(l);
   }
 
+  /** Ask the running bridge for a listener; concurrent asks for one name
+   *  share the same request and answer. */
   private listenNow(l: { name: string; port: number }): Promise<number | string> {
-    return new Promise<number | string>((resolve) => {
-      this.waiting.set(l.name, resolve);
+    const inFlight = this.pendingListens.get(l.name);
+    if (inFlight) return inFlight;
+    const p = new Promise<number | string>((resolve) => {
+      let done = false;
+      const finish = (v: number | string) => { if (done) return; done = true; this.pendingListens.delete(l.name); resolve(v); };
+      this.waiting.set(l.name, finish);
       this.send({ t: 'listen', name: l.name, port: l.port });
-      setTimeout(() => { if (this.waiting.delete(l.name)) resolve('failed:timeout'); }, 10_000).unref?.();
+      setTimeout(() => { if (this.waiting.get(l.name) === finish) this.waiting.delete(l.name); finish('failed:timeout'); }, 10_000).unref?.();
     });
+    this.pendingListens.set(l.name, p);
+    return p;
   }
 
   private send(m: unknown): void {
