@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import type { Agent } from '@/store/store';
 import { IntegrationsRegistry } from '@/components/IntegrationsRegistry';
 import { Avatar, StateBadge } from './data';
@@ -7,13 +9,9 @@ import { Guide, useGuide } from './Guide';
 type Connection = Awaited<ReturnType<typeof window.cth.connectionsList>>[number];
 type TestResult = { ok: boolean; message: string };
 
-const STEPS: Array<[string, string]> = [
-  ['Pick a service and get its key', 'Press “Get a key” on the card: it opens the right page at GitHub, Notion, Sentry… Create the key there, paste it into the card and Save. It is stored encrypted on this machine and never shown again.'],
-  ['Test it', 'Test makes one harmless call to the service with your key and tells you who it belongs to, or what is wrong with it.'],
-  ['Turn it on and choose who gets it', 'Turn on, then “Every agent” or “Choose agents”. An agent can use a connection but never sees its key: the app runs the connection itself and the agent only gets permission to use it.'],
-  ['Restart the agent', 'Agents pick up connections when they start. Use Restart & Continue on the agent: it keeps the conversation.'],
-  ['Ask for it', 'Ask in plain words; each card lists things to try. With several connections of one service (GitHub “Personal” and “Work”), say which one: “in my Work GitHub, …”. Add one with “+ Another … connection”.']
-];
+/** The guide's steps, `pro.conn.step<n>` / `pro.conn.step<n>Body`. */
+const STEPS = (t: TFunction): Array<[string, string]> =>
+  [1, 2, 3, 4, 5].map((n) => [t(`pro.conn.step${n}`), t(`pro.conn.step${n}Body`)]);
 
 /**
  * Connections — the outside services agents can use. Keyed MCP servers (GitHub,
@@ -25,6 +23,7 @@ const STEPS: Array<[string, string]> = [
  * reach through the key broker.
  */
 export function ConnectionsView({ roster }: { roster: Agent[] }) {
+  const { t } = useTranslation();
   const [list, setList] = useState<Connection[]>([]);
   const [guide, toggleGuide] = useGuide('cth.connectionsGuide');
   const reload = useCallback(() => {
@@ -38,24 +37,23 @@ export function ConnectionsView({ roster }: { roster: Agent[] }) {
   return (
     <div className="pro-page">
       <div className="pro-head">
-        <h2>Connections</h2>
-        <span className="pro-sub">{live} of {list.length} on</span>
+        <h2>{t('pro.nav.connections')}</h2>
+        <span className="pro-sub">{t('pro.conn.onCount', { live, total: list.length })}</span>
         <div className="pro-head-end">
-          <button className="pro-btn" onClick={toggleGuide}>{guide ? 'Hide guide' : 'How it works'}</button>
+          <button className="pro-btn" onClick={toggleGuide}>{guide ? t('pro.conn.hideGuide') : t('pro.conn.howItWorks')}</button>
         </div>
       </div>
 
-      {guide && <Guide title="Using connections, step by step" steps={STEPS} onClose={toggleGuide} />}
+      {guide && <Guide title={t('pro.conn.guideTitle')} steps={STEPS(t)} onClose={toggleGuide} />}
 
       {services.map(([service, label]) => (
         <ServiceGroup key={service} service={service} label={label}
           connections={list.filter((c) => c.service === service)} roster={roster} onChange={reload} />
       ))}
 
-      <h3 style={{ margin: '10px 0 0', fontSize: 14 }}>REST APIs</h3>
+      <h3 style={{ margin: '10px 0 0', fontSize: 14 }}>{t('pro.conn.restTitle')}</h3>
       <p className="pro-text" style={{ marginTop: -6 }}>
-        Linear, Jira, Stripe, your own API… Agents call these through a local broker that adds the key for
-        them, so they never see it.
+        {t('pro.conn.restBody')}
       </p>
       {/* A plain card that grows with its content: the page scrolls, not the card. */}
       <div className="pro-card" style={{ flexShrink: 0 }}><IntegrationsRegistry /></div>
@@ -66,13 +64,14 @@ export function ConnectionsView({ roster }: { roster: Agent[] }) {
 function ServiceGroup({ service, label, connections, roster, onChange }: {
   service: string; label: string; connections: Connection[]; roster: Agent[]; onChange: () => void;
 }) {
+  const { t } = useTranslation();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const add = async () => {
     setError(null);
     const r = await window.cth.connectionsAdd(service, name);
-    if (!r.ok) { setError(r.error ?? 'Could not add it.'); return; }
+    if (!r.ok) { setError(r.error ?? t('pro.conn.couldNotAdd')); return; }
     setAdding(false); setName(''); onChange();
   };
   return (
@@ -82,20 +81,21 @@ function ServiceGroup({ service, label, connections, roster, onChange }: {
       </div>
       {adding ? (
         <div className="pro-row">
-          <input className="pro-input" placeholder={`Name, e.g. Work ${label}`} maxLength={40} value={name} autoFocus
+          <input className="pro-input" placeholder={t('pro.conn.namePlaceholder', { label })} maxLength={40} value={name} autoFocus
             onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void add(); if (e.key === 'Escape') setAdding(false); }} />
-          <button className="pro-btn pro-btn-primary" disabled={!name.trim()} onClick={() => void add()}>Add</button>
-          <button className="pro-btn" onClick={() => setAdding(false)}>Cancel</button>
+          <button className="pro-btn pro-btn-primary" disabled={!name.trim()} onClick={() => void add()}>{t('common.add')}</button>
+          <button className="pro-btn" onClick={() => setAdding(false)}>{t('common.cancel')}</button>
           {error && <span className="pro-text" style={{ color: 'var(--cth-coral)' }}>{error}</span>}
         </div>
       ) : (
-        <button className="pro-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setAdding(true)}>+ Another {label} connection</button>
+        <button className="pro-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setAdding(true)}>+ {t('pro.conn.another', { label })}</button>
       )}
     </section>
   );
 }
 
 function ConnectionCard({ c, roster, onChange }: { c: Connection; roster: Agent[]; onChange: () => void }) {
+  const { t } = useTranslation();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,14 +105,14 @@ function ConnectionCard({ c, roster, onChange }: { c: Connection; roster: Agent[
   const [copied, setCopied] = useState<number | null>(null);
 
   const state = !c.enabled
-    ? { label: 'Off', tone: 'grey' as const }
-    : c.ready ? { label: 'On', tone: 'green' as const } : { label: 'Needs a key', tone: 'amber' as const };
+    ? { label: t('pro.conn.off'), tone: 'grey' as const }
+    : c.ready ? { label: t('pro.conn.on'), tone: 'green' as const } : { label: t('pro.conn.needsKey'), tone: 'amber' as const };
 
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     setBusy(true); setError(null);
     const res = await fn().catch((e) => ({ ok: false, error: String(e) }));
     setBusy(false);
-    if (!res.ok) setError(res.error ?? 'Could not save.');
+    if (!res.ok) setError(res.error ?? t('integrations.couldNotSave'));
     onChange();
     return res.ok;
   };
@@ -128,13 +128,13 @@ function ConnectionCard({ c, roster, onChange }: { c: Connection; roster: Agent[
 
   const doTest = async () => {
     setBusy(true); setTest(null);
-    const res = await window.cth.connectionsTest(c.id).catch(() => ({ ok: false, message: 'Test failed to run.' }));
+    const res = await window.cth.connectionsTest(c.id).catch(() => ({ ok: false, message: t('integrations.testFailed') }));
     setBusy(false);
     setTest(res);
   };
 
   const remove = async () => {
-    if (!(await window.cth.confirm(`Delete the connection "${c.label}"?`, { detail: 'Its key is erased.', ok: 'Delete' }))) return;
+    if (!(await window.cth.confirm(t('pro.conn.deleteConfirm', { name: c.label }), { detail: t('pro.conn.deleteDetail'), ok: t('pro.caps.delete') }))) return;
     void run(() => window.cth.connectionsRemove(c.id));
   };
 
@@ -154,7 +154,7 @@ function ConnectionCard({ c, roster, onChange }: { c: Connection; roster: Agent[
           <>
             <input className="pro-input" value={label} maxLength={40} autoFocus onChange={(e) => setLabel(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') rename(); if (e.key === 'Escape') setRenaming(false); }} />
-            <button className="pro-btn" onClick={rename}>Save</button>
+            <button className="pro-btn" onClick={rename}>{t('common.save')}</button>
           </>
         ) : (
           <>
@@ -164,56 +164,56 @@ function ConnectionCard({ c, roster, onChange }: { c: Connection; roster: Agent[
           </>
         )}
         <span style={{ marginInlineStart: 'auto', display: 'flex', gap: 6 }}>
-          {c.docsUrl && <button className="pro-btn" onClick={() => void window.cth.openExternal(c.docsUrl!)}>Get a key</button>}
+          {c.docsUrl && <button className="pro-btn" onClick={() => void window.cth.openExternal(c.docsUrl!)}>{t('pro.conn.getKey')}</button>}
           <button className={`pro-btn${c.enabled ? '' : ' pro-btn-primary'}`} disabled={busy}
             onClick={() => void run(() => window.cth.connectionsSetEnabled(c.id, !c.enabled))}>
-            {c.enabled ? 'Turn off' : 'Turn on'}
+            {c.enabled ? t('pro.conn.turnOff') : t('pro.conn.turnOn')}
           </button>
         </span>
       </div>
       {c.primary ? <p className="pro-text">{c.description}</p> : (
         <div className="pro-row" style={{ gap: 6 }}>
-          <span className="pro-sub" style={{ fontSize: 12 }}>A separate {c.serviceLabel} connection with its own key.</span>
-          {!renaming && <button className="pro-btn" style={{ padding: '2px 8px' }} onClick={() => setRenaming(true)}>Rename</button>}
-          <button className="pro-btn" style={{ padding: '2px 8px' }} onClick={remove}>Delete</button>
+          <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.conn.separate', { label: c.serviceLabel })}</span>
+          {!renaming && <button className="pro-btn" style={{ padding: '2px 8px' }} onClick={() => setRenaming(true)}>{t('pro.conn.rename')}</button>}
+          <button className="pro-btn" style={{ padding: '2px 8px' }} onClick={remove}>{t('pro.caps.delete')}</button>
         </div>
       )}
 
       {c.fields.map((f) => (
         <div key={f.env} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label className="pro-sub" style={{ fontSize: 12 }} htmlFor={`${c.id}-${f.env}`}>
-            {f.label}{f.optional ? ' (optional)' : ''}
-            {f.stored && <span className="pro-chip pro-chip-on" style={{ marginInlineStart: 6 }}>saved</span>}
+            {f.label}{f.optional ? ` (${t('pro.conn.optional')})` : ''}
+            {f.stored && <span className="pro-chip pro-chip-on" style={{ marginInlineStart: 6 }}>{t('pro.conn.saved')}</span>}
           </label>
           <div className="pro-row">
             <input id={`${c.id}-${f.env}`} className="pro-input pro-mono" style={{ flex: 1 }} type="password" autoComplete="off" spellCheck={false}
-              placeholder={f.stored ? 'Saved. Paste a new one to replace it' : (f.placeholder ?? '')}
+              placeholder={f.stored ? t('pro.conn.savedPlaceholder') : (f.placeholder ?? '')}
               value={drafts[f.env] ?? ''}
               onChange={(e) => setDrafts((d) => ({ ...d, [f.env]: e.target.value }))}
               onKeyDown={(e) => { if (e.key === 'Enter') void save(f.env); }} />
-            <button className="pro-btn" disabled={busy || !(drafts[f.env] ?? '').trim()} onClick={() => void save(f.env)}>Save</button>
-            {f.stored && <button className="pro-btn" disabled={busy} onClick={() => void run(() => window.cth.connectionsSetSecret(c.id, f.env, ''))}>Remove</button>}
+            <button className="pro-btn" disabled={busy || !(drafts[f.env] ?? '').trim()} onClick={() => void save(f.env)}>{t('common.save')}</button>
+            {f.stored && <button className="pro-btn" disabled={busy} onClick={() => void run(() => window.cth.connectionsSetSecret(c.id, f.env, ''))}>{t('pro.conn.remove')}</button>}
           </div>
           <span className="pro-sub" style={{ fontSize: 11.5 }}>{f.help}</span>
         </div>
       ))}
 
       <div className="pro-row" style={{ flexWrap: 'wrap' }}>
-        <button className="pro-btn" disabled={busy || !c.testable || !c.ready} onClick={() => void doTest()}>{busy ? 'Working…' : 'Test'}</button>
+        <button className="pro-btn" disabled={busy || !c.testable || !c.ready} onClick={() => void doTest()}>{busy ? t('pro.conn.working') : t('pro.conn.test')}</button>
         {test && <span className="pro-text" style={{ color: test.ok ? 'var(--cth-ink-900)' : 'var(--cth-coral)' }}>{test.ok ? '✓ ' : '✕ '}{test.message}</span>}
         {error && <span className="pro-text" style={{ color: 'var(--cth-coral)' }}>{error}</span>}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--pro-line)', paddingTop: 10 }}>
-        <div className="pro-tabs" role="radiogroup" aria-label="Who gets it">
+        <div className="pro-tabs" role="radiogroup" aria-label={t('pro.conn.whoGetsIt')}>
           <button role="radio" aria-selected={!scoped} aria-checked={!scoped} disabled={busy}
-            onClick={() => void run(() => window.cth.connectionsSetScope(c.id, null))}>Every agent</button>
+            onClick={() => void run(() => window.cth.connectionsSetScope(c.id, null))}>{t('pro.conn.everyAgent')}</button>
           <button role="radio" aria-selected={scoped} aria-checked={scoped} disabled={busy}
-            onClick={() => { if (!scoped) void run(() => window.cth.connectionsSetScope(c.id, [])); }}>Choose agents</button>
+            onClick={() => { if (!scoped) void run(() => window.cth.connectionsSetScope(c.id, [])); }}>{t('pro.conn.chooseAgents')}</button>
         </div>
         {scoped && (
           <div className="pro-row" style={{ flexWrap: 'wrap', gap: 6 }}>
-            {roster.length === 0 && <span className="pro-sub">No agents on the floor yet.</span>}
+            {roster.length === 0 && <span className="pro-sub">{t('pro.conn.noAgents')}</span>}
             {roster.map((a) => {
               const on = c.scope!.includes(a.id);
               return (
@@ -229,7 +229,7 @@ function ConnectionCard({ c, roster, onChange }: { c: Connection; roster: Agent[
 
       {c.examples.length > 0 && (
         <details>
-          <summary className="pro-sub" style={{ fontSize: 12, cursor: 'pointer' }}>Things to ask an agent</summary>
+          <summary className="pro-sub" style={{ fontSize: 12, cursor: 'pointer' }}>{t('pro.conn.thingsToAsk')}</summary>
           <ul style={{ margin: '6px 0 0', paddingInlineStart: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
             {c.examples.map((ex, i) => {
               const text = c.primary ? ex : `Using the "${c.label}" ${c.serviceLabel} connection: ${ex}`;
@@ -238,7 +238,7 @@ function ConnectionCard({ c, roster, onChange }: { c: Connection; roster: Agent[
                   <span className="pro-text">{text}</span>{' '}
                   <button className="pro-btn" style={{ padding: '0 6px', fontSize: 11 }}
                     onClick={() => { void navigator.clipboard.writeText(text).then(() => { setCopied(i); setTimeout(() => setCopied(null), 1200); }); }}>
-                    {copied === i ? 'Copied' : 'Copy'}
+                    {copied === i ? t('pro.conn.copied') : t('pro.conn.copy')}
                   </button>
                 </li>
               );
