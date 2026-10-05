@@ -48,6 +48,7 @@ import { assignTaskKeys, normalizeTaskKeyLedger, taskKeyPrefix } from '../shared
 import { cleanServerList } from '../shared/roleBundles';
 import { detectProjectType, memoryInstruction, memoryTemplate, parseMemory, type ProjectType } from '../shared/memorySections';
 import { listsInstruction, parseList } from '../shared/lists';
+import { disallowedTools } from '../shared/nativeTools';
 import { MD_LISTS_MCP } from './listsMcp';
 
 /** The subset of HarnessConfig the hive consumes for the default-MCP merge.
@@ -905,6 +906,8 @@ export class HiveManager {
        *  REPLACES the default set for this agent; write/secret servers in it still
        *  need the user's consent in mcpDefaults. Undefined → the defaults. */
       mcpGrant?: string[];
+      /** Claude Code tool groups taken from this agent (shared/nativeTools.ts). */
+      toolBlocks?: string[];
       /** Per-server agent lists (Manager → Connections "Choose agents"): a server
        *  listed here reaches only these agent ids. Absent → everyone it would
        *  otherwise reach. */
@@ -1203,7 +1206,9 @@ export class HiveManager {
     // the office never sees: no employee, no temp, no task tracking. Asked to
     // "put an agent on it", Michael reached for that tool instead. Listed
     // before --append-system-prompt, which ends this variadic option.
-    if (meta.isGod) args.push('--disallowedTools', 'Agent', 'Task');
+    // Tools taken away in Capabilities (Web, Shell…) go the same way.
+    const blockedTools = disallowedTools(opts.toolBlocks, !!meta.isGod);
+    if (blockedTools.length) args.push('--disallowedTools', ...blockedTools);
     args.push('--append-system-prompt', this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath, opts.integrations, opts.runners));
 
     // Phase 1 — autonomy: attach lifecycle hooks via --settings (no edits to the
