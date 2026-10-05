@@ -39,6 +39,7 @@ import {
 import { linkWorktreeDeps, unlinkWorktreeDeps } from './worktreeDeps';
 import { excludeOfficeFromRepo } from './gitExclude';
 import { openTerminalAt } from './openTerminal';
+import { formatList, parseList, type PersonalList } from '../shared/lists';
 import { HiveManager, type AgentMeta, type HiveMessage, type HiveTask } from './hive';
 import { HookServer } from './hooks';
 import { CircuitBreaker, type BreakerInput } from './breaker';
@@ -4234,6 +4235,38 @@ async function memoryProjectOf(cwd: string | undefined, home: string): Promise<s
   }
   return home && norm(cwd).startsWith(norm(home)) ? 'office' : basename(cwd);
 }
+
+// Personal lists (shared/lists.ts): hive/lists/<slug>.md, read and written
+// asynchronously, only inside that folder, by a validated slug.
+const listsDir = (): string | null => { const r = hive.root(); return r ? join(r, 'lists') : null; };
+const validSlug = (s: unknown): s is string => typeof s === 'string' && /^[a-z0-9][a-z0-9-]{0,59}$/.test(s);
+ipcMain.handle('lists:all', async () => {
+  const dir = listsDir();
+  if (!dir) return [];
+  const { readdir, readFile } = await import('node:fs/promises');
+  let files: string[] = [];
+  try { files = (await readdir(dir)).filter((f) => /^[a-z0-9][a-z0-9-]*\.md$/.test(f)); } catch { return []; }
+  const out = await Promise.all(files.map(async (f) => {
+    try { return parseList(f.replace(/\.md$/, ''), await readFile(join(dir, f), 'utf8')); } catch { return null; }
+  }));
+  return out.filter(Boolean).sort((a, b) => a!.title.localeCompare(b!.title));
+});
+ipcMain.handle('lists:save', async (_evt, list: unknown) => {
+  const dir = listsDir();
+  const l = list as PersonalList;
+  if (!dir || !l || !validSlug(l.slug) || typeof l.title !== 'string' || !Array.isArray(l.sections)) return { ok: false, error: 'invalid list' };
+  const { mkdir, writeFile } = await import('node:fs/promises');
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, `${l.slug}.md`), formatList(l), 'utf8');
+  return { ok: true };
+});
+ipcMain.handle('lists:remove', async (_evt, slug: unknown) => {
+  const dir = listsDir();
+  if (!dir || !validSlug(slug)) return { ok: false };
+  const { rm } = await import('node:fs/promises');
+  await rm(join(dir, `${slug}.md`), { force: true });
+  return { ok: true };
+});
 
 ipcMain.handle('hive:memoryCorpus', async () => {
   const root = hive.root();

@@ -858,6 +858,10 @@ const api = {
   /** Agents' memory.md + research/ deliverables, for the memory graph. */
   hiveMemoryCorpus: (): Promise<Array<{ id: string; kind: 'agent' | 'doc'; label: string; agentId?: string; project: string; projectType: string; text: string }>> => ipcRenderer.invoke('hive:memoryCorpus'),
   hiveInbox: (id: string): Promise<HiveMessage[]> => ipcRenderer.invoke('hive:inbox', id),
+  // Personal lists (shared/lists.ts), in hive/lists/.
+  listsAll: (): Promise<import('../shared/lists').PersonalList[]> => ipcRenderer.invoke('lists:all'),
+  listsSave: (list: import('../shared/lists').PersonalList): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('lists:save', list),
+  listsRemove: (slug: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('lists:remove', slug),
   /** Voice read-layer: recent message CONTENT (inbox/outbox bodies), REDACTED in
    *  main. Pass { id } for one message, { agentId } to scope to one mailbox, or
    *  {} for the whole floor. Backs Realtime Michael's get_messages. The renderer

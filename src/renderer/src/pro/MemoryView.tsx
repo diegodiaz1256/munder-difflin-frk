@@ -6,6 +6,7 @@ import { parseMemory, orderSections, sectionDef, filePathIn, PROJECT_TYPE_LABEL,
 import { useProStore } from './proStore';
 import { ConceptGraph } from './ConceptGraph';
 import { EntitiesView } from './EntitiesView';
+import { ListsView } from './ListsView';
 import { buildEntities, matchEntity } from '@shared/memoryEntities';
 import type { KeyedTask } from './data';
 
@@ -150,11 +151,12 @@ export function MemoryView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agen
 
       <div className="pro-row" style={{ gap: 6, flexWrap: 'wrap' }}>
         <button className={`pro-chip${scope === 'office' ? ' pro-chip-on' : ''}`} onClick={() => { setScope('office'); setConcept(null); }}>Whole office</button>
-        {projects.map(([p, n]) => (
+        <button className={`pro-chip${scope === '__lists' ? ' pro-chip-on' : ''}`} onClick={() => { setScope('__lists'); setConcept(null); setHits(null); }}>Lists</button>
+        {projects.filter(([p]) => p !== '__lists').map(([p, n]) => (
           <button key={p} className={`pro-chip${scope === p ? ' pro-chip-on' : ''}`} onClick={() => { setScope(p); setConcept(null); setHits(null); }}>{p} <span className="pro-sub">{n}</span></button>
         ))}
         {projects.length === 0 && <span className="pro-sub" style={{ fontSize: 12 }}>Projects appear here as agents working in a repository write their memory.</span>}
-        {scope !== 'office' ? (
+        {scope === '__lists' ? null : scope !== 'office' ? (
           <button className="pro-btn" style={{ marginInlineStart: 'auto' }} onClick={() => setShowMap((v) => !v)}>{showMap ? 'Hide map' : 'Map'}</button>
         ) : entities.length > 0 && (
           <div className="pro-switch" role="group" aria-label="View" style={{ marginInlineStart: 'auto' }}>
@@ -164,7 +166,9 @@ export function MemoryView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agen
         )}
       </div>
 
-      {tab === 'entities' && !hits && entities.length > 0 && (scope === 'office' || focusEntity) ? (
+      {scope === '__lists' ? (
+        <ListsView />
+      ) : tab === 'entities' && !hits && entities.length > 0 && (scope === 'office' || focusEntity) ? (
         <EntitiesView entities={entities} notesFor={notesFor} focus={focusEntity} />
       ) : scope !== 'office' && !hits && !showMap ? (
         <ProjectMemory project={scope} type={(docs.find((d) => d.project === scope)?.projectType as ProjectType | undefined) ?? null} entries={projectEntries} roster={roster} onOpenAgent={openAgent} />

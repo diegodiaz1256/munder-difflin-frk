@@ -47,6 +47,8 @@ import { resolveGodName } from '../shared/godIdentity';
 import { assignTaskKeys, normalizeTaskKeyLedger, taskKeyPrefix } from '../shared/taskKeys';
 import { cleanServerList } from '../shared/roleBundles';
 import { detectProjectType, memoryInstruction, memoryTemplate, parseMemory, type ProjectType } from '../shared/memorySections';
+import { listsInstruction, parseList } from '../shared/lists';
+import { MD_LISTS_MCP } from './listsMcp';
 
 /** The subset of HarnessConfig the hive consumes for the default-MCP merge.
  *  Kept as a local shape so hive.ts never imports the foundation-owned config
@@ -824,6 +826,8 @@ export class HiveManager {
     writeFileSync(join(root, 'bin', 'md-api.cjs'), MD_API_CLI, 'utf8');
     // md-run: ask the app to run a runner (a command with secrets the agent never sees).
     writeFileSync(join(root, 'bin', 'md-run.cjs'), MD_RUN_CLI, 'utf8');
+    // munder-lists: the human's lists as MCP tools (listsMcp.ts).
+    writeFileSync(join(root, 'bin', 'md-lists.cjs'), MD_LISTS_MCP, 'utf8');
     // The bundled-node launcher every shim above is invoked through — MUST be
     // written before any hook installer runs (they probe for it).
     this.writeNodeLauncher();
@@ -1586,6 +1590,10 @@ export class HiveManager {
     // The office memory, for every agent while semantic memory is on.
     const mem = agentId ? this.memoryMcp() : null;
     if (mem) servers['munder-memory'] = mem;
+    // The human's lists (Memory → Lists), as tools: told only in the prompt,
+    // agents kept those things in their own memory instead.
+    const root = this.root();
+    if (agentId && root) servers['munder-lists'] = { command: this.nodeCommand(), args: [join(root, 'bin', 'md-lists.cjs'), join(root, 'lists')] };
     // No gateway (tests, or it failed to bind) → no keyed servers at all: the
     // fallback is "without GitHub", never "with the key in the agent's env".
     const gw = keyed.length && agentId ? this.mcpGateway(agentId, keyed) : null;
@@ -1911,6 +1919,14 @@ export class HiveManager {
     const runnersLine = runners && runners.length
       ? `SECRETS: the human keeps secrets (API keys, passwords, database URLs) out of your reach — you will never see their values, and you must not try to read, print or exfiltrate them. Commands that need them are RUNNERS the app executes for you, in your worktree, with the secrets set; you get the output with every secret masked as ***. Available: ${runners.map((r) => `${r.id}${r.description ? ` (${r.description})` : ''}${r.secrets.length ? ` [uses ${r.secrets.join(', ')}]` : ''}`).join('; ')}. Run one with \`"${hiveNode}" "${runCli}" <runner>\` (\`"${hiveNode}" "${runCli}"\` lists them). The human may be asked to approve a run, especially after you changed files. If a task needs a secret no runner provides, ask the human for a runner — never ask for the value.`
       : '';
+    // The lists that exist now, so an agent uses them instead of inventing
+    // its own place for the human's things.
+    let existingLists: ReturnType<typeof parseList>[] = [];
+    try {
+      existingLists = readdirSync(inRoot('lists')).filter((f) => f.endsWith('.md')).slice(0, 30)
+        .map((f) => parseList(f.replace(/\.md$/, ''), readFileSync(inRoot('lists', f), 'utf8')));
+    } catch { /* no lists yet */ }
+    const listsLine = listsInstruction(inRoot('lists'), existingLists);
     const integrationsLine = integrations && integrations.length
       ? `REST APIs you can call (the harness adds the key; you never see it): ${integrations.map((i) => `${i.id} (${i.label})`).join(', ')}. Run \`"${hiveNode}" "${apiCli}" <api> GET /path\`, or \`"${hiveNode}" "${apiCli}" <api> POST /path '<json body>'\` (also PUT, PATCH, DELETE). The path is relative to that API's base URL, e.g. \`"${hiveNode}" "${apiCli}" ${integrations[0].id} GET /\`. It prints the HTTP status and the response body.`
       : '';
@@ -1940,6 +1956,7 @@ export class HiveManager {
       knowledgeLine,
       integrationsLine,
       runnersLine,
+      listsLine,
       godLine,
       scheduleLine,
       teamLine,

@@ -537,17 +537,20 @@ export class MemoryManager {
       }
       // The shared deliverables (research/): most of what the office learns
       // lands there, not in memory.md, so search by meaning has to see it.
-      const research = join(home, 'hive', 'research');
-      let newest = 0;
-      try {
-        for (const f of readdirSync(research)) {
-          if (!/\.(md|txt)$/i.test(f)) continue;
-          try { newest = Math.max(newest, statSync(join(research, f)).mtimeMs); } catch { /* gone */ }
+      // research/ deliverables and the human's lists/ go in too.
+      for (const shared of ['research', 'lists']) {
+        const dir = join(home, 'hive', shared);
+        let newest = 0;
+        try {
+          for (const f of readdirSync(dir)) {
+            if (!/\.(md|txt)$/i.test(f)) continue;
+            try { newest = Math.max(newest, statSync(join(dir, f)).mtimeMs); } catch { /* gone */ }
+          }
+        } catch { /* none yet */ }
+        if (newest && this.lastMined.get(shared) !== newest) {
+          this.lastMined.set(shared, newest);
+          await this.mineAgent(dir, shared);
         }
-      } catch { /* no research yet */ }
-      if (newest && this.lastMined.get('research') !== newest) {
-        this.lastMined.set('research', newest);
-        await this.mineAgent(research, 'research');
       }
     } finally {
       this.mining = false;
