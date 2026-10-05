@@ -649,6 +649,10 @@ export class HiveManager {
     return walk(value) as T;
   }
 
+  /** The loopback port of each agent's proxy sidecar (bridged into WSL). */
+  private proxyPorts = new Map<string, number>();
+  proxyPortFor(agentId: string): number | undefined { return this.proxyPorts.get(agentId); }
+
   private distroHomes = new Map<string, string>();
   /** The home folder the agents' CLIs use: the Windows profile, or the
    *  distro user's home (as a \\wsl.localhost path) on a WSL floor. */
@@ -813,6 +817,10 @@ export class HiveManager {
        *  instructions were unusable on Windows. Optional: undefined degrades to the
        *  old env-var spelling. */
       kgCliPath?: string;
+      /** Proxy-tier CLIs: the endpoint their sidecar forwards to (the user's
+       *  base URL for that engine). Passed here, never through process.env,
+       *  which every later agent would inherit. */
+      proxyUpstream?: string;
       /** REST integrations this agent may call through the key broker (its
        *  MD_BROKER_TOKEN is granted for exactly these). Listed in its prompt with
        *  the md-api command; empty/undefined → no line. */
@@ -1029,13 +1037,14 @@ export class HiveManager {
             // the user's configured value as the sidecar's UPSTREAM, then point the
             // CLI at the loopback proxy instead. Fall back to the cloud default if
             // the user hasn't set one.
-            const upstream = process.env[desc.baseUrlEnv]
+            const upstream = opts.proxyUpstream || process.env[desc.baseUrlEnv]
               || (desc.api === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com/v1');
             // A loopback bind on port 0 fails only transiently (a busy moment, a
             // slow sidecar start past the 4s ceiling), so try a few times before
             // giving up: without this ONE bad moment at spawn cost the agent its
             // hive events for the whole session.
             const port = await this.startProxyBridgeWithRetry(meta.id, { sock, sessionId, api: desc.api, upstream });
+            if (port > 0) this.proxyPorts.set(meta.id, port); else this.proxyPorts.delete(meta.id);
             // Only redirect the CLI through the proxy if the sidecar actually bound a
             // port. On failure leave routing untouched → the CLI talks to its real
             // upstream directly (degraded: no synthesized hive events, but it still
@@ -1676,7 +1685,7 @@ export class HiveManager {
       // handed a path its own shell/tools accept, not `C:\…\agents\god/inbox/`.
       `Open the files in ${join(dir, 'inbox')} for full detail, act on each, then move handled ones to ${join(dir, 'inbox', '.done')}. Reply via your outbox if a message requires it.`
     ].join('\n');
-    return { block: true, reason };
+    return { block: true, reason: this.forAgent(reason) };
   }
 
   // — agent-facing text —
@@ -1885,6 +1894,15 @@ export class HiveManager {
 
   /** Inject a message directly (used by the orchestrator / UI / tests). */
   send(partial: Partial<HiveMessage>, from = 'system'): HiveMessage {
+    // Agents on a WSL floor read these inside the distro: paths the app puts in
+    // a message (helper scripts, attachments, agent dirs) as they see them.
+    if (this.wslRoot()) {
+      partial = {
+        ...partial,
+        ...(typeof partial.body === 'string' ? { body: this.forAgent(partial.body) } : {}),
+        ...(typeof partial.subject === 'string' ? { subject: this.forAgent(partial.subject) } : {})
+      };
+    }
     const msg = this.normalize(partial, from);
     this.routeMessage(msg);
     this.commit(`hive: msg ${msg.from}→${msg.to} (${msg.act})`);

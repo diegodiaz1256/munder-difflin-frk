@@ -1761,6 +1761,8 @@ let slackServer: SlackWebhookServer | null = null;
 /** The loopback-only reply endpoint (lets the bundled helper post back to Slack
  *  without ever seeing the bot token). Lifecycle is tied to `slackServer`. */
 let slackReplyServer: SlackReplyServer | null = null;
+/** The reply endpoint's loopback port (bridged into WSL floors). */
+let slackReplyPort: number | null = null;
 /** Last public tunnel URL handed out — persisted so Settings can re-show the
  *  Request URL after a reopen (Slack reuses it until the server is stopped). */
 let lastSlackUrl: string | undefined;
@@ -2129,6 +2131,7 @@ async function startSlackReplyServer(): Promise<void> {
     slackReplyServer = null;
     return;
   }
+  slackReplyPort = r.port;
   try {
     writeFileSync(slackReplyConfigPath(), JSON.stringify({ port: r.port, token }), { mode: 0o600 });
   } catch (e) {
@@ -3140,14 +3143,13 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // Proxy-tier CLIs (qwen/crush) route their LLM traffic through a loopback sidecar
   // whose UPSTREAM is read from the preset's bridge.baseUrlEnv inside hive.ensureAgent.
   // For the local-LLM path, feed the user's configured base URL as that upstream so the
-  // proxy forwards to their endpoint (Ollama/LM Studio/vLLM). Set on process.env BEFORE
-  // ensureAgent reads it. (Crush's baseUrlEnv is an inert sentinel used ONLY as this
+  // proxy forwards to their endpoint (Ollama/LM Studio/vLLM). Handed to ensureAgent
+  // directly: it used to be set on process.env, which every agent spawned after it
+  // inherited (and kept after the field was cleared). (Crush's baseUrlEnv is an inert sentinel used ONLY as this
   // upstream source; its real routing is the per-agent CRUSH_GLOBAL_CONFIG base_url.)
-  if (opts.hive && (provider === 'crush' || provider === 'qwen')) {
-    const bridge = providerPreset(provider).bridge;
-    const baseUrl = readConfig().providerBaseUrls?.[provider];
-    if (bridge && bridge.kind === 'proxy' && baseUrl) process.env[bridge.baseUrlEnv] = baseUrl;
-  }
+  const proxyUpstream = opts.hive && (provider === 'crush' || provider === 'qwen')
+    ? readConfig().providerBaseUrls?.[provider]?.trim() || undefined
+    : undefined;
   // If the agent carries hive metadata, provision its workspace and add
   // provider-specific spawn injection. Non-Claude providers get shared AGENT_*
   // env only; Claude Code also gets prompt/settings hook args.
@@ -3188,6 +3190,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           // expands to nothing, so every knowledge-graph instruction was dead on a
           // Windows floor. Empty when the KG is off (the line isn't emitted then).
           kgCliPath: knowledge.env().KG_CLI,
+          proxyUpstream,
           integrations: brokerIntegrations,
           runners: runnersForAgent,
           theme: readConfig().terminalTheme ?? 'light',
@@ -3431,9 +3434,24 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   const wslLoc = process.platform === 'win32' ? parseWslPath(opts.cwd) : null;
   if (wslLoc) {
     try {
-      const ports = await wslBridgeFor(wslLoc.distro).start();
-      if (typeof ports.hooks === 'number') opts.env = { ...(opts.env ?? {}), HIVE_SOCK: `tcp://127.0.0.1:${ports.hooks}` };
-      for (const [name, v] of Object.entries(ports)) if (typeof v === 'string' && v !== 'direct') console.warn(`[wsl-bridge] ${name}: ${v}`);
+      const bridge = wslBridgeFor(wslLoc.distro);
+      // Every service as it is NOW (one that started after the first agent, the
+      // Slack reply endpoint, this agent's own proxy sidecar) — a new one is
+      // added to the running bridge. Same port numbers inside WSL where free.
+      const proxy = hive.proxyPortFor(opts.id);
+      const listeners = [
+        ...wslBridgeListeners(),
+        ...(slackReplyServer && slackReplyPort ? [{ name: `slack:${slackReplyPort}`, port: slackReplyPort, target: { port: slackReplyPort } }] : []),
+        ...(proxy ? [{ name: `proxy:${proxy}`, port: proxy, target: { port: proxy } }] : [])
+      ];
+      for (const l of listeners) {
+        const p = await bridge.ensure(l);
+        if (l.name === 'hooks' && typeof p === 'number') opts.env = { ...(opts.env ?? {}), HIVE_SOCK: `tcp://127.0.0.1:${p}` };
+        if (typeof p === 'string' && p !== 'direct') console.warn(`[wsl-bridge] ${l.name}: ${p}`);
+      }
+      // Set on the app's own env for Windows agents; a WSL agent only gets what
+      // its spawn carries (pty.ts), so hand it over here (as a /mnt path).
+      if (process.env.MD_SLACK_REPLY_CONFIG) opts.env = { ...(opts.env ?? {}), MD_SLACK_REPLY_CONFIG: process.env.MD_SLACK_REPLY_CONFIG };
     } catch (e) {
       console.error('[wsl-bridge] start failed:', e);
       return { ok: false, error: `Could not start the agent in WSL (${wslLoc.distro}): ${e instanceof Error ? e.message : describeWslError(e, wslLoc.distro)}` };
@@ -3692,19 +3710,24 @@ const wslBridges = new Map<string, WslBridge>();
 function wslBridgeFor(distro: string): WslBridge {
   let b = wslBridges.get(distro);
   if (b) return b;
+  b = new WslBridge(distro, [], (m) => console.log(m));
+  wslBridges.set(distro, b);
+  return b;
+}
+/** The app's services as they stand right now. Named with their port, so a
+ *  service that restarts on a new port is bridged anew. */
+function wslBridgeListeners(): Array<{ name: string; port: number; target: { port: number } | { path: string } }> {
   const listeners: Array<{ name: string; port: number; target: { port: number } | { path: string } }> = [];
   const sock = hive.sockPath();
   if (sock) listeners.push({ name: 'hooks', port: 0, target: { path: sock } });
   const portOf = (url: string | null | undefined): number => { const m = url ? /:(\d+)\/?$/.exec(url) : null; return m ? Number(m[1]) : 0; };
   const gw = portOf(mcpGateway.url());
-  if (gw) listeners.push({ name: 'gateway', port: gw, target: { port: gw } });
+  if (gw) listeners.push({ name: `gateway:${gw}`, port: gw, target: { port: gw } });
   const br = integrationBroker.running() ? portOf(integrationBroker.url()) : 0;
-  if (br) listeners.push({ name: 'broker', port: br, target: { port: br } });
+  if (br) listeners.push({ name: `broker:${br}`, port: br, target: { port: br } });
   const tel = portOf(telemetry.endpoint?.() ?? null);
-  if (tel) listeners.push({ name: 'telemetry', port: tel, target: { port: tel } });
-  b = new WslBridge(distro, listeners, (m) => console.log(m));
-  wslBridges.set(distro, b);
-  return b;
+  if (tel) listeners.push({ name: `telemetry:${tel}`, port: tel, target: { port: tel } });
+  return listeners;
 }
 
 ipcMain.handle('wsl:distros', async () => {
