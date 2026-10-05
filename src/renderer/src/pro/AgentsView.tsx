@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import type { HarnessConfig } from '@/store/config';
 import { useStore, type Agent } from '@/store/store';
 import { MessageQueueComposer } from '@/components/MessageQueueComposer';
@@ -27,16 +29,18 @@ export function currentTicket(tasks: KeyedTask[], agentId: string): KeyedTask | 
 }
 
 /** Floor spend vs the user's budget, for the orchestrator card and his room. */
-export function spendLine(directory: Record<string, AgentDirectoryEntry>, config: HarnessConfig) {
+export function spendLine(directory: Record<string, AgentDirectoryEntry>, config: HarnessConfig, t?: TFunction) {
   const rows = Object.values(directory).filter((d) => !d.archived);
   const usd = rows.reduce((n, d) => n + (d.usd || 0), 0);
   const tokens = rows.reduce((n, d) => n + (d.tokens || 0), 0);
-  if (config.costCapUsd) return { main: `$${usd.toFixed(2)}`, sub: `of $${config.costCapUsd} cap`, ratio: usd / config.costCapUsd };
-  if (config.costCapTokens) return { main: `$${usd.toFixed(2)}`, sub: `${fmtTokens(tokens)} of ${fmtTokens(config.costCapTokens)} tok`, ratio: tokens / config.costCapTokens };
-  return { main: `$${usd.toFixed(2)}`, sub: 'no cap set', ratio: 0 };
+  const tr = (key: string, en: string, params: Record<string, string> = {}) => (t ? t(`pro.spend.${key}`, params) : en);
+  if (config.costCapUsd) return { main: `$${usd.toFixed(2)}`, sub: tr('ofCap', `of $${config.costCapUsd} cap`, { cap: String(config.costCapUsd) }), ratio: usd / config.costCapUsd };
+  if (config.costCapTokens) return { main: `$${usd.toFixed(2)}`, sub: tr('ofTokens', `${fmtTokens(tokens)} of ${fmtTokens(config.costCapTokens)} tok`, { used: fmtTokens(tokens), cap: fmtTokens(config.costCapTokens) }), ratio: tokens / config.costCapTokens };
+  return { main: `$${usd.toFixed(2)}`, sub: tr('noCap', 'no cap set'), ratio: 0 };
 }
 
 export function AgentsView({ roster, tasks, directory, asking, config, onOpen }: Props) {
+  const { t } = useTranslation();
   const [q, setQ] = useState('');
   const setView = useProStore((s) => s.setView);
   const god = roster.find((a) => a.isGod);
@@ -50,12 +54,12 @@ export function AgentsView({ roster, tasks, directory, asking, config, onOpen }:
   return (
     <div className="pro-page">
       <div className="pro-head">
-        <h2>Agents</h2>
-        <span className="pro-sub">{roster.length} agents</span>
+        <h2>{t('pro.agents.title')}</h2>
+        <span className="pro-sub">{t('pro.agents.count', { count: roster.length })}</span>
         <div className="pro-head-end">
-          <input className="pro-input" placeholder="Search agents" value={q} onChange={(e) => setQ(e.target.value)} />
-          <button className="pro-btn" onClick={() => setView({ kind: 'section', section: 'capabilities' })}>Capabilities</button>
-          <button className="pro-btn pro-btn-primary" onClick={() => useStore.getState().setAddAgentOpen(true)}>Add an agent</button>
+          <input className="pro-input" placeholder={t('pro.agents.search')} value={q} onChange={(e) => setQ(e.target.value)} />
+          <button className="pro-btn" onClick={() => setView({ kind: 'section', section: 'capabilities' })}>{t('pro.nav.capabilities')}</button>
+          <button className="pro-btn pro-btn-primary" onClick={() => useStore.getState().setAddAgentOpen(true)}>{t('pro.agents.add')}</button>
         </div>
       </div>
 
@@ -70,7 +74,7 @@ export function AgentsView({ roster, tasks, directory, asking, config, onOpen }:
           style={{ borderStyle: 'dashed', minHeight: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--cth-ink-500)' }}
           onClick={() => useStore.getState().setAddAgentOpen(true)}
         >
-          + Add an agent
+          + {t('pro.agents.add')}
         </button>
       </div>
 
@@ -83,6 +87,7 @@ export function AgentsView({ roster, tasks, directory, asking, config, onOpen }:
  *  is kept, so Reopen respawns them with the same id, folder and model and
  *  resumes the conversation where it stopped. */
 function ArchivedAgents({ config }: { config: HarnessConfig }) {
+  const { t } = useTranslation();
   const archived = useStore((s) => s.archivedAgents);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -102,7 +107,7 @@ function ArchivedAgents({ config }: { config: HarnessConfig }) {
   return (
     <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <button className="pro-btn" style={{ alignSelf: 'flex-start' }} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        {open ? '▾' : '▸'} Archived ({archived.length})
+        {open ? '▾' : '▸'} {t('pro.agents.archived', { count: archived.length })}
       </button>
       {open && archived.map((a) => (
         <article key={a.id} className="pro-card pro-row" style={{ padding: '10px 14px' }}>
@@ -110,10 +115,10 @@ function ArchivedAgents({ config }: { config: HarnessConfig }) {
           <div style={{ minWidth: 0, flex: 1 }}>
             <p className="pro-title">{a.name}</p>
             <p className="pro-text" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.description}</p>
-            {errors[a.id] && <p className="pro-text" style={{ color: 'var(--cth-coral)' }}>Could not reopen: {errors[a.id]}</p>}
+            {errors[a.id] && <p className="pro-text" style={{ color: 'var(--cth-coral)' }}>{t('pro.agents.couldNotReopen', { error: errors[a.id] })}</p>}
           </div>
           <span className="pro-sub pro-mono" style={{ fontSize: 11 }}>{a.model ?? a.provider ?? ''}</span>
-          <button className="pro-btn" disabled={busy !== null} onClick={() => void reopen(a)}>{busy === a.id ? 'Reopening…' : 'Reopen'}</button>
+          <button className="pro-btn" disabled={busy !== null} onClick={() => void reopen(a)}>{busy === a.id ? t('pro.agents.reopening') : t('pro.agents.reopen')}</button>
         </article>
       ))}
     </section>
@@ -132,7 +137,8 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
 function OrchestratorCard({ god, tasks, directory, config, onOpen }: {
   god: Agent; tasks: KeyedTask[]; directory: Record<string, AgentDirectoryEntry>; config: HarnessConfig; onOpen: (id: string) => void;
 }) {
-  const spend = spendLine(directory, config);
+  const { t } = useTranslation();
+  const spend = spendLine(directory, config, t);
   const breaker = directory[god.id]?.breaker || 'healthy';
   const doing = tasks.filter((t) => t.status === 'doing').length;
   const blocked = tasks.filter((t) => t.status === 'blocked').length;
@@ -146,7 +152,7 @@ function OrchestratorCard({ god, tasks, directory, config, onOpen }: {
         <div style={{ minWidth: 0 }}>
           <div className="pro-row" style={{ gap: 8 }}>
             <button className="pro-title" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit' }} onClick={() => onOpen(god.id)}>{god.name}</button>
-            <span className="pro-badge" style={{ background: 'var(--cth-lemon-light)' }}>orchestrator</span>
+            <span className="pro-badge" style={{ background: 'var(--cth-lemon-light)' }}>{t('pro.nav.orchestrator')}</span>
           </div>
           <div className="pro-sub" style={{ fontSize: 12 }}>
             {[god.model ?? god.provider, ctx !== null ? `ctx ${ctx}%` : null].filter(Boolean).join(' · ')}
@@ -156,10 +162,10 @@ function OrchestratorCard({ god, tasks, directory, config, onOpen }: {
       </div>
       {god.description && <p className="pro-text">{god.description}</p>}
       <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-        <Stat label="Spend"><strong style={{ fontSize: 18, color: 'var(--cth-peach)' }}>{spend.main}</strong><span className="pro-mono pro-sub">{spend.sub}</span></Stat>
-        <Stat label="Circuit breaker"><span className="pro-dot" style={{ background: breaker === 'healthy' ? 'var(--cth-mint)' : 'var(--cth-coral)' }} /><strong>{breaker}</strong></Stat>
-        <Stat label="Tasks"><strong style={{ fontSize: 18 }}>{doing}</strong><span className="pro-mono pro-sub">doing · {blocked} blocked</span></Stat>
-        <Stat label="Waiting on you"><strong style={{ fontSize: 18, color: asks ? 'var(--cth-peach)' : undefined }}>{asks}</strong><span className="pro-mono pro-sub">{asks === 1 ? 'question' : 'questions'}</span></Stat>
+        <Stat label={t('pro.agents.spend')}><strong style={{ fontSize: 18, color: 'var(--cth-peach)' }}>{spend.main}</strong><span className="pro-mono pro-sub">{spend.sub}</span></Stat>
+        <Stat label={t('pro.agents.breaker')}><span className="pro-dot" style={{ background: breaker === 'healthy' ? 'var(--cth-mint)' : 'var(--cth-coral)' }} /><strong>{breaker === 'healthy' ? t('pro.agents.healthy') : breaker}</strong></Stat>
+        <Stat label={t('pro.nav.tasks')}><strong style={{ fontSize: 18 }}>{doing}</strong><span className="pro-mono pro-sub">{t('pro.agents.doingBlocked', { blocked })}</span></Stat>
+        <Stat label={t('pro.agents.waitingOnYou')}><strong style={{ fontSize: 18, color: asks ? 'var(--cth-peach)' : undefined }}>{asks}</strong><span className="pro-mono pro-sub">{t('pro.agents.questions', { count: asks })}</span></Stat>
       </div>
       <MessageQueueComposer agent={god} />
     </section>
@@ -169,6 +175,7 @@ function OrchestratorCard({ god, tasks, directory, config, onOpen }: {
 function AgentTile({ agent, ticket, dir, asksYou, onOpen }: {
   agent: Agent; ticket?: KeyedTask; dir?: AgentDirectoryEntry; asksYou: boolean; onOpen: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const feed = useStore((s) => s.feeds[agent.id]);
   const st = agentState(agent, asksYou);
   // The live terminal first: the parser feed only fills while Classic shows that
@@ -184,7 +191,7 @@ function AgentTile({ agent, ticket, dir, asksYou, onOpen }: {
         <Avatar agent={agent} scale={1.5} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <p className="pro-title">{agent.name}</p>
-          <div className="pro-sub" style={{ fontSize: 12 }}>{agent.model ?? agent.provider ?? 'CLI default'}</div>
+          <div className="pro-sub" style={{ fontSize: 12 }}>{agent.model ?? agent.provider ?? t('pro.agents.cliDefault')}</div>
         </div>
         <StateBadge {...st} />
       </div>
@@ -194,10 +201,10 @@ function AgentTile({ agent, ticket, dir, asksYou, onOpen }: {
           <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ticket.title}</span>
         </button>
       ) : (
-        <p className="pro-text">{agent.action || agent.description || 'Waiting for work'}</p>
+        <p className="pro-text">{agent.action || agent.description || t('pro.agents.waitingForWork')}</p>
       )}
       <div>
-        <div className="pro-sub" style={{ fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 4 }}>Terminal</div>
+        <div className="pro-sub" style={{ fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 4 }}>{t('pro.agents.terminal')}</div>
         <div className="pro-term">{tail || '—'}</div>
       </div>
       <div className="pro-row pro-mono pro-sub" style={{ fontSize: 11 }}>
@@ -207,8 +214,8 @@ function AgentTile({ agent, ticket, dir, asksYou, onOpen }: {
       </div>
       <div className="pro-row">
         {dir && <span className="pro-chip">{fmtTokens(dir.tokens)} tok</span>}
-        {dir && dir.inboxBacklog > 0 && <span className="pro-chip">{dir.inboxBacklog} unread</span>}
-        <button className="pro-btn" style={{ marginInlineStart: 'auto' }} onClick={() => onOpen(agent.id)}>Prompt</button>
+        {dir && dir.inboxBacklog > 0 && <span className="pro-chip">{t('pro.agents.unread', { count: dir.inboxBacklog })}</span>}
+        <button className="pro-btn" style={{ marginInlineStart: 'auto' }} onClick={() => onOpen(agent.id)}>{t('pro.agents.prompt')}</button>
       </div>
     </article>
   );

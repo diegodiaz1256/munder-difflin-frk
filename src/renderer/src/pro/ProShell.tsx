@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { APP_NAME, LAYOUT_LABELS } from '@shared/fork';
 import type { HarnessConfig } from '@/store/config';
 import { useStore } from '@/store/store';
@@ -22,17 +23,18 @@ import { EnvironmentView } from './EnvironmentView';
 import { McpView } from './McpView';
 import './pro.css';
 
-const TOP: { id: ProSection; label: string; icon: ProIconName }[] = [
-  { id: 'tasks', label: 'Tasks', icon: 'tasks' },
-  { id: 'inbox', label: 'Inbox', icon: 'inbox' },
-  { id: 'automations', label: 'Automations', icon: 'automations' },
-  { id: 'memory', label: 'Memory', icon: 'memory' },
-  { id: 'capabilities', label: 'Capabilities', icon: 'capabilities' },
-  { id: 'connections', label: 'Connections', icon: 'connections' },
-  { id: 'environment', label: 'Environment', icon: 'environment' },
-  { id: 'mcp', label: 'MCP', icon: 'mcp' },
-  { id: 'team', label: 'Team', icon: 'team' },
-  { id: 'factories', label: 'Factories', icon: 'factories' }
+/** Sections in the sidebar; their names are `pro.nav.<id>`. */
+const TOP: { id: ProSection; icon: ProIconName }[] = [
+  { id: 'tasks', icon: 'tasks' },
+  { id: 'inbox', icon: 'inbox' },
+  { id: 'automations', icon: 'automations' },
+  { id: 'memory', icon: 'memory' },
+  { id: 'capabilities', icon: 'capabilities' },
+  { id: 'connections', icon: 'connections' },
+  { id: 'environment', icon: 'environment' },
+  { id: 'mcp', icon: 'mcp' },
+  { id: 'team', icon: 'team' },
+  { id: 'factories', icon: 'factories' }
 ];
 
 /**
@@ -42,6 +44,7 @@ const TOP: { id: ProSection; label: string; icon: ProIconName }[] = [
  * back and forth never touches a running agent.
  */
 export function ProShell({ config }: { config: HarnessConfig }) {
+  const { t } = useTranslation();
   const view = useProStore((s) => s.view);
   const setView = useProStore((s) => s.setView);
   const roster = useRoster();
@@ -84,7 +87,7 @@ export function ProShell({ config }: { config: HarnessConfig }) {
 
   return (
     <div className="pro-root">
-      <nav className="pro-side" aria-label="Manager navigation">
+      <nav className="pro-side" aria-label={t('pro.nav.aria')}>
         <div className="pro-brand">
           <Avatar agent={god} />
           <span style={{ display: 'flex', flexDirection: 'column', lineHeight: '15px' }}>
@@ -94,16 +97,16 @@ export function ProShell({ config }: { config: HarnessConfig }) {
         </div>
         {TOP.map((item) => (
           <button key={item.id} className="pro-nav" aria-current={section === item.id} onClick={() => go(item.id)}>
-            <ProIcon name={item.icon} /> {item.label}
+            <ProIcon name={item.icon} /> {t(`pro.nav.${item.id}`)}
             {item.id === 'inbox' && openAsks > 0 && <span className="pro-nav-end"><span className="pro-count">{openAsks}</span></span>}
           </button>
         ))}
 
-        <div className="pro-side-label">Agents</div>
+        <div className="pro-side-label">{t('pro.nav.agents')}</div>
         <button className="pro-nav" aria-current={section === 'agents'} onClick={() => go('agents')}>
-          <ProIcon name="agents" /> Agents
+          <ProIcon name="agents" /> {t('pro.nav.agents')}
           <span className="pro-nav-end pro-sub" style={{ fontSize: 11 }}>
-            {roster.filter(isActive).length} active
+            {t('pro.nav.active', { count: roster.filter(isActive).length })}
           </span>
         </button>
         {roster.map((a) => {
@@ -122,17 +125,17 @@ export function ProShell({ config }: { config: HarnessConfig }) {
               <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: '15px' }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
                 <span className="pro-sub" style={{ fontSize: 11 }}>
-                  {asking.has(a.id) ? 'Asked you' : ctx !== null ? `ctx ${ctx}%` : a.isGod ? 'orchestrator' : (a.model ?? a.provider ?? 'agent')}
+                  {asking.has(a.id) ? t('pro.nav.askedYou') : ctx !== null ? `ctx ${ctx}%` : a.isGod ? t('pro.nav.orchestrator') : (a.model ?? a.provider ?? t('pro.nav.agent'))}
                 </span>
               </span>
               <span className="pro-nav-end">
-                <span className="pro-dot" style={{ background: TONE_COLOR[active ? 'green' : 'grey'] }} title={active ? 'Active' : 'Idle'} />
+                <span className="pro-dot" style={{ background: TONE_COLOR[active ? 'green' : 'grey'] }} title={active ? t('pro.nav.activeOne') : t('pro.nav.idle')} />
               </span>
             </button>
           );
         })}
         <button className="pro-nav" style={{ marginTop: 4 }} aria-current={section === 'temps'} onClick={() => go('temps')}>
-          <ProIcon name="temps" /> Temps
+          <ProIcon name="temps" /> {t('pro.nav.temps')}
         </button>
       </nav>
       <main className="pro-main">{page}</main>
@@ -142,12 +145,13 @@ export function ProShell({ config }: { config: HarnessConfig }) {
 
 /** Floor / Manager switch for the title bar. */
 export function LayoutSwitch() {
+  const { t } = useTranslation();
   const layout = useProStore((s) => s.layout);
   const setLayout = useProStore((s) => s.setLayout);
   return (
-    <div className="pro-switch cth-titlebar-nodrag" role="group" aria-label="Layout">
-      <button aria-pressed={layout === 'classic'} onClick={() => setLayout('classic')}>{LAYOUT_LABELS.classic}</button>
-      <button aria-pressed={layout === 'pro'} onClick={() => setLayout('pro')}>{LAYOUT_LABELS.pro}</button>
+    <div className="pro-switch cth-titlebar-nodrag" role="group" aria-label={t('pro.layout.aria')}>
+      <button aria-pressed={layout === 'classic'} onClick={() => setLayout('classic')}>{t('pro.layout.classic', { defaultValue: LAYOUT_LABELS.classic })}</button>
+      <button aria-pressed={layout === 'pro'} onClick={() => setLayout('pro')}>{t('pro.layout.pro', { defaultValue: LAYOUT_LABELS.pro })}</button>
     </div>
   );
 }

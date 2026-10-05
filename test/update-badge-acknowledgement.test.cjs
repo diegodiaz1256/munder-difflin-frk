@@ -28,7 +28,9 @@ test('the check branch acknowledges a no-update result', () => {
 test('the acknowledgement renders and auto-dismisses', () => {
   assert.ok(/checkedOk && !started &&/.test(SRC),
     'the acknowledgement popover must render when checkedOk is set');
-  assert.ok(/on the latest version/i.test(SRC),
+  // The words live in the locale files now (i18n); the component names the key.
+  const EN = require('../src/renderer/src/i18n/locales/en.json');
+  assert.ok(SRC.includes("t('updateBadge.upToDate')") && /on the latest version/i.test(EN.updateBadge.upToDate),
     'it must say, in words, that the user is already current');
   assert.ok(/setTimeout\(\(\) => setCheckedOk\(false\)/.test(SRC),
     'it must auto-dismiss, or it is a stuck mode instead of a flash');

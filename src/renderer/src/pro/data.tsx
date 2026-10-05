@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState } from 'react';
 import { useStore, type Agent } from '@/store/store';
 import { SpritePortrait } from '@/components/SpritePortrait';
@@ -126,7 +127,13 @@ export function askingAgents(tasks: HiveTask[]): Set<string> {
   return out;
 }
 
+/** agentState's labels → their i18n keys (`pro.state.*`). */
+const STATE_KEY: Record<string, string> = { 'Needs you': 'needsYou', Working: 'working', Thinking: 'thinking', Breaker: 'breaker', Done: 'done', Idle: 'idle' };
+
 export function StateBadge({ label, tone }: { label: string; tone: Tone }) {
+  const { t } = useTranslation();
+  const key = STATE_KEY[label];
+  label = key ? t(`pro.state.${key}`) : label;
   return (
     <span className="pro-badge" style={{ background: TONE_BG[tone], color: 'var(--cth-ink-900)' }}>
       <span className="pro-dot" style={{ background: TONE_COLOR[tone] }} /> {label}
