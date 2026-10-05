@@ -94,6 +94,8 @@ interface PtySession {
   /** WSL floors: when the agent first printed visible text (0 = not yet).
    *  wsl.exe paints escape sequences long before the agent starts. */
   wslVisibleAt?: number;
+  /** The distro a WSL floor's agent runs in. */
+  wslDistro?: string;
 }
 
 /** Visible text once escape sequences are removed. */
@@ -745,7 +747,7 @@ export class PtyManager {
         hasOutput: false,
         tail: '',
         owner,
-        ...(wsl ? { wslVisibleAt: 0 } : {})
+        ...(wsl ? { wslVisibleAt: 0, wslDistro: wsl.distro } : {})
       };
       this.sessions.set(opts.id, session);
 
@@ -797,7 +799,10 @@ export class PtyManager {
     const s = this.sessions.get(id);
     if (!s) return { ok: false, error: `no pty: ${id}` };
     try {
-      s.proc.write(data);
+      // Text the app types into a WSL agent (attachments, Slack files, work
+      // orders) names Windows files: give their paths as the distro sees them.
+      // Single keystrokes never hold a whole path, so typing is untouched.
+      s.proc.write(s.wslDistro && data.includes(':\\') ? linuxizeText(data, s.wslDistro) : data);
       return { ok: true };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e) };

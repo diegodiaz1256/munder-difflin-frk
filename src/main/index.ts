@@ -3730,6 +3730,13 @@ function wslBridgeListeners(): Array<{ name: string; port: number; target: { por
   return listeners;
 }
 
+/** The home folder the floor's agents use: the Windows profile, or the
+ *  distro user's home (as a UNC path) on a WSL floor. */
+function agentsHome(): string {
+  const w = hive.wslRoot();
+  return (w && distroHomeUnc(w.distro)) || homedir();
+}
+
 ipcMain.handle('wsl:distros', async () => {
   if (process.platform !== 'win32') return { ok: false, distros: [], error: 'WSL is a Windows feature' };
   const r = await listDistros();
@@ -4144,7 +4151,7 @@ ipcMain.handle('skills:local', (_evt, cwd: unknown): LocalSkill[] => {
     ...(cfg.registeredRepos ?? [])
   ];
   try {
-    return listLocalSkills({ cwds, bundledDir: skillsResourceDir() });
+    return listLocalSkills({ cwds, bundledDir: skillsResourceDir(), home: agentsHome() });
   } catch (e) {
     console.error('[skills] local scan failed:', e);
     return [];
@@ -4164,14 +4171,14 @@ ipcMain.handle('skills:install', async (_evt, url: unknown, name: unknown) => {
   if (typeof url !== 'string' || typeof name !== 'string') {
     return { ok: false as const, error: 'bad request' };
   }
-  return installSkill(url, name);
+  return installSkill(url, name, agentsHome());
 });
 /** Delete an installed skill. The guard rails live in uninstallSkill — it refuses
  *  any path it cannot prove is a skill folder inside a skills root. */
 ipcMain.handle('skills:uninstall', (_evt, path: unknown) => {
   if (typeof path !== 'string') return { ok: false as const, error: 'bad request' };
   const cfg = readConfig();
-  return uninstallSkill(path, { cwds: cfg.registeredRepos ?? [] });
+  return uninstallSkill(path, { cwds: cfg.registeredRepos ?? [], home: agentsHome() });
 });
 /** Reveal a skill on disk. `openExternal` is deliberately https-only, so a
  *  file:// URL cannot (and should not) be smuggled through it. */

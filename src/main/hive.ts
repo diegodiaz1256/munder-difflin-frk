@@ -649,6 +649,20 @@ export class HiveManager {
     return walk(value) as T;
   }
 
+  /** Link `link` → `target`. On a WSL floor, when both live in the floor's
+   *  distro, Linux makes the link: a Windows junction cannot point into
+   *  \\wsl.localhost, and a copy of auth.json goes stale on token refresh. */
+  private linkPath(target: string, link: string, dir: boolean): void {
+    const w = this.wslRoot();
+    const t = w ? parseWslPath(target) : null;
+    const l = w ? parseWslPath(link) : null;
+    if (w && t && l && t.distro.toLowerCase() === w.distro.toLowerCase() && l.distro.toLowerCase() === w.distro.toLowerCase()) {
+      runInDistro(w.distro, 'ln', ['-s', '--', t.linuxPath, l.linuxPath]);
+      return;
+    }
+    symlinkSync(target, link, dir ? (process.platform === 'win32' ? 'junction' : 'dir') : undefined);
+  }
+
   /** The loopback port of each agent's proxy sidecar (bridged into WSL). */
   private proxyPorts = new Map<string, number>();
   proxyPortFor(agentId: string): number | undefined { return this.proxyPorts.get(agentId); }
@@ -2453,7 +2467,7 @@ export class HiveManager {
       const authSrc = join(userHome, 'auth.json');
       const authDest = join(home, 'auth.json');
       if (existsSync(authSrc) && !existsSync(authDest)) {
-        try { symlinkSync(authSrc, authDest); }
+        try { this.linkPath(authSrc, authDest, false); }
         catch { try { copyFileSync(authSrc, authDest); } catch { /* best-effort */ } }
       }
       // The managed app-server daemon used by Codex Remote Control is launched
@@ -2463,7 +2477,7 @@ export class HiveManager {
       const packagesDest = join(home, 'packages');
       if (existsSync(packagesSrc) && !existsSync(packagesDest)) {
         try {
-          symlinkSync(packagesSrc, packagesDest, process.platform === 'win32' ? 'junction' : 'dir');
+          this.linkPath(packagesSrc, packagesDest, true);
         } catch { /* remote integration falls back to a local TUI if unavailable */ }
       }
       // Wire lifecycle hooks via config.toml `[hooks]` tables — the user-layer
@@ -2587,7 +2601,7 @@ export class HiveManager {
     }
 
     try {
-      symlinkSync(target, source, process.platform === 'win32' ? 'junction' : 'dir');
+      this.linkPath(target, source, true);
     } catch (e) {
       if (!existsSync(source) && existsSync(target)) {
         try { this.moveCodexDataDir(target, source); } catch { /* data remains at target */ }
