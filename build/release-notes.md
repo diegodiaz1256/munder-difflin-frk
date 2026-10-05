@@ -1,5 +1,5 @@
-- **Memory by project** and your own lists (have / want).
-- **Model and effort per role**; Web and Shell as capabilities.
+- **Español** en toda la app, y **memoria por proyecto** con listas.
+- **Model and effort per role**; Web off really means no web.
 - Cards say **asks you** when a menu waits.
 - **Windows first run** installs Node and Claude.
 - **5h / weekly usage** in the title bar.
