@@ -2,7 +2,7 @@
   Uninstall Scranton Branch WITHOUT running its uninstaller.
 
   The NSIS uninstaller is unsigned and runs from %TEMP% on upgrades, which
-  endpoint security (Cortex XDR and similar) blocks. This does the same job
+  endpoint security blocks. This does the same job
   with Windows' own tools: close the app, delete its program folder, its
   "Apps & features" entry and its shortcuts. Your settings, offices and keys
   (%APPDATA%\Scranton Branch) are KEPT unless you pass -RemoveUserData.
