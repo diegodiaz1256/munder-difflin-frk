@@ -1,3 +1,4 @@
+import type { RemoteControlState } from '@shared/remoteControl';
 import { create } from 'zustand';
 import type { AccentColorName } from '@/design/tokens';
 import type { OfficeCharacterName } from '@/scene/office/cast';
@@ -207,6 +208,13 @@ interface State {
    *  fallback for anything that genuinely has no particular agent in mind. */
   ideAgentId: string | null;
   sidebarWidth: number;
+  /** Remote Control per terminal, read from its output (shared/remoteControl.ts). */
+  remoteControl: Record<string, RemoteControlState>;
+  setRemoteControl: (ptyId: string, state: RemoteControlState) => void;
+  /** When the cloud button last sent /remote-control, per terminal: its menu,
+   *  if it opens right after, is ours to close. */
+  remoteControlAskedAt: Record<string, number>;
+  markRemoteControlAsked: (ptyId: string) => void;
   sidebarTab: SidebarTab;
   godStatus: GodStatus;
   /** Per-agent outgoing message queue (agent id → messages awaiting delivery).
@@ -694,6 +702,14 @@ export const useStore = create<State>((set, get) => ({
   ideOpen: false,
   ideAgentId: null,
   sidebarWidth: initialSidebarWidth,
+  remoteControl: {},
+  remoteControlAskedAt: {},
+  markRemoteControlAsked: (ptyId) => set((s) => ({ remoteControlAskedAt: { ...s.remoteControlAskedAt, [ptyId]: Date.now() } })),
+  setRemoteControl: (ptyId, state) => set((s) => {
+    const prev = s.remoteControl[ptyId];
+    if (prev && prev.state === state.state && state.state !== 'connecting' && (prev.state !== 'on' || state.state !== 'on' || prev.url === state.url)) return s;
+    return { remoteControl: { ...s.remoteControl, [ptyId]: state } };
+  }),
   sidebarTab: initialSidebarTab,
   godStatus: 'booting',
   godError: null,

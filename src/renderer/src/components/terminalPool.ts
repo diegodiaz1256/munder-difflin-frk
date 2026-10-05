@@ -39,6 +39,8 @@ import {
   type TerminalAutomationBlock
 } from './terminalAutomation';
 import { sanitizeTerminalSelection } from './terminalSelection';
+import { detectRemoteControl, isRemoteControlMenu } from '@shared/remoteControl';
+import { useStore } from '@/store/store';
 import { terminalKeySequence } from './terminalKeys';
 import '@xterm/xterm/css/xterm.css';
 
@@ -186,9 +188,27 @@ export function acquireTerminal(ptyId: string, theme?: ThemeMap, fontSize = 14):
 
   // Subscribe to the pty stream ONCE for the terminal's whole lifetime, so the
   // buffer keeps filling even while this terminal isn't mounted in any view.
+  let rcTail = '';
   entry.unsub.push(window.cth.onPtyData(ptyId, (rawChunk) => {
     const chunk = normalizePtyChunk(rawChunk);
     if (!chunk) return;
+    // Remote Control's state, for the Command Center's cloud button. A small
+    // tail of earlier output covers a link split across two chunks.
+    rcTail = (rcTail + chunk).slice(-800);
+    if (/claude\.ai\/code|Remote Control|remote-control|Enter to (?:select|confirm|continue)/i.test(chunk)) {
+      const rc = detectRemoteControl(rcTail);
+      if (rc) useStore.getState().setRemoteControl(ptyId, rc);
+      // /remote-control asked something back: its menu when it was already on
+      // (Continue is preselected) or a confirmation the first time. If the
+      // cloud button sent it a moment ago, answer with Enter, as a person
+      // would; otherwise the terminal sits waiting on a question. Once only.
+      const st = useStore.getState();
+      if (isRemoteControlMenu(rcTail) && Date.now() - (st.remoteControlAskedAt[ptyId] ?? 0) < 10_000) {
+        useStore.setState((x) => ({ remoteControlAskedAt: { ...x.remoteControlAskedAt, [ptyId]: 0 } }));
+        rcTail = '';
+        setTimeout(() => { void window.cth.writePty(ptyId, '\r'); }, 300);
+      }
+    }
     const active = term.buffer.active;
     const follow = shouldFollowTerminalOutput(active.viewportY, active.baseY);
     term.write(chunk, () => {
