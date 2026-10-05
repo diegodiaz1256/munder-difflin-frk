@@ -470,7 +470,10 @@
     "openIdeAria": "افتح بيئة التطوير",
     "remoteControl": "عن بُعد",
     "remoteControlTitle": "التحكم عن بُعد: الوصول إلى هذه الجلسة من claude.ai أو تطبيق Claude على هاتفك. سيطلب Claude التأكيد في الطرفية.",
-    "remoteControlAria": "تشغيل التحكم عن بُعد للمنسق"
+    "remoteControlAria": "تشغيل التحكم عن بُعد للمنسق",
+    "remoteControlOnTitle": "التحكم عن بُعد مفعّل. انقر لفتح هذه الجلسة ({{url}})؛ وهي أيضًا في تطبيق Claude على هاتفك.",
+    "remoteControlFailedTitle": "التحكم عن بُعد متوقف: {{reason}}. انقر للمحاولة مجددًا.",
+    "remoteControlOnLabel": "عن بُعد: مفعّل"
   },
   "addAgent": {
     "title": "إضافة وكيل",

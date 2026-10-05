@@ -1,3 +1,4 @@
+import type { RemoteControlState } from '@shared/remoteControl';
 import { create } from 'zustand';
 import type { AccentColorName } from '@/design/tokens';
 import type { OfficeCharacterName } from '@/scene/office/cast';
@@ -207,6 +208,9 @@ interface State {
    *  fallback for anything that genuinely has no particular agent in mind. */
   ideAgentId: string | null;
   sidebarWidth: number;
+  /** Remote Control per terminal, read from its output (shared/remoteControl.ts). */
+  remoteControl: Record<string, RemoteControlState>;
+  setRemoteControl: (ptyId: string, state: RemoteControlState) => void;
   sidebarTab: SidebarTab;
   godStatus: GodStatus;
   /** Per-agent outgoing message queue (agent id → messages awaiting delivery).
@@ -688,6 +692,12 @@ export const useStore = create<State>((set, get) => ({
   ideOpen: false,
   ideAgentId: null,
   sidebarWidth: initialSidebarWidth,
+  remoteControl: {},
+  setRemoteControl: (ptyId, state) => set((s) => {
+    const prev = s.remoteControl[ptyId];
+    if (prev && prev.state === state.state && (prev.state !== 'on' || state.state !== 'on' || prev.url === state.url)) return s;
+    return { remoteControl: { ...s.remoteControl, [ptyId]: state } };
+  }),
   sidebarTab: initialSidebarTab,
   godStatus: 'booting',
   messageQueues: initialQueues,

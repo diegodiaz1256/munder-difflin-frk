@@ -136,6 +136,12 @@ export async function enableRemoteControl(provider: AgentProvider, sessionName: 
   return true;
 }
 
+/** How long to wait between typing `text` into a TUI and pressing Enter. */
+export function preEnterDelayMs(text: string): number {
+  if (text.startsWith('/')) return 450;
+  return Math.min(1100, 140 + Math.floor(text.length / 3));
+}
+
 function submitToPty(
   ptyId: string,
   text: string,
@@ -157,7 +163,11 @@ function submitToPty(
     // immune (the prev.catch above absorbs it for the next writer).
     const wrote = await window.cth.writePty(ptyId, payload);
     if (!wrote?.ok) throw new Error(wrote?.error ?? `pty write failed: ${ptyId}`);
-    await new Promise((r) => setTimeout(r, 140));
+    // Give the TUI time to take the text in before Enter. A long paste (the
+    // boot prompt) or a slash command (its autocomplete opens) takes longer,
+    // most of all on Windows, and an Enter that arrives early is lost: the
+    // text sat in the input until someone pressed Enter by hand.
+    await new Promise((r) => setTimeout(r, preEnterDelayMs(text)));
     const submitted = await window.cth.writePty(ptyId, '\r');
     if (!submitted?.ok) throw new Error(submitted?.error ?? `pty write failed: ${ptyId}`);
     await new Promise((r) => setTimeout(r, settleMs));

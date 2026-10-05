@@ -470,7 +470,10 @@
     "openIdeAria": "Open the IDE",
     "remoteControl": "remote",
     "remoteControlTitle": "Remote Control: reach this session from claude.ai or the Claude app on your phone. Claude asks you to confirm in the terminal.",
-    "remoteControlAria": "Turn on Remote Control for the orchestrator"
+    "remoteControlAria": "Turn on Remote Control for the orchestrator",
+    "remoteControlOnTitle": "Remote Control is on. Click to open this session ({{url}}); it is also in the Claude app on your phone.",
+    "remoteControlFailedTitle": "Remote Control is off: {{reason}}. Click to try again.",
+    "remoteControlOnLabel": "remote on"
   },
   "addAgent": {
     "title": "ADD AGENT",

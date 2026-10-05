@@ -87,6 +87,7 @@ const TABS: { key: CCTab; labelKey: string; icon: Parameters<typeof Icon>[0]['na
  *  cols/rows and corrupt the display. */
 export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent; fullscreen?: boolean }) {
   const { t } = useTranslation();
+  const rc = useStore((s) => (agent.ptyId ? s.remoteControl[agent.ptyId] : undefined));
   const [tab, setTab] = useState<CCTab>('terminal');
   // The trigger-history ledger has nothing to say until an outside party can
   // reach us, so its tab appears only once an org key or a webhook exists. This
@@ -212,16 +213,22 @@ export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent
           {/* Remote Control on demand (it used to be sent at every boot, and
               Claude stops to ask for confirmation). Only engines that have it. */}
           {remoteControlCommandForProvider(inferAgentProvider(agent.command, agent.provider), agent.name) && (
-            <PixelButton variant="secondary" size="sm" onClick={() => {
-              void enableRemoteControl(inferAgentProvider(agent.command, agent.provider), agent.name);
+            <PixelButton variant={rc?.state === 'on' ? 'primary' : 'secondary'} size="sm" onClick={() => {
+              // On: open the session (sending the command again would open
+              // Claude's own Remote Control menu in the terminal). Off: turn it on.
+              if (rc?.state === 'on') void window.cth.openExternal(rc.url);
+              else void enableRemoteControl(inferAgentProvider(agent.command, agent.provider), agent.name);
             }}>
               <span
                 className="cth-tip cth-tip-wrap"
-                data-tip={t('commandCenter.remoteControlTitle')}
+                data-tip={rc?.state === 'on' ? t('commandCenter.remoteControlOnTitle', { url: rc.url })
+                  : rc?.state === 'off' && rc.reason ? t('commandCenter.remoteControlFailedTitle', { reason: rc.reason })
+                  : t('commandCenter.remoteControlTitle')}
                 aria-label={t('commandCenter.remoteControlAria')}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
               >
-                <Icon name="cloud" /> {t('commandCenter.remoteControl')}
+                <Icon name="cloud" /> {rc?.state === 'on' ? t('commandCenter.remoteControlOnLabel') : t('commandCenter.remoteControl')}
+                <span aria-hidden="true" style={{ width: 6, height: 6, background: rc?.state === 'on' ? 'var(--cth-mint)' : rc?.state === 'off' && rc.reason ? 'var(--cth-coral)' : 'var(--cth-ink-300)' }} />
               </span>
             </PixelButton>
           )}
