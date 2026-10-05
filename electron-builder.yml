@@ -139,6 +139,14 @@ dmg:
 # ---- Windows ----
 win:
   icon: build/icon.ico
+  # The extra uninstaller that does not run the NSIS one (blocked by endpoint
+  # security such as Cortex XDR on managed laptops). Shipped next to the app
+  # and offered in the Start Menu by build/installer.nsh.
+  extraResources:
+    - from: tools/windows/uninstall-scranton-branch.cmd
+      to: uninstall-scranton-branch.cmd
+    - from: tools/windows/uninstall-scranton-branch.ps1
+      to: uninstall-scranton-branch.ps1
   target:
     - target: nsis
       arch: [x64]
@@ -153,6 +161,7 @@ win:
 # strings electron-builder's templates leave untranslated (e.g. Korean
 # multi-user titles, falling back to English), so warnings are not fatal.
 nsis:
+  include: build/installer.nsh
   warningsAsErrors: false
   oneClick: false
   perMachine: false

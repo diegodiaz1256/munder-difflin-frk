@@ -78,6 +78,7 @@ foreach ($e in $entries) {
 # 5. Shortcuts.
 $links = @(
   (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$name.lnk"),
+  (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Uninstall $name (without uninstaller).lnk"),
   (Join-Path ([Environment]::GetFolderPath('Desktop')) "$name.lnk"),
   (Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\$name.lnk"),
   (Join-Path $env:PUBLIC "Desktop\$name.lnk")
