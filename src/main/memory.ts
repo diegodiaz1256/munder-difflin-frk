@@ -507,6 +507,20 @@ export class MemoryManager {
         this.lastMined.set(id, mtime);
         await this.mineAgent(agentDir, id); // one writer at a time
       }
+      // The shared deliverables (research/): most of what the office learns
+      // lands there, not in memory.md, so search by meaning has to see it.
+      const research = join(home, 'hive', 'research');
+      let newest = 0;
+      try {
+        for (const f of readdirSync(research)) {
+          if (!/\.(md|txt)$/i.test(f)) continue;
+          try { newest = Math.max(newest, statSync(join(research, f)).mtimeMs); } catch { /* gone */ }
+        }
+      } catch { /* no research yet */ }
+      if (newest && this.lastMined.get('research') !== newest) {
+        this.lastMined.set('research', newest);
+        await this.mineAgent(research, 'research');
+      }
     } finally {
       this.mining = false;
     }

@@ -855,6 +855,8 @@ const api = {
   hiveTaskKeys: (): Promise<{ prefix: string; keys: Record<string, number> }> => ipcRenderer.invoke('hive:taskKeys'),
   hiveLog: (n?: number): Promise<unknown[]> => ipcRenderer.invoke('hive:log', n ?? 200),
   hiveMemory: (id: string): Promise<string> => ipcRenderer.invoke('hive:memory', id),
+  /** Agents' memory.md + research/ deliverables, for the memory graph. */
+  hiveMemoryCorpus: (): Promise<Array<{ id: string; kind: 'agent' | 'doc'; label: string; agentId?: string; text: string }>> => ipcRenderer.invoke('hive:memoryCorpus'),
   hiveInbox: (id: string): Promise<HiveMessage[]> => ipcRenderer.invoke('hive:inbox', id),
   /** Voice read-layer: recent message CONTENT (inbox/outbox bodies), REDACTED in
    *  main. Pass { id } for one message, { agentId } to scope to one mailbox, or

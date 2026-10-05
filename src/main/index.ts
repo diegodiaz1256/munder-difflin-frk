@@ -4181,6 +4181,33 @@ ipcMain.handle('hive:board', () => hive.board());
 ipcMain.handle('hive:tasks', () => hive.tasks());
 ipcMain.handle('hive:log', (_evt, n: unknown) => hive.logTail(typeof n === 'number' ? n : 200));
 ipcMain.handle('hive:memory', (_evt, id: unknown) => (typeof id === 'string' ? hive.memory(id) : ''));
+// The memory graph's source (shared/memoryGraph.ts): every agent's memory.md
+// and the research/ deliverables. Read asynchronously and capped: on a WSL
+// floor each file is a slow read over \\wsl.localhost.
+ipcMain.handle('hive:memoryCorpus', async () => {
+  const root = hive.root();
+  if (!root) return [];
+  const { readFile, readdir } = await import('node:fs/promises');
+  const PER_FILE = 64 * 1024;
+  const out: Array<{ id: string; kind: 'agent' | 'doc'; label: string; agentId?: string; text: string }> = [];
+  const reg = hive.registry();
+  await Promise.all(Object.values(reg.agents ?? {}).map(async (a) => {
+    try {
+      const text = await readFile(join(root, 'agents', a.id, 'memory.md'), 'utf8');
+      out.push({ id: `agent:${a.id}`, kind: 'agent', label: a.name, agentId: a.id, text: text.slice(0, PER_FILE) });
+    } catch { /* no memory yet */ }
+  }));
+  try {
+    const files = (await readdir(join(root, 'research'))).filter((f) => /\.(md|txt)$/i.test(f)).slice(0, 40);
+    await Promise.all(files.map(async (f) => {
+      try {
+        const text = await readFile(join(root, 'research', f), 'utf8');
+        out.push({ id: `doc:research/${f}`, kind: 'doc', label: f, text: text.slice(0, PER_FILE) });
+      } catch { /* gone */ }
+    }));
+  } catch { /* no research yet */ }
+  return out.sort((x, y) => x.id.localeCompare(y.id));
+});
 ipcMain.handle('hive:inbox', (_evt, id: unknown) => (typeof id === 'string' ? hive.inbox(id) : []));
 // Voice read-layer: recent message CONTENT (inbox/outbox bodies), REDACTED
 // main-side by hive.voiceMessages(). The renderer/voice layer never sees a raw
