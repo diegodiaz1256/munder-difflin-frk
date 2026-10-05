@@ -20,6 +20,7 @@ import { initReactI18next } from 'react-i18next';
 import { DEFAULT_GOD_NAME } from '@shared/godIdentity';
 import en from './locales/en.json';
 import zhCN from './locales/zh-CN.json';
+import es from './locales/es.json';
 import ar from './locales/ar.json';
 
 /**
@@ -34,6 +35,7 @@ import ar from './locales/ar.json';
  */
 export const LANGUAGES = [
   { code: 'en', label: 'English', dir: 'ltr' },
+  { code: 'es', label: 'Español', dir: 'ltr' },
   { code: 'zh-CN', label: '简体中文', dir: 'ltr' },
   { code: 'ar', label: 'العربية', dir: 'rtl' }
 ] as const;
@@ -109,12 +111,13 @@ void i18n
   .init({
     resources: {
       en: { translation: en },
+      es: { translation: es },
       'zh-CN': { translation: zhCN },
       ar: { translation: ar }
     },
     lng: detectLanguage(),
     fallbackLng: 'en',
-    supportedLngs: ['en', 'zh-CN', 'ar'],
+    supportedLngs: ['en', 'es', 'zh-CN', 'ar'],
     // Resources are bundled inline, so nothing ever suspends — the string is
     // there at init time. Keeping this false lets every component call
     // useTranslation() without wrapping the tree in <Suspense>.
