@@ -1,12 +1,12 @@
 ; Extra Start Menu entry: uninstall WITHOUT the NSIS uninstaller, for machines
-; whose endpoint security (Cortex XDR and similar) blocks it. The regular
+; whose endpoint security blocks it. The regular
 ; "Uninstall Scranton Branch" stays as it is; this one runs
 ; resources\uninstall-scranton-branch.cmd (Windows' own tools only).
 ;
 ; Upgrades: do NOT run the previous version's uninstaller. electron-builder
 ; copies it to %TEMP% as old-uninstaller.exe and runs it before installing,
-; and endpoint security (Cortex XDR…) blocks that unsigned program, so every
-; upgrade failed on managed laptops. It only runs when the old Apps & features
+; and endpoint security can block that unsigned program, so every
+; upgrade could fail where it does. It only runs when the old Apps & features
 ; entry names an UninstallString, so drop that value first: the new version is
 ; installed over the old one (same folder), and its own entry is written anew
 ; at the end of the install.

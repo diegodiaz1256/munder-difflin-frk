@@ -140,7 +140,7 @@ dmg:
 win:
   icon: build/icon.ico
   # The extra uninstaller that does not run the NSIS one (blocked by endpoint
-  # security such as Cortex XDR on managed laptops). Shipped next to the app
+  # security software). Shipped next to the app
   # and offered in the Start Menu by build/installer.nsh.
   extraResources:
     - from: tools/windows/uninstall-scranton-branch.cmd
