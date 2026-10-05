@@ -24,7 +24,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { connect, type Socket } from 'node:net';
 import { createInterface } from 'node:readline';
-import { wslCommand } from './wsl';
+import { describeWslError, wslCommand } from './wsl';
 
 /** Where a listener inside WSL leads on Windows: a TCP port or a named pipe. */
 export type BridgeTarget = { port: number } | { path: string };
@@ -86,15 +86,26 @@ export class WslBridge {
       const p = spawn(inv.file, inv.args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
       this.proc = p;
       let settled = false;
-      const timer = setTimeout(() => { if (!settled) { settled = true; reject(new Error(`WSL bridge for ${this.distro} did not start`)); } }, 30_000);
-      p.stderr?.on('data', (d) => this.log(`[wsl-bridge ${this.distro}] ${String(d).trim()}`));
+      const timer = setTimeout(() => { if (!settled) { settled = true; reject(new Error(`${describeWslError('timed out', this.distro)} (the bridge into ${this.distro} did not start in 30s)`)); } }, 30_000);
+      let errTail = '';
+      p.stderr?.on('data', (d) => {
+        errTail = (errTail + String(d)).slice(-600);
+        this.log(`[wsl-bridge ${this.distro}] ${String(d).trim()}`);
+      });
+      // wsl.exe itself could not start (missing, or blocked by security software).
+      p.on('error', (e) => {
+        this.log(`[wsl-bridge ${this.distro}] spawn failed: ${e.message}`);
+        this.proc = null;
+        this.ready = null;
+        if (!settled) { settled = true; clearTimeout(timer); reject(new Error(describeWslError(e, this.distro))); }
+      });
       p.on('exit', (code) => {
         this.log(`[wsl-bridge ${this.distro}] exited (${code})`);
         for (const s of this.socks.values()) s.destroy();
         this.socks.clear();
         this.proc = null;
         this.ready = null; // next start() launches a fresh one
-        if (!settled) { settled = true; clearTimeout(timer); reject(new Error(`WSL bridge for ${this.distro} exited (${code}); is node installed in the distro?`)); }
+        if (!settled) { settled = true; clearTimeout(timer); reject(new Error(`the WSL bridge into ${this.distro} stopped (exit ${code}). ${errTail.trim() ? describeWslError(errTail, this.distro) : 'It ended without a message: security software may have stopped it, or node is missing inside the distro.'}`)); }
       });
       createInterface({ input: p.stdout! }).on('line', (line) => {
         let m: { t: string; c?: number; n?: string; b?: string; ports?: BridgePorts };

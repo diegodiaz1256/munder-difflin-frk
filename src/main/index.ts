@@ -72,7 +72,7 @@ import * as integrations from './integrations';
 import { applyMissionRequest, type MissionLike } from '../shared/missionRequests';
 import { cleanCustomBundles } from '../shared/roleBundles';
 import { Factories } from './factories';
-import { createWslOffice, listDistros, mirroredNetworking, parseWslPath, probeInDistro, WSL_INSTALL } from './wsl';
+import { createWslOffice, describeWslError, listDistros, mirroredNetworking, parseWslPath, probeInDistro, WSL_INSTALL } from './wsl';
 import { WslBridge } from './wslBridge';
 import { McpServers } from './mcpServers';
 import { EnvVault, fingerprintOf } from './envVault';
@@ -3431,7 +3431,8 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
       if (typeof ports.hooks === 'number') opts.env = { ...(opts.env ?? {}), HIVE_SOCK: `tcp://127.0.0.1:${ports.hooks}` };
       for (const [name, v] of Object.entries(ports)) if (typeof v === 'string' && v !== 'direct') console.warn(`[wsl-bridge] ${name}: ${v}`);
     } catch (e) {
-      return { ok: false, error: `could not reach WSL (${wslLoc.distro}): ${e instanceof Error ? e.message : String(e)}` };
+      console.error('[wsl-bridge] start failed:', e);
+      return { ok: false, error: `Could not start the agent in WSL (${wslLoc.distro}): ${e instanceof Error ? e.message : describeWslError(e, wslLoc.distro)}` };
     }
   }
   const res = ptyManager.spawn(opts, owner);
@@ -4181,14 +4182,15 @@ ipcMain.handle('tools:status', async (): Promise<ToolStatus[]> => {
   const wslLoc = win ? parseWslPath(readConfig().harnessHome) : null;
   if (wslLoc) {
     const specs = toolCatalog();
-    const found = await probeInDistro(wslLoc.distro, specs.map((s) => s.bin).filter((b): b is string => !!b));
+    let probeError: string | null = null;
+    const found = await probeInDistro(wslLoc.distro, specs.map((s) => s.bin).filter((b): b is string => !!b), (m) => { probeError = m; });
     return specs.map((spec): ToolStatus => {
       if (spec.id === 'mempalace') {
         return { ...spec, installCommand: spec.install.win32, found: !!mem?.available, path: mem?.bin ?? null };
       }
       const installCommand = WSL_INSTALL[spec.id] ?? spec.install.posix.replace(/^xcode-select --install\s+# macOS · or: /, '');
       const path = spec.bin ? found[spec.bin] ?? null : null;
-      return { ...spec, installCommand, found: !!path, path, detail: `inside WSL (${wslLoc.distro})` };
+      return { ...spec, installCommand, found: !!path, path, detail: probeError ? `could not check inside WSL (${wslLoc.distro}): ${probeError}` : `inside WSL (${wslLoc.distro})` };
     });
   }
   return toolCatalog().map((spec): ToolStatus => {

@@ -50,3 +50,15 @@ test('wsl -l -q output (UTF-16LE with a BOM) parses to distro names', () => {
   assert.deepEqual(parseDistroList(raw), ['Ubuntu', 'Debian']);
   assert.deepEqual(parseDistroList('Ubuntu-24.04\n'), ['Ubuntu-24.04']);
 });
+
+test('wsl.exe failures become sentences a person can act on', () => {
+  const { describeWslError } = loadTs('src/main/wsl.ts');
+  assert.match(describeWslError(Object.assign(new Error('spawn wsl.exe ENOENT'), { code: 'ENOENT' })), /not installed or is disabled/);
+  assert.match(describeWslError(Object.assign(new Error('spawn wsl.exe EPERM'), { code: 'EPERM' })), /security software/i);
+  assert.match(describeWslError('timed out', 'Ubuntu'), /Ubuntu.*too long/);
+  const utf16 = Buffer.from('﻿There is no distribution with the supplied name.\r\n', 'utf16le');
+  assert.match(describeWslError(utf16, 'Foo'), /was not found/);
+  assert.match(describeWslError('Error code: Wsl/Service/CreateInstance/HCS_E_HYPERV_NOT_INSTALLED'), /virtualization/i);
+  assert.equal(describeWslError('boom\nsecond'), 'boom');
+  assert.ok(describeWslError('').length > 0);
+});
