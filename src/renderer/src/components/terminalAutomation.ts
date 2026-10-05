@@ -121,3 +121,31 @@ export function canAutomateTerminal(
 ): boolean {
   return terminalAutomationBlock(state, now) === null;
 }
+
+/** One screen row of a logical line: its text (indent already removed for
+ *  a continuation row), its 1-based buffer row, and the column its text starts at. */
+export interface LineRow { text: string; row: number; x0: number }
+
+/** Does `cur` continue `prev`? The terminal's own soft wrap, or a TUI's hard
+ *  wrap: Claude Code breaks long lines itself, ending a full row and indenting
+ *  the next, so a long path printed by an agent arrives as several lines. */
+export function continuesRow(prev: string, cur: string, softWrapped: boolean, cols: number): boolean {
+  return softWrapped || (prev.length >= cols - 1 && /^\s+\S/.test(cur));
+}
+
+/** Where a span of the joined text sits on screen, as an xterm link range
+ *  (1-based columns, inclusive end). Matched one row at a time, a wrapped
+ *  path was never a link. */
+export function wrappedSpanRange(rows: LineRow[], start: number, length: number): {
+  start: { x: number; y: number }; end: { x: number; y: number };
+} {
+  const at = (i: number) => {
+    let off = 0;
+    for (const r of rows) {
+      if (i < off + r.text.length || r === rows[rows.length - 1]) return { x: r.x0 + (i - off) + 1, y: r.row };
+      off += r.text.length;
+    }
+    return { x: i + 1, y: rows[0]?.row ?? 1 };
+  };
+  return { start: at(start), end: at(start + Math.max(1, length) - 1) };
+}
