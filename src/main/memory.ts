@@ -14,7 +14,7 @@
  * Runs in the Electron main process.
  */
 import { existsSync, statSync, readdirSync, readFileSync, writeFileSync, rmSync, mkdtempSync, mkdirSync } from 'node:fs';
-import { join, sep as pathSep } from 'node:path';
+import { dirname, join, sep as pathSep } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
 import { ensureKilled } from './procKill';
@@ -266,6 +266,34 @@ export class MemoryManager {
   }
 
   /** Env merged into each agent's spawn so its `mempalace` CLI hits the shared palace. */
+  /**
+   * The palace as an MCP server for agents (munder-memory): recall becomes a
+   * tool call, which agents reach for, instead of a shell command they rarely
+   * remember to run. Read-only (the app is the palace's only writer) and
+   * offline like every other mempalace run. Null until memory is on and its
+   * model is on disk.
+   */
+  mcpServer(): { command: string; args: string[]; env: Record<string, string> } | null {
+    if (!this.active() || !this.modelReady()) return null;
+    const bin = this.bin();
+    const palace = this.palacePath();
+    if (!bin || !palace) return null;
+    const w = this.wsl();
+    let command: string;
+    if (w) {
+      command = bin.replace(/mempalace$/, 'mempalace-mcp');
+    } else {
+      command = join(dirname(bin), process.platform === 'win32' ? 'mempalace-mcp.exe' : 'mempalace-mcp');
+      if (!existsSync(command)) return null;
+    }
+    const pal = w ? (toLinuxPath(palace, w.distro) ?? palace) : palace;
+    return {
+      command,
+      args: ['--palace', pal, '--read-only'],
+      env: { MEMPALACE_EMBEDDING_MODEL: this.model(), ...(MEMPALACE_DEVICE ? { MEMPALACE_EMBEDDING_DEVICE: MEMPALACE_DEVICE } : {}), ...OFFLINE_ENV }
+    };
+  }
+
   env(): Record<string, string> {
     const palace = this.palacePath();
     if (!this.active() || !palace) return {};
