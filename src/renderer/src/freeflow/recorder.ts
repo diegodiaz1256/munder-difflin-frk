@@ -19,6 +19,7 @@
  */
 import { useSyncExternalStore } from 'react';
 import { useStore } from '@/store/store';
+import { transcribeLocal } from './localWhisper';
 
 export type FreeflowStatus = 'idle' | 'recording' | 'transcribing';
 
@@ -155,13 +156,15 @@ async function finish(agentId: string): Promise<void> {
   }
   setState({ status: 'transcribing', error: null });
   try {
-    const buf = await blob.arrayBuffer();
-    const ext = type.includes('ogg') ? 'ogg' : 'webm';
-    const res = await window.cth.freeflowTranscribe({
-      audio: buf,
-      mimeType: type.split(';')[0],
-      filename: `dictation.${ext}`
-    });
+    // Local Whisper (offline) or Groq, as set in Settings → Voice.
+    const cfg = await window.cth.getConfig().catch(() => null);
+    const res = cfg?.freeflowEngine === 'local'
+      ? await transcribeLocal(blob, cfg.freeflowLocalModel ?? 'small')
+      : await window.cth.freeflowTranscribe({
+        audio: await blob.arrayBuffer(),
+        mimeType: type.split(';')[0],
+        filename: `dictation.${type.includes('ogg') ? 'ogg' : 'webm'}`
+      });
     if (res.ok && res.text) {
       deliverTranscript(agentId, res.text);
       setState({ status: 'idle', error: null });

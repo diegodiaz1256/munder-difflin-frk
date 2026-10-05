@@ -23,6 +23,29 @@ const defineMain = {
 // missing from out/main — which crashed the packaged app (#66) AND `npm run
 // dev` (#67). A writeBundle hook runs after the main build in BOTH dev and
 // build, so the sidecar is emitted from a single place for every path.
+/** ONNX Runtime's WASM files for local Whisper (renderer/src/freeflow), served
+ *  as `ort/<file>` next to the page. onnxruntime-web does not export them, so
+ *  they cannot be imported; transformers.js would otherwise fetch them from a
+ *  CDN, and dictation must work offline. */
+const ORT_FILES = ['ort-wasm-simd-threaded.asyncify.mjs', 'ort-wasm-simd-threaded.asyncify.wasm'];
+function ortWasmFiles() {
+  const dir = resolve(__dirname, 'node_modules/onnxruntime-web/dist');
+  return {
+    name: 'ort-wasm-files',
+    configureServer(server: { middlewares: { use: (fn: (req: { url?: string }, res: { setHeader: (k: string, v: string) => void; end: (b: Buffer) => void }, next: () => void) => void) => void } }) {
+      server.middlewares.use((req, res, next) => {
+        const f = ORT_FILES.find((x) => req.url === `/ort/${x}`);
+        if (!f) { next(); return; }
+        res.setHeader('Content-Type', f.endsWith('.wasm') ? 'application/wasm' : 'text/javascript');
+        res.end(readFileSync(resolve(dir, f)));
+      });
+    },
+    generateBundle(this: { emitFile: (f: { type: 'asset'; fileName: string; source: Buffer }) => void }) {
+      for (const f of ORT_FILES) this.emitFile({ type: 'asset', fileName: `ort/${f}`, source: readFileSync(resolve(dir, f)) });
+    }
+  };
+}
+
 function copyMainSidecars() {
   const ASSETS: Array<[string, string]> = [
     ['src/main/slack-trigger.cjs', 'out/main/slack-trigger.cjs'],
@@ -75,7 +98,8 @@ export default defineConfig({
         input: { index: resolve(__dirname, 'src/renderer/index.html') }
       }
     },
-    plugins: [react()],
+    plugins: [react(), ortWasmFiles()],
+    worker: { format: 'es' },
     resolve: {
       alias: {
         '@': resolve(__dirname, 'src/renderer/src'),

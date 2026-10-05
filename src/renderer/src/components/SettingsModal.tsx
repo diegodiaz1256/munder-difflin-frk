@@ -2,6 +2,7 @@ import { useState, useEffect, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { agentModels, type HarnessConfig } from '@/store/config';
 import { RoleModelsSettings } from './RoleModelsSettings';
+import { LocalWhisperSettings } from './LocalWhisperSettings';
 import { useStore } from '@/store/store';
 import {
   CLONE_NODE_BLURB,
@@ -528,6 +529,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
   // v0.3.4 fix: the config default is ON ('now on by default', 0.2.7) — seeding
   // with `?? false` displayed OFF while the feature was actually running.
   const [freeflowEnabled, setFreeflowEnabled] = useState(config.freeflowEnabled !== false);
+  const [ffEngine, setFfEngine] = useState<'groq' | 'local'>(config.freeflowEngine ?? 'groq');
   const [groqKey, setGroqKey] = useState(config.groqApiKey ?? '');
   const [freeflowModel, setFreeflowModel] = useState(config.freeflowModel ?? 'whisper-large-v3-turbo');
   const [showGroqKey, setShowGroqKey] = useState(false);
@@ -758,7 +760,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
       setFreeflowEnabledStore(enabled);
       // Mirror boolean key-presence so the voice button enables/disables live
       // without an app restart (presence only — never the key value).
-      setHasGroqKeyStore(!!groqKey.trim());
+      setHasGroqKeyStore(!!groqKey.trim() || ffEngine === 'local');
       setFreeflowNote('saved');
     } catch (e) {
       setFreeflowNote(e instanceof Error ? e.message : String(e));
@@ -1943,6 +1945,12 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                         </div>
 
                         {freeflowEnabled && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <LocalWhisperSettings engine={ffEngine} onEngine={setFfEngine} selectStyle={slackInputStyle} />
+                          </div>
+                        )}
+
+                        {freeflowEnabled && ffEngine === 'groq' && (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                             {/* Groq API key — stored in main config, used only there. */}
                             <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
