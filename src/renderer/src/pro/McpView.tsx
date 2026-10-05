@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import type { Agent } from '@/store/store';
 import type { McpFoundView, McpMineView, McpTransportView } from '../../../preload/index';
 import { StateBadge } from './data';
@@ -12,16 +14,14 @@ import { Guide, useGuide } from './Guide';
  * with a capability token, never the key.
  */
 
-const STEPS: Array<[string, string]> = [
-  ['Servers you already use', 'The app reads the MCP settings of your other tools (read-only) and lists their servers here. Import one and your agents get it too.'],
-  ['Keys stay out of reach', 'Those settings usually hold API keys in plain text. On import, anything that looks like a key is moved into the encrypted store and the server runs inside the app: agents talk to it through the app with a pass, and never see the key.'],
-  ['Servers without keys', 'They are handed to agents as they are, like the built-in ones.'],
-  ['Choose who gets what', 'A server reaches every agent unless you pick some. Switch it off to keep it without using it.']
-];
+/** The guide's steps, `pro.mcp.step<n>` / `pro.mcp.step<n>Body`. */
+const STEPS = (t: TFunction): Array<[string, string]> =>
+  [1, 2, 3, 4].map((n) => [t(`pro.mcp.step${n}`), t(`pro.mcp.step${n}Body`)]);
 
 const transportText = (t: McpTransportView) => (t.kind === 'stdio' ? [t.command, ...t.args].join(' ') : t.url);
 
 export function McpView({ roster }: { roster: Agent[] }) {
+  const { t } = useTranslation();
   const [mine, setMine] = useState<McpMineView[]>([]);
   const [found, setFound] = useState<McpFoundView[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +38,7 @@ export function McpView({ roster }: { roster: Agent[] }) {
   const doImport = async (f: McpFoundView) => {
     setError(null);
     const r = await window.cth.mcpImport(f.source, f.name);
-    if (!r.ok) setError(r.error ?? 'Not imported.');
+    if (!r.ok) setError(r.error ?? t('pro.mcp.notImported'));
     reload();
   };
 
@@ -46,25 +46,25 @@ export function McpView({ roster }: { roster: Agent[] }) {
     <div className="pro-page">
       <div className="pro-head">
         <h2>MCP</h2>
-        <span className="pro-sub">Tool servers for your agents — your own, and the ones your other tools already use.</span>
-        <div className="pro-head-end"><button className="pro-btn" onClick={toggleGuide}>{guideOpen ? 'Hide guide' : 'How it works'}</button></div>
+        <span className="pro-sub">{t('pro.mcp.sub')}</span>
+        <div className="pro-head-end"><button className="pro-btn" onClick={toggleGuide}>{guideOpen ? t('pro.conn.hideGuide') : t('pro.conn.howItWorks')}</button></div>
       </div>
-      {guideOpen && <Guide title="MCP servers" steps={STEPS} onClose={toggleGuide} />}
+      {guideOpen && <Guide title={t('pro.mcp.guideTitle')} steps={STEPS(t)} onClose={toggleGuide} />}
       {error && <div className="pro-card" style={{ borderColor: 'var(--cth-coral)' }}><span className="pro-text">{error}</span></div>}
 
-      <h3 style={{ margin: '6px 0 0', fontSize: 14 }}>Yours</h3>
+      <h3 style={{ margin: '6px 0 0', fontSize: 14 }}>{t('pro.mcp.yours')}</h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {mine.length === 0 && !adding && <p className="pro-sub" style={{ margin: 0 }}>None yet. Import one below or add your own. Built-in servers and keyed services are in Capabilities and Connections.</p>}
+        {mine.length === 0 && !adding && <p className="pro-sub" style={{ margin: 0 }}>{t('pro.mcp.noneYet')}</p>}
         {mine.slice().sort((a, b) => a.name.localeCompare(b.name)).map((s) => (
           <MineCard key={s.id} s={s} agents={agents} onChanged={reload} onError={setError} />
         ))}
         {adding
           ? <ServerForm onDone={() => { setAdding(false); reload(); }} onCancel={() => setAdding(false)} onError={setError} />
-          : <button className="pro-card" onClick={() => setAdding(true)} style={{ borderStyle: 'dashed', cursor: 'pointer', textAlign: 'center', flexShrink: 0 }}><span className="pro-sub">+ Add a server</span></button>}
+          : <button className="pro-card" onClick={() => setAdding(true)} style={{ borderStyle: 'dashed', cursor: 'pointer', textAlign: 'center', flexShrink: 0 }}><span className="pro-sub">+ {t('pro.mcp.addServer')}</span></button>}
       </div>
 
-      <h3 style={{ margin: '6px 0 0', fontSize: 14 }}>Found on this machine</h3>
-      {found.length === 0 && <p className="pro-sub" style={{ margin: 0 }}>No MCP servers in Claude Code, Claude Desktop, Cursor, Codex, Gemini CLI / Antigravity or Windsurf settings.</p>}
+      <h3 style={{ margin: '6px 0 0', fontSize: 14 }}>{t('pro.mcp.found')}</h3>
+      {found.length === 0 && <p className="pro-sub" style={{ margin: 0 }}>{t('pro.mcp.noneFound')}</p>}
       {[...bySource.entries()].map(([source, list]) => (
         <section key={source} className="pro-card" style={{ display: 'flex', flexDirection: 'column', padding: 0, flexShrink: 0 }}>
           <div className="pro-row" style={{ padding: '10px 14px', borderBottom: '1px solid var(--pro-line)' }}>
@@ -79,26 +79,28 @@ export function McpView({ roster }: { roster: Agent[] }) {
 }
 
 function FoundRow({ f, onImport }: { f: McpFoundView; onImport: () => void }) {
+  const { t } = useTranslation();
   const secrets = f.env.filter((e) => e.secret).map((e) => e.name);
   const needsHeader = f.transport.kind === 'http' && f.headerNames.length > 0;
   return (
     <div className="pro-row" style={{ padding: '10px 14px', borderBottom: '1px solid var(--pro-line)', gap: 12 }}>
       <span style={{ fontSize: 13, fontWeight: 600, minWidth: 120 }}>{f.name}</span>
-      <StateBadge label={f.transport.kind === 'stdio' ? 'Local' : 'Remote'} tone={f.transport.kind === 'stdio' ? 'grey' : 'blue'} />
+      <StateBadge label={f.transport.kind === 'stdio' ? t('pro.mcp.local') : t('pro.mcp.remote')} tone={f.transport.kind === 'stdio' ? 'grey' : 'blue'} />
       <span className="pro-mono" style={{ fontSize: 12, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--cth-ink-700)' }}>{transportText(f.transport)}</span>
-      {secrets.length > 0 && <span className="pro-sub" style={{ fontSize: 11 }} title={secrets.join(', ')}>{secrets.length === 1 ? '1 key' : `${secrets.length} keys`} → encrypted</span>}
+      {secrets.length > 0 && <span className="pro-sub" style={{ fontSize: 11 }} title={secrets.join(', ')}>{t(secrets.length === 1 ? 'pro.mcp.keysOne' : 'pro.mcp.keysMany', { count: secrets.length })}</span>}
       {f.imported
-        ? <StateBadge label="Imported" tone="green" />
-        : <button className="pro-btn" disabled={needsHeader} title={needsHeader ? 'Needs a key in a header — not supported yet' : undefined} onClick={onImport}>Import</button>}
+        ? <StateBadge label={t('pro.mcp.imported')} tone="green" />
+        : <button className="pro-btn" disabled={needsHeader} title={needsHeader ? t('pro.mcp.headerKey') : undefined} onClick={onImport}>{t('pro.mcp.import')}</button>}
     </div>
   );
 }
 
 function MineCard({ s, agents, onChanged, onError }: { s: McpMineView; agents: Agent[]; onChanged: () => void; onError: (e: string | null) => void }) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const missing = s.secretEnv.filter((e) => !s.secretsStored[e]);
   const remove = async () => {
-    if (!(await window.cth.confirm(`Remove ${s.name}?`, { detail: s.secretEnv.length ? 'Its stored keys are erased.' : undefined, ok: 'Remove' }))) return;
+    if (!(await window.cth.confirm(t('pro.mcp.removeConfirm', { name: s.name }), { detail: s.secretEnv.length ? t('pro.mcp.removeDetail') : undefined, ok: t('pro.conn.remove') }))) return;
     await window.cth.mcpRemove(s.id);
     onChanged();
   };
@@ -113,34 +115,34 @@ function MineCard({ s, agents, onChanged, onError }: { s: McpMineView; agents: A
     <section className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0, opacity: s.enabled ? 1 : 0.65 }}>
       <div className="pro-row" style={{ gap: 8 }}>
         <strong style={{ fontSize: 13 }}>{s.name}</strong>
-        <StateBadge label={s.transport.kind === 'stdio' ? 'Local' : 'Remote'} tone={s.transport.kind === 'stdio' ? 'grey' : 'blue'} />
-        {s.secretEnv.length > 0 && <StateBadge label="Through the app" tone="gold" />}
-        {s.source && <span className="pro-sub" style={{ fontSize: 11 }}>from {s.source}</span>}
-        <div className="pro-switch" role="group" aria-label="On or off" style={{ marginInlineStart: 'auto' }}>
-          <button aria-pressed={s.enabled} onClick={() => void window.cth.mcpSetEnabled(s.id, true).then(onChanged)}>On</button>
-          <button aria-pressed={!s.enabled} onClick={() => void window.cth.mcpSetEnabled(s.id, false).then(onChanged)}>Off</button>
+        <StateBadge label={s.transport.kind === 'stdio' ? t('pro.mcp.local') : t('pro.mcp.remote')} tone={s.transport.kind === 'stdio' ? 'grey' : 'blue'} />
+        {s.secretEnv.length > 0 && <StateBadge label={t('pro.mcp.throughApp')} tone="gold" />}
+        {s.source && <span className="pro-sub" style={{ fontSize: 11 }}>{t('pro.mcp.from', { source: s.source })}</span>}
+        <div className="pro-switch" role="group" aria-label={t('pro.mcp.onOff')} style={{ marginInlineStart: 'auto' }}>
+          <button aria-pressed={s.enabled} onClick={() => void window.cth.mcpSetEnabled(s.id, true).then(onChanged)}>{t('pro.conn.on')}</button>
+          <button aria-pressed={!s.enabled} onClick={() => void window.cth.mcpSetEnabled(s.id, false).then(onChanged)}>{t('pro.conn.off')}</button>
         </div>
-        <button className="pro-btn" onClick={() => setEditing(true)}>Edit</button>
-        <button className="pro-btn" onClick={() => void remove()}>Remove</button>
+        <button className="pro-btn" onClick={() => setEditing(true)}>{t('pro.caps.edit')}</button>
+        <button className="pro-btn" onClick={() => void remove()}>{t('pro.conn.remove')}</button>
       </div>
       <code className="pro-mono" style={{ fontSize: 12, overflowWrap: 'anywhere' }}>{transportText(s.transport)}</code>
       {(s.secretEnv.length > 0 || Object.keys(s.env).length > 0) && (
         <div className="pro-row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          {s.secretEnv.map((e) => <span key={e} className="pro-chip pro-mono" style={{ fontSize: 11 }}>{e} {s.secretsStored[e] ? '•••• stored' : 'missing'}</span>)}
+          {s.secretEnv.map((e) => <span key={e} className="pro-chip pro-mono" style={{ fontSize: 11 }}>{e} {s.secretsStored[e] ? `•••• ${t('pro.env.stored')}` : t('pro.mcp.missing')}</span>)}
           {Object.entries(s.env).map(([k, v]) => <span key={k} className="pro-chip pro-mono" style={{ fontSize: 11 }}>{k}={v}</span>)}
         </div>
       )}
-      {missing.length > 0 && <span className="pro-sub" style={{ fontSize: 11, color: 'var(--cth-coral)' }}>Missing {missing.join(', ')} — agents won’t get this server until you add it (Edit).</span>}
+      {missing.length > 0 && <span className="pro-sub" style={{ fontSize: 11, color: 'var(--cth-coral)' }}>{t('pro.mcp.missingHint', { names: missing.join(', ') })}</span>}
       {agents.length > 0 && (
         <div className="pro-row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          <span className="pro-sub" style={{ fontSize: 12 }}>For:</span>
-          <button className={`pro-chip${!s.agents?.length ? ' pro-chip-on' : ''}`} onClick={() => void window.cth.mcpSetAgents(s.id, null).then(onChanged)}>All agents</button>
+          <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.env.for')}</span>
+          <button className={`pro-chip${!s.agents?.length ? ' pro-chip-on' : ''}`} onClick={() => void window.cth.mcpSetAgents(s.id, null).then(onChanged)}>{t('pro.env.allAgents')}</button>
           {agents.map((a) => (
             <button key={a.id} className={`pro-chip${s.agents?.includes(a.id) ? ' pro-chip-on' : ''}`} onClick={() => void toggleAgent(a.id)}>{a.name}</button>
           ))}
         </div>
       )}
-      <span className="pro-sub" style={{ fontSize: 11 }}>Agents pick changes up the next time they start.</span>
+      <span className="pro-sub" style={{ fontSize: 11 }}>{t('pro.mcp.nextStart')}</span>
     </section>
   );
 }
@@ -148,6 +150,7 @@ function MineCard({ s, agents, onChanged, onError }: { s: McpMineView; agents: A
 type EnvRow = { name: string; value: string; secret: boolean };
 
 function ServerForm({ initial, onDone, onCancel, onError }: { initial?: McpMineView; onDone: () => void; onCancel: () => void; onError: (e: string | null) => void }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(initial?.name ?? '');
   const [kind, setKind] = useState<McpTransportView['kind']>(initial?.transport.kind ?? 'stdio');
   const [command, setCommand] = useState(initial?.transport.kind === 'stdio' ? [initial.transport.command, ...initial.transport.args].join(' ') : '');
@@ -163,17 +166,17 @@ function ServerForm({ initial, onDone, onCancel, onError }: { initial?: McpMineV
     const transport: McpTransportView = kind === 'stdio' ? { kind, command: parts[0] ?? '', args: parts.slice(1) } : { kind, url: url.trim() };
     const rows = env.filter((r) => r.name.trim());
     const r = await window.cth.mcpSave({ id: initial?.id, name, transport, env: Object.fromEntries(rows.map((x) => [x.name.trim(), x.value])) }, rows.filter((x) => x.secret).map((x) => x.name.trim()));
-    if (!r.ok) { onError(r.error ?? 'Not saved.'); return; }
+    if (!r.ok) { onError(r.error ?? t('pro.env.notSaved')); return; }
     onDone();
   };
   const setRow = (i: number, patch: Partial<EnvRow>) => setEnv((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   return (
     <section className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
       <div className="pro-row" style={{ gap: 8, flexWrap: 'wrap' }}>
-        <input className="pro-input" placeholder="Name, e.g. github" value={name} disabled={!!initial} onChange={(e) => setName(e.target.value)} style={{ width: 200 }} />
-        <div className="pro-switch" role="group" aria-label="Kind">
-          <button aria-pressed={kind === 'stdio'} onClick={() => setKind('stdio')}>Local command</button>
-          <button aria-pressed={kind === 'http'} onClick={() => setKind('http')}>Remote address</button>
+        <input className="pro-input" placeholder={t('pro.mcp.namePh')} value={name} disabled={!!initial} onChange={(e) => setName(e.target.value)} style={{ width: 200 }} />
+        <div className="pro-switch" role="group" aria-label={t('pro.env.kind')}>
+          <button aria-pressed={kind === 'stdio'} onClick={() => setKind('stdio')}>{t('pro.mcp.localCommand')}</button>
+          <button aria-pressed={kind === 'http'} onClick={() => setKind('http')}>{t('pro.mcp.remoteAddress')}</button>
         </div>
       </div>
       {kind === 'stdio'
@@ -181,25 +184,25 @@ function ServerForm({ initial, onDone, onCancel, onError }: { initial?: McpMineV
         : <input className="pro-input pro-mono" placeholder="https://example.com/mcp" value={url} onChange={(e) => setUrl(e.target.value)} />}
       {kind === 'stdio' && (
         <>
-          <span className="pro-sub" style={{ fontSize: 12 }}>Environment</span>
+          <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.nav.environment')}</span>
           {env.map((r, i) => (
             <div key={i} className="pro-row" style={{ gap: 6 }}>
-              <input className="pro-input pro-mono" placeholder="NAME" value={r.name} onChange={(e) => setRow(i, { name: e.target.value.replace(/[^A-Za-z0-9_]/g, '_') })} style={{ width: 200 }} />
+              <input className="pro-input pro-mono" placeholder={t('pro.env.namePh')} value={r.name} onChange={(e) => setRow(i, { name: e.target.value.replace(/[^A-Za-z0-9_]/g, '_') })} style={{ width: 200 }} />
               <input className="pro-input pro-mono" type={r.secret ? 'password' : 'text'} autoComplete="off" style={{ flex: 1 }}
-                placeholder={r.secret ? (initial?.secretsStored[r.name] ? 'stored — paste a new value to replace it' : 'key') : 'value'}
+                placeholder={r.secret ? (initial?.secretsStored[r.name] ? t('pro.env.storedPh') : t('pro.mcp.keyPh')) : t('pro.env.valuePh')}
                 value={r.value} onChange={(e) => setRow(i, { value: e.target.value })} />
-              <button className={`pro-chip${r.secret ? ' pro-chip-on' : ''}`} onClick={() => setRow(i, { secret: !r.secret })}>Secret</button>
+              <button className={`pro-chip${r.secret ? ' pro-chip-on' : ''}`} onClick={() => setRow(i, { secret: !r.secret })}>{t('pro.env.kind_secret')}</button>
               <button className="pro-btn" onClick={() => setEnv((rows) => rows.filter((_, j) => j !== i))}>×</button>
             </div>
           ))}
-          <button className="pro-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setEnv((rows) => [...rows, { name: '', value: '', secret: true }])}>+ Variable</button>
-          <span className="pro-sub" style={{ fontSize: 11 }}>Secret values are encrypted on this machine, never shown again, and never reach an agent: the server runs inside the app.</span>
+          <button className="pro-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setEnv((rows) => [...rows, { name: '', value: '', secret: true }])}>+ {t('pro.mcp.variable')}</button>
+          <span className="pro-sub" style={{ fontSize: 11 }}>{t('pro.mcp.secretHint')}</span>
         </>
       )}
-      {kind === 'http' && <span className="pro-sub" style={{ fontSize: 11 }}>For a remote server that needs an API key, use Connections when it is listed there.</span>}
+      {kind === 'http' && <span className="pro-sub" style={{ fontSize: 11 }}>{t('pro.mcp.remoteHint')}</span>}
       <div className="pro-row" style={{ gap: 8 }}>
-        <button className="pro-btn pro-btn-primary" disabled={!name.trim() || (kind === 'stdio' ? !command.trim() : !url.trim())} onClick={() => void save()}>Save</button>
-        <button className="pro-btn" onClick={onCancel}>Cancel</button>
+        <button className="pro-btn pro-btn-primary" disabled={!name.trim() || (kind === 'stdio' ? !command.trim() : !url.trim())} onClick={() => void save()}>{t('common.save')}</button>
+        <button className="pro-btn" onClick={onCancel}>{t('common.cancel')}</button>
       </div>
     </section>
   );

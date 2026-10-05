@@ -1,4 +1,4 @@
-- **Español** en toda la app, y **memoria por proyecto** con listas.
+- **Spanish** across the app; **memory by project** and lists.
 - **Model and effort per role**; Web off really means no web.
 - Cards say **asks you** when a menu waits.
 - **Windows first run** installs Node and Claude.

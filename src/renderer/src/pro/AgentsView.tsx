@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { actionLabel } from '@/scene/office/actionLabel';
 import type { TFunction } from 'i18next';
 import type { HarnessConfig } from '@/store/config';
 import { useStore, type Agent } from '@/store/store';
@@ -201,7 +202,7 @@ function AgentTile({ agent, ticket, dir, asksYou, onOpen }: {
           <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ticket.title}</span>
         </button>
       ) : (
-        <p className="pro-text">{agent.action || agent.description || t('pro.agents.waitingForWork')}</p>
+        <p className="pro-text">{(agent.action && actionLabel(agent.action, t)) || agent.description || t('pro.agents.waitingForWork')}</p>
       )}
       <div>
         <div className="pro-sub" style={{ fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 4 }}>{t('pro.agents.terminal')}</div>
