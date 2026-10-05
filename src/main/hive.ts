@@ -46,6 +46,7 @@ import { expandTilde } from './fs';
 import { resolveGodName } from '../shared/godIdentity';
 import { assignTaskKeys, normalizeTaskKeyLedger, taskKeyPrefix } from '../shared/taskKeys';
 import { cleanServerList } from '../shared/roleBundles';
+import { memoryTemplate, parseMemory } from '../shared/memorySections';
 
 /** The subset of HarnessConfig the hive consumes for the default-MCP merge.
  *  Kept as a local shape so hive.ts never imports the foundation-owned config
@@ -942,7 +943,8 @@ export class HiveManager {
 
     const memory = join(dir, 'memory.md');
     if (!existsSync(memory)) {
-      writeFileSync(memory, `# Memory — ${meta.name} (${meta.id})\n\n_Append durable facts, decisions, and context below._\n`, 'utf8');
+      // Sections the Memory screen shows per project (shared/memorySections.ts).
+      writeFileSync(memory, memoryTemplate(meta.name, meta.id), 'utf8');
     }
     ensureMineIgnore(dir); // keep settings.json / cursor / messages out of mempalace's index
     const cursor = join(dir, 'cursor.json');
@@ -1915,7 +1917,7 @@ export class HiveManager {
       '',
       'HIVE PROTOCOL — follow it every task:',
       `1. At the START of a task, read ${inDir('memory.md')} and EVERY file in ${inDir('inbox')} (messages other agents sent you). After handling an inbox message, move its file into ${inDir('inbox', '.done')}.`,
-      `2. Record durable facts, decisions, and context by appending to ${inDir('memory.md')}.`,
+      `2. Record durable knowledge in ${inDir('memory.md')}, one dated bullet each, under the heading it belongs to: Decisions (what was chosen and why), Conventions (how things are done here), Known issues (what breaks and the workaround), Key files (\`path\` — what it is), Open questions; anything else under Log. Correct or remove a bullet when it stops being true: people read this per project, and stale facts mislead the next agent.`,
       `3. To ask another agent for something or share information, write ONE message JSON into ${inDir('outbox')} (schema in PROTOCOL.md). NEVER write into another agent's folder — the orchestrator delivers your outbox.`,
       '4. At the END of a task, append what you learned to memory.md so future-you remembers.',
       guardrailsLine,
@@ -2334,9 +2336,9 @@ export class HiveManager {
     const p = join(this.agentDir(id), 'memory.md');
     if (!existsSync(p)) return false;
     try {
-      // A fresh seed is ~90 chars (one header line + the prompt). Anything
-      // meaningfully longer means the agent appended durable facts.
-      return readFileSync(p, 'utf8').trim().length > 200;
+      // A fresh seed is headings only (the sectioned template is ~300 chars,
+      // so length no longer tells): any bullet or note means real memory.
+      return parseMemory(readFileSync(p, 'utf8')).length > 0;
     } catch { return false; }
   }
   inbox(id: string): HiveMessage[] {

@@ -4185,17 +4185,47 @@ ipcMain.handle('hive:memory', (_evt, id: unknown) => (typeof id === 'string' ? h
 // The memory graph's source (shared/memoryGraph.ts): every agent's memory.md
 // and the research/ deliverables. Read asynchronously and capped: on a WSL
 // floor each file is a slow read over \\wsl.localhost.
+/**
+ * The project an agent's memory belongs to: the repository its folder is in
+ * (a worktree resolves to its main repository, through the `gitdir:` line of
+ * its .git file), or "office" for the office itself. Async: on a WSL floor
+ * each of these reads crosses \\wsl.localhost.
+ */
+async function memoryProjectOf(cwd: string | undefined, home: string): Promise<string> {
+  if (!cwd) return 'office';
+  const { readFile, stat } = await import('node:fs/promises');
+  const norm = (p: string) => p.replace(/[\\/]+$/, '').toLowerCase();
+  if (home && (norm(cwd) === norm(home) || norm(cwd).startsWith(norm(join(home, 'hive'))))) return 'office';
+  let cur = cwd;
+  for (let i = 0; i < 32; i++) {
+    const dotGit = join(cur, '.git');
+    try {
+      const st = await stat(dotGit);
+      if (st.isDirectory()) return basename(cur);
+      // A worktree: "gitdir: <repo>/.git/worktrees/<name>".
+      const m = /gitdir:\s*(.+?)[\\/]\.git[\\/]worktrees[\\/]/.exec(await readFile(dotGit, 'utf8'));
+      return m ? basename(m[1].trim()) : basename(cur);
+    } catch { /* not here: go up */ }
+    const up = dirname(cur);
+    if (up === cur) break;
+    cur = up;
+  }
+  return home && norm(cwd).startsWith(norm(home)) ? 'office' : basename(cwd);
+}
+
 ipcMain.handle('hive:memoryCorpus', async () => {
   const root = hive.root();
   if (!root) return [];
   const { readFile, readdir } = await import('node:fs/promises');
   const PER_FILE = 64 * 1024;
-  const out: Array<{ id: string; kind: 'agent' | 'doc'; label: string; agentId?: string; text: string }> = [];
+  const out: Array<{ id: string; kind: 'agent' | 'doc'; label: string; agentId?: string; project: string; text: string }> = [];
   const reg = hive.registry();
+  const home = readConfig().harnessHome ?? '';
   await Promise.all(Object.values(reg.agents ?? {}).map(async (a) => {
     try {
       const text = await readFile(join(root, 'agents', a.id, 'memory.md'), 'utf8');
-      out.push({ id: `agent:${a.id}`, kind: 'agent', label: a.name, agentId: a.id, text: text.slice(0, PER_FILE) });
+      const project = await memoryProjectOf(a.cwd, home);
+      out.push({ id: `agent:${a.id}`, kind: 'agent', label: a.name, agentId: a.id, project, text: text.slice(0, PER_FILE) });
     } catch { /* no memory yet */ }
   }));
   try {
@@ -4203,7 +4233,7 @@ ipcMain.handle('hive:memoryCorpus', async () => {
     await Promise.all(files.map(async (f) => {
       try {
         const text = await readFile(join(root, 'research', f), 'utf8');
-        out.push({ id: `doc:research/${f}`, kind: 'doc', label: f, text: text.slice(0, PER_FILE) });
+        out.push({ id: `doc:research/${f}`, kind: 'doc', label: f, project: 'office', text: text.slice(0, PER_FILE) });
       } catch { /* gone */ }
     }));
   } catch { /* no research yet */ }
