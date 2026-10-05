@@ -288,7 +288,16 @@
       "adding": "جارٍ الإضافة…",
       "addFiles": "أضف ملفات…",
       "docCount": "{{count}} مستند مفهرَس",
-      "docCountPlural": "{{count}} مستندات مفهرَسة"
+      "docCountPlural": "{{count}} مستندات مفهرَسة",
+      "modelTitle": "نموذج الذاكرة",
+      "modelReady": "تم تنزيل {{model}}. تعمل الذاكرة دون اتصال.",
+      "modelMissing": "لم يتم تنزيل {{model}}. ينتظره البحث في الذاكرة والحفظ.",
+      "modelDownload": "تنزيل النموذج",
+      "modelUpdate": "تحديث النموذج",
+      "modelDownloading": "جارٍ التنزيل… مرة واحدة، حتى بضع مئات من الميغابايت",
+      "modelFailed": "فشل التنزيل: {{error}}",
+      "modelDone": "النموذج جاهز.",
+      "modelOffline": "لا تتصل الذاكرة بالإنترنت من تلقاء نفسها: هذا الزر هو المرة الوحيدة."
     },
     "connections": {
       "slack": "Slack",
