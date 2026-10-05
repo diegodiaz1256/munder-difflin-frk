@@ -83,7 +83,8 @@ import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, rel
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
-import { buildWorkerLaunch } from './workerLaunch';
+import { buildWorkerLaunch, workerRequestProblem } from './workerLaunch';
+import { tokenizeCommand } from '../shared/commandLine';
 import { ControlRegistry } from './control';
 import { WorkerWakeWatchdog, WORKER_WAKE_REPORT_MS, activityEvidenceAt, type WorkerWakeFacts } from './workerWake';
 import { inboxNudgeText } from '../shared/hiveNudge';
@@ -93,6 +94,7 @@ import { parseHireDeepLink, type HireManifest } from '../shared/hire';
 import { ClosingTimeController } from './closingTime';
 import {
   argsWithAutoModeFlag,
+  defaultCommandForProvider,
   inferAgentProvider,
   isClaudeProvider,
   nonInteractiveEnvForProvider,
@@ -5480,6 +5482,22 @@ async function processSpawnRequest(filePath: string): Promise<void> {
   if (!isSafeCommandName(bin) && !isAbsolute(bin)) {
     fail(`refusing spawn: engine command "${bin}" is not a plain command name or an absolute path`);
     return;
+  }
+  // The request file is untrusted (any agent can write the hive): only an agent
+  // CLI, with no settings/MCP/backend flags, in a folder the user set up.
+  {
+    const providers: AgentProvider[] = ['claude', 'codex', 'grok', 'kimi', 'gemini', 'antigravity', 'qwen', 'opencode', 'crush', 'pi', 'copilot', 'cursor'];
+    const bins = [
+      ...providers.map((pr) => tokenizeCommand(defaultCommandForProvider(pr))[0] ?? ''),
+      tokenizeCommand(cfgSpawn.defaultCommand ?? '')[0] ?? ''
+    ];
+    const roots = [
+      ...(cfgSpawn.registeredRepos ?? []),
+      cfgSpawn.harnessHome ?? '',
+      ...Object.values(hive.registry().agents ?? {}).map((a) => (a as { cwd?: string }).cwd ?? '')
+    ];
+    const problem = workerRequestProblem(launch, cwd, { bins, roots, caseInsensitive: process.platform === 'win32' });
+    if (problem) { fail(`refusing spawn: ${problem}`); return; }
   }
   // Missing-CLI → FAIL FAST. A headless worker has no human to watch an installer,
   // so we never run the cc49e1e install banner here — we reject and tell god.
