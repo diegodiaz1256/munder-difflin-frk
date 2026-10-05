@@ -231,5 +231,5 @@ test('the Windows node-then-npm script is still one quote-free line', () => {
   assert.ok(!s.includes('\n'), 'must stay a single line');
   assert.ok(!s.includes('"'), 'double quote would end the command line early');
   assert.ok(s.indexOf('msiexec') < s.lastIndexOf('npm install -g'), 'Node must land before the CLI install');
-  assert.match(s, /set PATH=%ProgramFiles%\\nodejs;%PATH%/);
+  assert.match(s, /set PATH=%ProgramFiles%\\nodejs;%APPDATA%\\npm;%PATH%/);
 });

@@ -563,7 +563,9 @@ export const AGENT_PROVIDER_PRESETS: AgentProviderPreset[] = [
     // a node-free machine can still self-heal. Trusted hardcoded constants only.
     nativeInstallCommand: {
       posix: 'curl https://cursor.com/install -fsS | bash',
-      win32: 'irm https://cursor.com/install?win32=true | iex'
+      // Run by cmd.exe (cliInstall.ts): PowerShell is invoked explicitly and the
+      // pipe escaped, as for Claude — a bare `irm` is not a cmd command.
+      win32: 'powershell -c irm https://cursor.com/install?win32=true ^| iex'
     },
     docsUrl: 'https://cursor.com/docs/cli/install'
   },

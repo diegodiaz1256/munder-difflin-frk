@@ -97,10 +97,14 @@ export function buildMissingCliScript(
         `echo     ${cmd}`,
         `echo ${rule}`,
         'echo.',
-        cmd,
+        // A failed install must EXIT non-zero: on 0 the app relaunches the agent,
+        // which would start a binary that is still not there and wipe this
+        // output, the one place that says what went wrong. `||`, not
+        // `if errorlevel`: on one cmd line everything after an `if` is part of
+        // it (see buildNodeInstallScript).
+        `${cmd} || (echo. & echo   [x] The install failed - see above. Run the command shown above by hand, then restart the agent. & exit /b 1)`,
         'echo.',
-        'echo   [done] If it succeeded, the agent launches automatically.',
-        'echo   If it failed, run the command above manually, then restart the agent.'
+        'echo   [done] Installed - launching the agent...'
       );
     } else {
       if (rung.nodeMissing) {
@@ -170,7 +174,9 @@ export function buildMissingCliScript(
       `  echo '    ${cmd}'`,
       ...(docs ? [`  echo '    Docs: ${docs}'`] : []),
       `  echo '  Then restart the agent to launch it.'`,
-      `fi`
+      `fi`,
+      // Non-zero on failure: on 0 the app relaunches the agent (see win32 above).
+      `exit $__clirc`
     );
   } else if (rung.nodeMissing) {
     // The honest dead end: no node, and this vendor ships no node-free installer.

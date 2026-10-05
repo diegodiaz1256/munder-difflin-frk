@@ -179,18 +179,24 @@ export function buildNodeInstallScript(installer: NodeInstaller, platform: strin
     // certutil is the only hashing tool guaranteed present; `findstr` does the
     // compare because cmd has no string equality on command output. msiexec's
     // own UAC prompt is the elevation — we never call it silently.
+    //
+    // These steps are joined into ONE cmd.exe line, where everything after an
+    // `if` belongs to that `if`: `curl … & if errorlevel 1 exit /b 1 & next`
+    // skipped every later step when the download WORKED (Node was never
+    // installed), and a `^&` inside `( )` is printed, not run, so a checksum
+    // mismatch did not stop the install. `step || (message & exit /b 1)` fails
+    // closed and lets the next `&` step run. msiexec is called directly: under
+    // cmd /c it is waited for and its exit code reaches `||` (start /wait hides it).
     const f = `%TEMP%\\${file}`;
     return [
       `echo   Downloading Node.js ${version} ^(official installer^)...`,
-      `curl -fSL ${url} -o ${f}`,
-      `if errorlevel 1 exit /b 1`,
+      `curl -fSL ${url} -o ${f} || (echo   [x] The download failed. & exit /b 1)`,
       `echo   Verifying checksum...`,
-      `certutil -hashfile ${f} SHA256 | findstr /i /c:${sha256} >nul`,
-      `if errorlevel 1 (echo   [x] CHECKSUM MISMATCH - refusing to install ^& exit /b 1)`,
+      `certutil -hashfile ${f} SHA256 | findstr /i /c:${sha256} >nul || (echo   [x] CHECKSUM MISMATCH - refusing to install & exit /b 1)`,
       `echo   Installing - approve the Windows prompt if it appears...`,
-      `msiexec /i ${f} /passive /norestart`,
-      `if errorlevel 1 exit /b 1`,
-      `set PATH=%ProgramFiles%\\nodejs;%PATH%`
+      `msiexec /i ${f} /passive /norestart || (echo   [x] Node.js was not installed - the installer was cancelled or failed. & exit /b 1)`,
+      // The new Node and npm's global bin, for the rest of this line only.
+      `set PATH=%ProgramFiles%\\nodejs;%APPDATA%\\npm;%PATH%`
     ];
   }
 
