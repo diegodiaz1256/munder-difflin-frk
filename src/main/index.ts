@@ -72,7 +72,7 @@ import * as integrations from './integrations';
 import { applyMissionRequest, type MissionLike } from '../shared/missionRequests';
 import { cleanCustomBundles } from '../shared/roleBundles';
 import { Factories } from './factories';
-import { createWslOffice, describeWslError, listDistros, mirroredNetworking, parseWslPath, probeInDistro, WSL_INSTALL } from './wsl';
+import { createWslOffice, describeWslError, distroHomeUnc, fromLinuxPath, gitInvocation, listDistros, toWslUnc, mirroredNetworking, parseWslPath, probeInDistro, WSL_INSTALL } from './wsl';
 import { WslBridge } from './wslBridge';
 import { McpServers } from './mcpServers';
 import { EnvVault, fingerprintOf } from './envVault';
@@ -491,7 +491,11 @@ const integrationBroker = new IntegrationBroker({
 /** Best-effort git output for runner fingerprints ('' outside a repo). */
 function gitRun(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve) => {
-    const p = spawn('git', args, { cwd, windowsHide: true });
+    // A WSL floor's repo is read by git inside the distro (gitInvocation): Windows
+    // git on \\wsl.localhost is missing or refuses it, which left the
+    // fingerprint empty and the "files changed" check silent.
+    const inv = gitInvocation(cwd, args);
+    const p = spawn(inv.file, inv.args, { cwd: inv.cwd, windowsHide: true });
     let out = '';
     p.stdout.on('data', (d) => { out += d; });
     p.on('error', () => resolve(''));
@@ -5359,7 +5363,13 @@ async function processSpawnRequest(filePath: string): Promise<void> {
 
   // Worker request files are hand/LLM-authored, so `~/…` shows up here too — expand
   // before the existence check (Node reads `~` literally).
-  const cwd = typeof raw.cwd === 'string' && raw.cwd.trim() ? expandTilde(raw.cwd) : '';
+  // A WSL floor's god runs inside the distro, so it writes Linux paths
+  // (`/home/u/repo`, `~/repo`): open them through \\wsl.localhost.
+  const floorWsl = hive.wslRoot();
+  const rawCwd = typeof raw.cwd === 'string' ? raw.cwd.trim() : '';
+  const cwd = !rawCwd ? ''
+    : floorWsl ? fromLinuxPath(rawCwd, floorWsl.distro, () => distroHomeUnc(floorWsl.distro))
+    : expandTilde(rawCwd);
   if (!cwd || !existsSync(cwd)) { fail(`"cwd" missing or not found (${cwd || 'unset'})`); return; }
 
   // Request line → executable + argv (auto-mode inheritance, tokenization,
@@ -5386,7 +5396,14 @@ async function processSpawnRequest(filePath: string): Promise<void> {
   }
   // Missing-CLI → FAIL FAST. A headless worker has no human to watch an installer,
   // so we never run the cc49e1e install banner here — we reject and tell god.
-  if (!ptyManager.isCommandAvailable(bin)) { fail(`engine CLI "${bin}" is not installed`); return; }
+  // On a WSL floor the worker runs inside the distro: look for the CLI there.
+  const cwdWsl = process.platform === 'win32' ? parseWslPath(cwd) : null;
+  if (cwdWsl) {
+    const there = bin.startsWith('/')
+      ? existsSync(toWslUnc(cwdWsl.distro, bin))
+      : !!(await probeInDistro(cwdWsl.distro, [bin]))[bin];
+    if (!there) { fail(`engine CLI "${bin}" is not installed inside WSL (${cwdWsl.distro})`); return; }
+  } else if (!ptyManager.isCommandAvailable(bin)) { fail(`engine CLI "${bin}" is not installed`); return; }
 
   const isolate = raw.isolate !== false; // default true
   // Base branch the worktree will be cut from (for the ahead-of-base safety check).

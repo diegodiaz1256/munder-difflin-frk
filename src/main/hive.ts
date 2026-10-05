@@ -549,6 +549,9 @@ export class HiveManager {
    *  such instruction is dead on arrival there. The absolute path is correct on
    *  every platform and needs no expansion at all. */
   nodeCommand(): string {
+    // A WSL floor's agents run in the distro, where the launcher (a Windows
+    // .cmd starting electron.exe) cannot run: their own node does.
+    if (this.wslRoot()) return 'node';
     return this.nodeLauncher() ?? 'node';
   }
 

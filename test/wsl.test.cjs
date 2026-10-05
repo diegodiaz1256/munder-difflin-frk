@@ -77,3 +77,18 @@ test('mempalace runs inside the distro for a WSL floor, with Linux paths', () =>
   const plain = mempalaceInvocation('mempalace.exe', ['search', 'x'], {}, null);
   assert.deepEqual(plain, { file: 'mempalace.exe', args: ['search', 'x'] });
 });
+
+test('Windows drive paths become /mnt paths for agents in the distro', () => {
+  const { fromLinuxPath } = loadTs('src/main/wsl.ts');
+  assert.equal(linuxizeText('run "C:\\Program Files\\Scranton Branch\\resources\\kg.cjs" search x', 'Ubuntu'),
+    'run "/mnt/c/Program Files/Scranton Branch/resources/kg.cjs" search x');
+  assert.equal(linuxizeText('KG at C:\\Users\\d\\AppData\\kg now', 'Ubuntu'), 'KG at /mnt/c/Users/d/AppData/kg now');
+  assert.equal(linuxizeText('ROOT=G:\\x', 'Ubuntu'), 'ROOT=/mnt/g/x');
+  assert.equal(linuxizeText('no paths: a:b, http://x', 'Ubuntu'), 'no paths: a:b, http://x');
+  // and back: what an agent in the distro writes, as the app opens it
+  assert.equal(fromLinuxPath('/home/d/repo', 'Ubuntu'), '\\\\wsl.localhost\\Ubuntu\\home\\d\\repo');
+  assert.equal(fromLinuxPath('~/repo/x', 'Ubuntu', () => '\\\\wsl.localhost\\Ubuntu\\home\\d'), '\\\\wsl.localhost\\Ubuntu\\home\\d\\repo\\x');
+  assert.equal(fromLinuxPath('/mnt/c/Users/d', 'Ubuntu'), 'C:\\Users\\d');
+  assert.equal(fromLinuxPath('G:\\x', 'Ubuntu'), 'G:\\x');
+  assert.equal(fromLinuxPath('~', 'Ubuntu', () => null), '~');
+});

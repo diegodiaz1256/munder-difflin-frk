@@ -7,7 +7,7 @@ import { ensureKilled, hardKillTree } from './procKill';
 import { expandTilde } from './fs';
 import { buildPtyEnv } from './ptyEnv';
 import { homedir } from 'node:os';
-import { linuxizeText, parseWslPath, wslCommand } from './wsl';
+import { linuxizeText, parseWslPath, toLinuxPath, wslCommand } from './wsl';
 import {
   captureFromLoginShell,
   isSafeCommandName,
@@ -630,7 +630,10 @@ export class PtyManager {
         const env: Record<string, string> = { TERM: 'xterm-256color', COLORTERM: 'truecolor' };
         for (const [k, v] of Object.entries(opts.env ?? {})) {
           if (DROP.has(k) || typeof v !== 'string') continue;
-          env[k] = linuxizeText(v, wsl.distro);
+          // A value that IS a Windows path (KG_ROOT, KG_CLI…) may hold spaces.
+          env[k] = /^[A-Za-z]:[\\/]/.test(v) && !v.includes(';')
+            ? toLinuxPath(v, wsl.distro) ?? v
+            : linuxizeText(v, wsl.distro);
         }
         env.HIVE_NODE = 'node';
         const cmd = typeof opts.shellScript === 'string' ? 'bash' : opts.command;
