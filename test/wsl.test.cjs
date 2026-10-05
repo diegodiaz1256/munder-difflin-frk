@@ -62,3 +62,18 @@ test('wsl.exe failures become sentences a person can act on', () => {
   assert.equal(describeWslError('boom\nsecond'), 'boom');
   assert.ok(describeWslError('').length > 0);
 });
+
+test('mempalace runs inside the distro for a WSL floor, with Linux paths', () => {
+  const { mempalaceInvocation } = loadTs('src/main/memory.ts');
+  const wsl = { distro: 'Ubuntu', linuxPath: '/home/d/offices/shop' };
+  const palace = '\\\\wsl.localhost\\Ubuntu\\home\\d\\offices\\shop\\palace';
+  const inv = mempalaceInvocation('/home/d/.local/bin/mempalace',
+    ['mine', '\\\\wsl.localhost\\Ubuntu\\home\\d\\offices\\shop\\hive\\agents\\a1', '--wing', 'a1'],
+    { MEMPALACE_PALACE_PATH: palace, MEMPALACE_EMBEDDING_MODEL: 'minilm' }, wsl);
+  assert.equal(inv.file, 'wsl.exe');
+  assert.ok(inv.args.includes('/home/d/offices/shop/hive/agents/a1'));
+  assert.ok(inv.args.includes('MEMPALACE_PALACE_PATH=/home/d/offices/shop/palace'));
+  assert.ok(inv.args.includes('/home/d/.local/bin/mempalace'));
+  const plain = mempalaceInvocation('mempalace.exe', ['search', 'x'], {}, null);
+  assert.deepEqual(plain, { file: 'mempalace.exe', args: ['search', 'x'] });
+});

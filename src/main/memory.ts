@@ -17,6 +17,7 @@ import { existsSync, statSync, readdirSync, readFileSync, writeFileSync, rmSync 
 import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { ensureKilled } from './procKill';
+import { parseWslPath, runInDistro, toLinuxPath, wslCommand, type WslLocation } from './wsl';
 import { quarantineDirsToReap, quarantineStampMs, nextMineDelayMs } from './palaceReap';
 
 /** Non-memory files `mempalace mine` must not ingest: the Claude Code hooks
@@ -110,8 +111,28 @@ export function mempalaceDevice(
 }
 const MEMPALACE_DEVICE = mempalaceDevice(process.platform, process.env.MEMPALACE_EMBEDDING_DEVICE);
 
+/** How to run `mempalace args` for a floor: straight from `bin`, or inside the
+ *  distro (wsl.exe) when the floor lives in WSL. There the CLI, the palace and
+ *  the agents' own `mempalace` calls all sit on the same side, so a single
+ *  writer works on the real Linux filesystem, not through \\wsl.localhost. */
+export function mempalaceInvocation(
+  bin: string,
+  args: string[],
+  env: Record<string, string>,
+  wsl: WslLocation | null
+): { file: string; args: string[] } {
+  if (!wsl) return { file: bin, args };
+  const linuxEnv: Record<string, string> = {};
+  for (const [k, v] of Object.entries(env)) if (v) linuxEnv[k] = toLinuxPath(v, wsl.distro) ?? v;
+  const linuxArgs = args.map((a) => (/^[A-Za-z]:[\\/]/.test(a) || /^[\\/]{2}wsl/i.test(a) ? toLinuxPath(a, wsl.distro) ?? a : a));
+  return wslCommand(wsl.distro, '/', bin, linuxArgs, linuxEnv);
+}
+
 export class MemoryManager {
   private binCache: string | null | undefined;
+  /** mempalace inside a WSL distro: one wsl.exe call each time, so the answer is
+   *  kept (a miss only briefly, so a fresh install is noticed within seconds). */
+  private wslBinCache: { distro: string; bin: string | null; at: number } | null = null;
   private mineTimer: NodeJS.Timeout | null = null;
   private mineStopped = false;
   /** Current gap between mine passes. Widens while the palace is quarantining. */
@@ -135,8 +156,31 @@ export class MemoryManager {
     return h ? join(h, 'palace') : null;
   }
 
-  /** Resolve the mempalace CLI against the user's PATH + common uv/pip spots. */
+  /** The distro this hive lives in, when it is a WSL floor (Windows only). */
+  private wsl(): WslLocation | null {
+    return process.platform === 'win32' ? parseWslPath(this.getHome()) : null;
+  }
+
+  /** Where `mempalace` resolves inside `distro` (login shell + node managers,
+   *  like the agents get), or null. */
+  private wslBin(distro: string): string | null {
+    const c = this.wslBinCache;
+    const now = Date.now();
+    if (c && c.distro === distro && now - c.at < (c.bin ? 300_000 : 5_000)) return c.bin;
+    let bin: string | null = null;
+    try {
+      const p = runInDistro(distro, 'sh', ['-c', 'command -v mempalace']);
+      if (p.startsWith('/')) bin = p;
+    } catch { /* not installed, or WSL did not answer */ }
+    this.wslBinCache = { distro, bin, at: now };
+    return bin;
+  }
+
+  /** Resolve the mempalace CLI against the user's PATH + common uv/pip spots
+   *  (inside the distro for a WSL floor). */
   bin(): string | null {
+    const w = this.wsl();
+    if (w) return this.wslBin(w.distro);
     if (this.binCache !== undefined) return this.binCache;
     let found: string | null = null;
     const isWin = process.platform === 'win32';
@@ -212,6 +256,16 @@ export class MemoryManager {
       MEMPALACE_EMBEDDING_MODEL: this.model(),
       ...(MEMPALACE_DEVICE ? { MEMPALACE_EMBEDDING_DEVICE: MEMPALACE_DEVICE } : {})
     };
+  }
+
+  /** The process to start for `mempalace args`: here, or inside the distro. */
+  private launch(bin: string, args: string[]): { file: string; args: string[]; env: NodeJS.ProcessEnv } {
+    const inv = mempalaceInvocation(bin, args, {
+      MEMPALACE_PALACE_PATH: this.palacePath() ?? '',
+      MEMPALACE_EMBEDDING_MODEL: this.model(),
+      ...(MEMPALACE_DEVICE ? { MEMPALACE_EMBEDDING_DEVICE: MEMPALACE_DEVICE } : {})
+    }, this.wsl());
+    return { ...inv, env: this.childEnv() };
   }
 
   // — lifecycle —
@@ -365,8 +419,9 @@ export class MemoryManager {
       if (!bin) { resolve(); return; }
       ensureMineIgnore(agentDir); // keep settings.json / cursor / messages out of the index
       // stdin closed (mempalace can prompt); mempalace dedups so re-mining is safe.
-      const proc = spawn(bin, ['mine', agentDir, '--wing', id, '--agent', id], {
-        env: this.childEnv(), stdio: ['ignore', 'ignore', 'pipe']
+      const run = this.launch(bin, ['mine', agentDir, '--wing', id, '--agent', id]);
+      const proc = spawn(run.file, run.args, {
+        env: run.env, stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true
       });
       let err = '';
       proc.stderr?.on('data', (d) => { err += d.toString(); });
@@ -403,7 +458,8 @@ export class MemoryManager {
       if (!this.active() || !bin) { resolve({ ok: false, output: '', error: 'semantic memory not active' }); return; }
       let proc: ReturnType<typeof spawn>;
       try {
-        proc = spawn(bin, args, { env: this.childEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
+        const run = this.launch(bin, args);
+        proc = spawn(run.file, run.args, { env: run.env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
       } catch (e) {
         resolve({ ok: false, output: '', error: e instanceof Error ? e.message : String(e) });
         return;
