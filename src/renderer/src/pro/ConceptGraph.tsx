@@ -32,7 +32,17 @@ export function ConceptGraph({ graph, docs, selected, onSelect }: {
       ...graph.edges.map((e) => ({ source: `c:${e.a}`, target: `c:${e.b}`, strength: Math.min(2, 0.6 + e.weight / 3) })),
       ...sources.flatMap((d) => (graph.mentions[d.id] ?? []).map((c) => ({ source: `d:${d.id}`, target: `c:${c}`, strength: 0.25 })))
     ];
-    return { pos: forceLayout(nodes, edges, { width: size.w, height: size.h, iterations: 320, padding: 40 }), edges };
+    const raw = forceLayout(nodes, edges, { width: size.w, height: size.h, iterations: 320, padding: 40 });
+    // The layout settles into the middle of the box; stretch it to fill the
+    // panel so labels have room (margins leave space for them and the legend).
+    const pts = [...raw.values()];
+    const minX = Math.min(...pts.map((p) => p.x)), maxX = Math.max(...pts.map((p) => p.x));
+    const minY = Math.min(...pts.map((p) => p.y)), maxY = Math.max(...pts.map((p) => p.y));
+    const mx = 70, mt = 34, mb = 40;
+    const sx = maxX > minX ? (size.w - 2 * mx) / (maxX - minX) : 1;
+    const sy = maxY > minY ? (size.h - mt - mb) / (maxY - minY) : 1;
+    const pos = new Map([...raw].map(([id, p]) => [id, { x: mx + (p.x - minX) * sx, y: mt + (p.y - minY) * sy }]));
+    return { pos, edges };
   }, [graph, sources, size.w, size.h]);
 
   const focus = hover ?? (selected ? `c:${selected}` : null);
@@ -46,6 +56,8 @@ export function ConceptGraph({ graph, docs, selected, onSelect }: {
     return s;
   }, [focus, layout.edges]);
   const dim = (id: string) => (near && !near.has(id) ? 0.25 : 1);
+  // Label the top ~18 concepts by default.
+  const labelMin = graph.concepts.length > 18 ? graph.concepts[17].count : 0;
 
   if (!graph.concepts.length) {
     return <div ref={box} style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center' }}>
@@ -84,13 +96,15 @@ export function ConceptGraph({ graph, docs, selected, onSelect }: {
           if (!p) return null;
           const r = 5 + Math.sqrt(c.count) * 3.5;
           const sel = selected === c.id;
+          // Names on the concepts that matter; the rest on hover or when related to the focus.
+          const labelled = sel || c.count >= labelMin || (near ? near.has(id) : false);
           return (
             <g key={id} transform={`translate(${p.x},${p.y})`} opacity={dim(id)} style={{ cursor: 'pointer' }}
               onMouseEnter={() => setHover(id)} onMouseLeave={() => setHover(null)}
               onClick={(e) => { e.stopPropagation(); onSelect(sel ? null : c.id); }}>
               <circle r={r} fill={sel ? 'var(--cth-lemon)' : 'var(--cth-lemon-light)'} stroke={sel ? 'var(--cth-ink-900)' : 'var(--cth-lemon)'} strokeWidth={sel ? 2 : 1.2} />
-              <text y={-r - 4} textAnchor="middle" fontSize={c.count > 3 ? 12 : 11} fontWeight={c.count > 3 ? 600 : 400}
-                fill="var(--cth-ink-900)" style={{ paintOrder: 'stroke', stroke: 'var(--pro-bg, var(--cth-cream-100))', strokeWidth: 3 }}>{c.label}</text>
+              {labelled && <text y={-r - 4} textAnchor="middle" fontSize={c.count > 3 ? 12 : 11} fontWeight={c.count > 3 ? 600 : 400}
+                fill="var(--cth-ink-900)" style={{ paintOrder: 'stroke', stroke: 'var(--pro-bg, var(--cth-cream-100))', strokeWidth: 3 }}>{c.label}</text>}
             </g>
           );
         })}
