@@ -3046,8 +3046,14 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // with `cwd does not exist`. Expanding BEFORE hive provisioning is what makes the
   // registry store an ABSOLUTE cwd (and `cwdValid: true`). The resolved value is
   // returned to the caller so the renderer records the same absolute path.
-  opts.cwd = expandTilde(opts.cwd);
-  if (opts.hive) opts.hive = { ...opts.hive, cwd: expandTilde(opts.hive.cwd) };
+  // On a WSL floor a typed `/home/u/repo` or `~/repo` is a path inside the
+  // distro (that is where its agents run), not on Windows.
+  const floorWslIn = process.platform === 'win32' ? hive.wslRoot() : null;
+  const ingest = (p: string): string => (floorWslIn && typeof p === 'string' && /^(\/|~(\/|$))/.test(p.trim())
+    ? fromLinuxPath(p, floorWslIn.distro, () => distroHomeUnc(floorWslIn.distro))
+    : expandTilde(p));
+  opts.cwd = ingest(opts.cwd);
+  if (opts.hive) opts.hive = { ...opts.hive, cwd: ingest(opts.hive.cwd) };
   // Which CLI is this? Explicit wins; else inferred from the binary
   // (claude/codex/grok/agy). Non-Claude providers skip every Claude-only spawn step
   // below. Persist the resolved provider onto opts (+ hive meta) so the registry
@@ -3599,9 +3605,14 @@ ipcMain.on('app:readClipboardSync', (evt) => {
 ipcMain.handle('dialog:chooseFolder', async (evt) => {
   const win = BrowserWindow.fromWebContents(evt.sender);
   if (!win) return { ok: false as const, error: 'no window' };
+  // On a WSL floor start in the distro user's home (\\wsl.localhost\<distro>\
+  // home\<you>): projects for its agents live there, not on a Windows drive.
+  const floorWsl = process.platform === 'win32' ? hive.wslRoot() : null;
+  const defaultPath = floorWsl ? distroHomeUnc(floorWsl.distro) ?? undefined : undefined;
   const res = await dialog.showOpenDialog(win, {
     properties: ['openDirectory', 'createDirectory'],
-    title: 'Pick a folder'
+    title: 'Pick a folder',
+    ...(defaultPath ? { defaultPath } : {})
   });
   if (res.canceled || res.filePaths.length === 0) return { ok: false as const, error: 'cancelled' };
   return { ok: true as const, path: res.filePaths[0] };

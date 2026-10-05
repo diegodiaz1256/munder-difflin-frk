@@ -18,6 +18,9 @@ param([switch]$RemoveUserData)
 
 $ErrorActionPreference = 'Stop'
 $name = 'Scranton Branch'
+# Never stand inside the folder being removed (a shell whose current folder is
+# in it keeps it "in use").
+Set-Location -LiteralPath $env:TEMP
 
 # 1. Close the app (every process from its folder).
 Get-Process -Name $name -ErrorAction SilentlyContinue | ForEach-Object {
@@ -61,9 +64,22 @@ foreach ($d in $dirs) {
   if ($leaf -notlike "*$name*" -and $leaf -notlike '*scranton*') {
     Write-Warning "Skipping $d (does not look like the app's folder)"; continue
   }
-  if ($PSCmdlet.ShouldProcess($d, 'Delete folder')) {
-    Remove-Item -LiteralPath $d -Recurse -Force
-    Write-Host "Deleted $d"
+  if (-not $PSCmdlet.ShouldProcess($d, 'Delete folder')) { continue }
+  # Anything still running from the folder keeps it in use: the app's helper
+  # processes, a terminal or agent it started from there.
+  $prefix = (Resolve-Path -LiteralPath $d).Path.TrimEnd('\') + '\'
+  Get-Process -ErrorAction SilentlyContinue | Where-Object {
+    $p = $null; try { $p = $_.Path } catch {}
+    $p -and $p.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) -and $_.Id -ne $PID
+  } | ForEach-Object { Write-Host "Closing $($_.Name) ($($_.Id))"; $_ | Stop-Process -Force -ErrorAction SilentlyContinue }
+  $done = $false
+  for ($i = 1; $i -le 5 -and -not $done; $i++) {
+    try { Remove-Item -LiteralPath $d -Recurse -Force -ErrorAction Stop; $done = $true }
+    catch { Start-Sleep -Seconds 2 }
+  }
+  if ($done) { Write-Host "Deleted $d" }
+  else {
+    Write-Warning "Could not delete $d (something still has it open). Close any window or terminal opened from that folder, then run this again; the entry and shortcuts are removed anyway."
   }
 }
 
