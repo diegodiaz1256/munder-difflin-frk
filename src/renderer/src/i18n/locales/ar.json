@@ -467,7 +467,10 @@
     "openIssue": "مشكلة GitHub رقم {{num}}: {{title}}",
     "deliveryResumeAria": "استأنف التسليم التلقائي للأرضية كلها",
     "deliveryHoldAria": "احتجز التسليم التلقائي للأرضية كلها",
-    "openIdeAria": "افتح بيئة التطوير"
+    "openIdeAria": "افتح بيئة التطوير",
+    "remoteControl": "عن بُعد",
+    "remoteControlTitle": "التحكم عن بُعد: الوصول إلى هذه الجلسة من claude.ai أو تطبيق Claude على هاتفك. سيطلب Claude التأكيد في الطرفية.",
+    "remoteControlAria": "تشغيل التحكم عن بُعد للمنسق"
   },
   "addAgent": {
     "title": "إضافة وكيل",

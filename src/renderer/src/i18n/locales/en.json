@@ -467,7 +467,10 @@
     "openIssue": "GitHub Issue #{{num}}: {{title}}",
     "deliveryResumeAria": "Resume automatic delivery for the whole floor",
     "deliveryHoldAria": "Hold automatic delivery for the whole floor",
-    "openIdeAria": "Open the IDE"
+    "openIdeAria": "Open the IDE",
+    "remoteControl": "remote",
+    "remoteControlTitle": "Remote Control: reach this session from claude.ai or the Claude app on your phone. Claude asks you to confirm in the terminal.",
+    "remoteControlAria": "Turn on Remote Control for the orchestrator"
   },
   "addAgent": {
     "title": "ADD AGENT",

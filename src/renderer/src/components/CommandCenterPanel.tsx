@@ -35,6 +35,8 @@ import {
   type AgentProvider
 } from '@/store/config';
 import { canReceiveInbox } from '@shared/agentProvider';
+import { remoteControlCommandForProvider } from '@shared/providerAutomation';
+import { enableRemoteControl } from '@/hooks/useHive';
 import { isComposingKey } from '@shared/imeGuard';
 import { useRtl } from '@/i18n/useDirection';
 
@@ -207,6 +209,22 @@ export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent
               {floorDeliveryPaused ? t('commandCenter.deliveryPaused') : t('commandCenter.deliveryAuto')}
             </span>
           </PixelButton>
+          {/* Remote Control on demand (it used to be sent at every boot, and
+              Claude stops to ask for confirmation). Only engines that have it. */}
+          {remoteControlCommandForProvider(inferAgentProvider(agent.command, agent.provider), agent.name) && (
+            <PixelButton variant="secondary" size="sm" onClick={() => {
+              void enableRemoteControl(inferAgentProvider(agent.command, agent.provider), agent.name);
+            }}>
+              <span
+                className="cth-tip cth-tip-wrap"
+                data-tip={t('commandCenter.remoteControlTitle')}
+                aria-label={t('commandCenter.remoteControlAria')}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
+                <Icon name="cloud" /> {t('commandCenter.remoteControl')}
+              </span>
+            </PixelButton>
+          )}
           {/* Floor-level surface with no agent of its own: the honest target is
               whoever is selected, stated explicitly rather than left to the
               IDE's fallback so the intent is visible at the call site. */}

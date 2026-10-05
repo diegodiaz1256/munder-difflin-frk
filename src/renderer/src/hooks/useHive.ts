@@ -126,6 +126,16 @@ async function waitForTerminalReady(
  * input box. Without them, every "\n" in a multi-line message acted as Enter —
  * the message submitted line-by-line in fragments (the agent saw only the last
  * chunk). The closing Enter, sent a tick later, submits the whole block. (#24) */
+/** Turn on Remote Control for the orchestrator's session (the cloud button
+ *  in the Command Center). Goes through the same submit chain as everything
+ *  else typed into his terminal. False when his engine has no such command. */
+export async function enableRemoteControl(provider: AgentProvider, sessionName: string): Promise<boolean> {
+  const cmd = remoteControlCommandForProvider(provider, sessionName);
+  if (!cmd) return false;
+  await submitToPty(GOD_PTY, cmd, provider, REMOTE_CONTROL_SETTLE_MS);
+  return true;
+}
+
 function submitToPty(
   ptyId: string,
   text: string,
@@ -454,12 +464,9 @@ export function useHive(config: HarnessConfig | null): void {
       bootGraceUntil.current[GOD_ID] = Date.now() + BOOT_GRACE_MS;
       void (async () => {
         try {
-          const remoteCommand = remoteControlCommandForProvider(godProvider, godName);
-          if (remoteCommand) {
-            // settleMs pauses the chain ~1.5s after /remote-control before the
-            // orientation prompt (fresh spawns only) is submitted next.
-            await submitToPty(GOD_PTY, remoteCommand, godProvider, REMOTE_CONTROL_SETTLE_MS);
-          }
+          // Remote Control is no longer turned on at every boot: Claude asks
+          // to confirm it, which stalled the orientation prompt behind a
+          // question. It is a button on the orchestrator (enableRemoteControl).
           if (!cancelled && !resumedGod) {
             // A type-into-tui god (Crush) can't ride its hive protocol on argv, so the
             // main process hands it back as seedPrompt — type it FIRST (identity), then
