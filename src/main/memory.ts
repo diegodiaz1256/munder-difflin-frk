@@ -18,6 +18,10 @@ import { dirname, join, sep as pathSep } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
 import { ensureKilled } from './procKill';
+
+/** Shown when even an updated mempalace cannot load EmbeddingGemma. The
+ *  renderer recognises this text and explains it in the app language. */
+export const MEMPALACE_TOO_OLD = 'mempalace-too-old';
 import { parseWslPath, runInDistro, runInDistroAsync, toLinuxPath, wslCommand, type WslLocation } from './wsl';
 import { quarantineDirsToReap, quarantineStampMs, nextMineDelayMs } from './palaceReap';
 
@@ -369,8 +373,8 @@ export class MemoryManager {
    * online, from Settings. Mines one short note (long enough not to be skipped) into a throwaway palace, which
    * makes mempalace fetch the model, then deletes it.
    */
-  downloadModel(): Promise<{ ok: boolean; error?: string }> {
-    if (this.downloadRun) return this.downloadRun;
+  downloadModel(upgraded = false): Promise<{ ok: boolean; error?: string }> {
+    if (this.downloadRun && !upgraded) return this.downloadRun;
     const bin = this.bin();
     if (!bin) return Promise.resolve({ ok: false, error: 'mempalace is not installed' });
     const w = this.wsl();
@@ -428,7 +432,15 @@ export class MemoryManager {
           // does not know it (EmbeddingGemma needs a newer mempalace; older
           // ones quietly use MiniLM), so it would never arrive.
           if (code === 0 && this.model() === 'embeddinggemma') {
-            done({ ok: false, error: 'this mempalace cannot use EmbeddingGemma. Update it (uv tool upgrade mempalace) or choose MiniLM in the Memory panel.' });
+            // Update mempalace ourselves (people should not need a terminal),
+            // then try once more. Only if that fails is it on the user.
+            if (upgraded) { done({ ok: false, error: MEMPALACE_TOO_OLD }); return; }
+            void this.upgradeMempalace().then((u) => {
+              clearTimeout(timer); cleanup();
+              if (!u.ok) { resolve({ ok: false, error: `${MEMPALACE_TOO_OLD} (${u.error})` }); return; }
+              this.resetBinCache();
+              void this.downloadModel(true).then(resolve);
+            });
             return;
           }
           done({ ok: false, error: last || `the download did not finish (exit ${code})` });
@@ -437,6 +449,37 @@ export class MemoryManager {
     });
     this.downloadRun = run.finally(() => { this.downloadRun = null; });
     return this.downloadRun;
+  }
+
+  /** Install the latest mempalace over the one there, where it lives: inside the distro
+   *  for a WSL floor, else with the uv next to it (or on PATH). `install
+   *  mempalace@latest`, not `upgrade`: an install pinned to a version
+   *  ("==3.3.5", seen on a real machine) never moves with `upgrade`. */
+  private upgradeMempalace(): Promise<{ ok: boolean; error?: string }> {
+    const w = this.wsl();
+    let file: string; let args: string[];
+    if (w) {
+      const c = wslCommand(w.distro, '~', 'sh', ['-lc', 'uv tool install mempalace@latest']);
+      file = c.file; args = c.args;
+    } else {
+      const bin = this.bin();
+      const near = bin ? join(dirname(bin), process.platform === 'win32' ? 'uv.exe' : 'uv') : '';
+      file = near && existsSync(near) ? near : 'uv';
+      args = ['tool', 'install', 'mempalace@latest'];
+    }
+    return new Promise((resolve) => {
+      let err = '';
+      let p: ReturnType<typeof spawn>;
+      try { p = spawn(file, args, { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true }); }
+      catch (e) { resolve({ ok: false, error: e instanceof Error ? e.message : String(e) }); return; }
+      p.stderr?.on('data', (d) => { err += d.toString(); });
+      const t = setTimeout(() => { try { p.kill(); } catch { /* gone */ } }, 10 * 60_000);
+      p.on('error', (e) => { clearTimeout(t); resolve({ ok: false, error: e.message }); });
+      p.on('close', (code) => {
+        clearTimeout(t);
+        resolve(code === 0 ? { ok: true } : { ok: false, error: err.trim().split(/\r?\n/).slice(-2).join(' ') || `uv exited ${code}` });
+      });
+    });
   }
 
   // — lifecycle —

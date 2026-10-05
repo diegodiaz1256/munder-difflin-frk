@@ -317,7 +317,9 @@
       "modelDownloading": "Downloading… one time, up to a few hundred MB",
       "modelFailed": "Download failed: {{error}}",
       "modelDone": "Model ready.",
-      "modelOffline": "Memory never goes online by itself: this button is the only time it does."
+      "modelOffline": "Memory never goes online by itself: this button is the only time it does.",
+      "modelTooOld": "The installed mempalace cannot run EmbeddingGemma, and updating it did not work {{detail}}. Reinstall it from Settings → Prerequisites, or switch the memory model to MiniLM (English only) in the memory panel.",
+      "modelDownloadingHint": "If mempalace is too old for this model, the app updates it first (a few minutes)."
     },
     "connections": {
       "slack": "Slack",

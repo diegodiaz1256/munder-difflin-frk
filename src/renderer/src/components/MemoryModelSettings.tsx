@@ -33,7 +33,10 @@ export function MemoryModelSettings() {
     setNote(null);
     try {
       const r = await window.cth.memoryDownloadModel();
-      setNote(r.ok ? { ok: true, text: t('settings.memory.modelDone') } : { ok: false, text: t('settings.memory.modelFailed', { error: r.error ?? '' }) });
+      // main/memory.ts MEMPALACE_TOO_OLD: it tried updating mempalace itself first.
+      const tooOld = r.error?.startsWith('mempalace-too-old');
+      setNote(r.ok ? { ok: true, text: t('settings.memory.modelDone') }
+        : { ok: false, text: tooOld ? t('settings.memory.modelTooOld', { detail: r.error!.replace('mempalace-too-old', '').trim() }) : t('settings.memory.modelFailed', { error: r.error ?? '' }) });
       setStatus(await window.cth.memoryStatus());
     } finally {
       setBusy(false);
@@ -49,6 +52,7 @@ export function MemoryModelSettings() {
             : status.modelReady ? t('settings.memory.modelReady', { model: name }) : t('settings.memory.modelMissing', { model: name })}
         </span>
         <span style={{ fontSize: 11, lineHeight: '16px', color: 'var(--cth-ink-500)' }}>{t('settings.memory.modelOffline')}</span>
+        {downloading && <span style={{ fontSize: 11, lineHeight: '16px', color: 'var(--cth-ink-500)' }}>{t('settings.memory.modelDownloadingHint')}</span>}
         {note && <span style={{ fontSize: 12, color: note.ok ? 'var(--cth-mint)' : 'var(--cth-coral)', overflowWrap: 'anywhere' }}>{note.text}</span>}
       </div>
       <PixelButton variant={status.modelReady ? 'secondary' : 'primary'} size="sm" onClick={() => void download()} disabled={downloading}>

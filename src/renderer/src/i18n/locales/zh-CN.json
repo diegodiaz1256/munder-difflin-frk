@@ -317,7 +317,9 @@
       "modelDownloading": "正在下载…仅一次，最多几百 MB",
       "modelFailed": "下载失败：{{error}}",
       "modelDone": "模型已就绪。",
-      "modelOffline": "记忆不会自行联网：只有这个按钮会。"
+      "modelOffline": "记忆不会自行联网：只有这个按钮会。",
+      "modelTooOld": "已安装的 mempalace 无法运行 EmbeddingGemma，且更新未成功 {{detail}}。请在 设置 → 先决条件 中重新安装，或在记忆面板中把记忆模型切换为 MiniLM（仅英文）。",
+      "modelDownloadingHint": "如果 mempalace 版本太旧，应用会先更新它（几分钟）。"
     },
     "connections": {
       "slack": "Slack",
