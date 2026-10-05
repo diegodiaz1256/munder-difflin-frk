@@ -1417,5 +1417,9 @@
     "viewSource": "view source",
     "loading": "loading image…",
     "decodeFailed": "could not decode this image — the file may be corrupt or misnamed"
+  },
+  "app": {
+    "godFailed": "The orchestrator could not start:",
+    "godRetry": "Retry"
   }
 }

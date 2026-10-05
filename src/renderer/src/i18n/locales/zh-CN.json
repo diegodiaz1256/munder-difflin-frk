@@ -1417,5 +1417,9 @@
     "viewSource": "查看源码",
     "loading": "正在加载图片…",
     "decodeFailed": "无法解码此图片——文件可能已损坏或扩展名有误"
+  },
+  "app": {
+    "godFailed": "协调者无法启动：",
+    "godRetry": "重试"
   }
 }

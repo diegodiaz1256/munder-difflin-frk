@@ -36,7 +36,13 @@ const listeners = JSON.parse(process.argv[1]);
 const socks = new Map();
 let next = 1;
 const out = (m) => process.stdout.write(JSON.stringify(m) + '\n');
+const bound = new Map();
 const listen = (l, cb) => {
+  // Asked again for a listener this bridge already has (the app lost track
+  // of it): answer with it. Listening twice failed with EADDRINUSE, which the
+  // app reads as "another program holds the port" and refuses the agent.
+  if (bound.has(l.name)) return cb(bound.get(l.name));
+  for (const p of bound.values()) if (l.port && p === l.port) return cb(p);
   const srv = net.createServer((s) => {
     const c = next++;
     socks.set(c, s);
@@ -46,7 +52,7 @@ const listen = (l, cb) => {
     s.on('error', () => {});
   });
   srv.on('error', (e) => cb(e.code === 'EADDRINUSE' ? 'direct' : 'failed:' + e.code));
-  srv.listen(l.port, '127.0.0.1', () => cb(srv.address().port));
+  srv.listen(l.port, '127.0.0.1', () => { bound.set(l.name, srv.address().port); cb(srv.address().port); });
 };
 const ports = {};
 let pending = listeners.length;
