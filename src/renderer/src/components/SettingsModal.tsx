@@ -19,6 +19,7 @@ import { SetupPanel } from './SetupPanel';
 import { Icon } from './Icon';
 import { OfficeThemePicker } from './OfficeThemePicker';
 import { McpDefaultsSettings } from './McpDefaultsSettings';
+import { MemoryModelSettings } from './MemoryModelSettings';
 import { IntegrationsRegistry } from './IntegrationsRegistry';
 import { LEGACY_ORG_TRIGGER, PRODUCT_ANALYTICS } from '@shared/fork';
 import { AiEnginesSettings } from './AiEnginesSettings';
@@ -1385,6 +1386,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                             {semMemOn ? t('common.on') : t('common.off')}
                           </PixelButton>
                         </div>
+                        {semMemOn && <MemoryModelSettings />}
                       </div>
 
                       <div style={{ height: 1, background: 'var(--cth-ink-300)' }} />

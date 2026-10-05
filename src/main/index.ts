@@ -128,7 +128,20 @@ const isDev = !!process.env.ELECTRON_RENDERER_URL;
 // NOT take the whole app and every running agent down with it. Log and continue
 // rather than letting the default handler exit the process.
 // (Restored during the #71 merge — the PR's rebase dropped these handlers.)
+// A closed stdout/stderr (the terminal or pipe that launched the app went
+// away) makes every console write fail with EPIPE. Unhandled, each failure
+// came back here, was logged through the same broken stream, failed again,
+// and the main process spun on it: 0% idle, every IPC call ~1 s, the whole
+// UI stuttering. Swallow those stream errors; log nothing about them.
+for (const stream of [process.stdout, process.stderr]) {
+  stream?.on?.('error', () => { /* the console is gone; nothing to tell it */ });
+}
+const isBrokenConsole = (err: unknown): boolean => {
+  const code = (err as { code?: string } | null)?.code;
+  return code === 'EPIPE' || code === 'ERR_STREAM_DESTROYED' || code === 'EIO';
+};
 process.on('uncaughtException', (err) => {
+  if (isBrokenConsole(err)) return;
   console.error('[main] uncaughtException (kept alive):', err);
 });
 process.on('unhandledRejection', (reason) => {
@@ -4344,6 +4357,8 @@ ipcMain.handle('hive:searchMemory', (_evt, query: unknown, wing: unknown) => {
 ipcMain.handle('hive:memoryWakeUp', (_evt, wing: unknown) =>
   memory.wakeUp(typeof wing === 'string' ? wing : undefined));
 ipcMain.handle('hive:mineNow', () => { memory.mineNow(); return { ok: true }; });
+// The one way the memory model goes online (memory.ts OFFLINE_ENV).
+ipcMain.handle('hive:memoryDownloadModel', () => memory.downloadModel());
 // Condense memory.md on demand: an explicit id condenses that one agent (skips
 // the size trigger — a "condense now" button); no id runs a full threshold scan.
 ipcMain.handle('memory:reflectNow', (_evt, id: unknown) =>
@@ -5463,6 +5478,60 @@ function spawnRequestsDir(): string | null {
   return root ? join(root, 'spawn-requests') : null;
 }
 
+/** Requests already put to the operator, so one is asked about once. */
+const spawnAsked = new Set<string>();
+let spawnAsking = false;
+
+/**
+ * "Orchestrator may start workers" is off: show each waiting request to the
+ * operator once — start it, always allow, or decline (the orchestrator is
+ * told either way). Before, the request sat in the queue with nobody aware
+ * of it, and an orchestrator left waiting looked broken.
+ */
+async function askToSpawnPending(): Promise<void> {
+  if (spawnAsking) return;
+  const queue = spawnRequestsDir();
+  if (!queue || !existsSync(queue)) return;
+  let files: string[] = [];
+  try { files = readdirSync(queue).filter((f) => f.endsWith('.json')).sort(); } catch { return; }
+  const next = files.find((f) => !spawnAsked.has(f));
+  if (!next) return;
+  spawnAsked.add(next);
+  const filePath = join(queue, next);
+  let req: SpawnRequest = {};
+  try { req = JSON.parse(readFileSync(filePath, 'utf8')) as SpawnRequest; } catch { return; }
+  const reg = hive.registry();
+  const who = resolveGodName(reg.agents[reg.godId ?? 'god']?.name);
+  const name = typeof req.name === 'string' && req.name.trim() ? req.name.trim() : basename(next, '.json');
+  const objective = typeof req.objective === 'string' ? req.objective.trim() : '';
+  spawnAsking = true;
+  try {
+    const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    const opts = {
+      type: 'question' as const,
+      buttons: ['Start it', 'Always allow', 'Decline'],
+      defaultId: 0, cancelId: 2, noLink: true,
+      title: 'Start a worker?',
+      message: `${who} wants to start a worker: ${name}`,
+      detail: `${objective.length > 600 ? objective.slice(0, 600) + '…' : objective}\n\nTo stop being asked, turn on "Orchestrator may start workers" in Settings → Autonomy & Budgets.`
+    };
+    const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
+    if (win) win.webContents.focus();
+    if (!existsSync(filePath)) return;
+    if (response === 2) {
+      informGod('[worker spawn declined]', `The operator declined to start the worker in ${next}. Do the work another way or ask them.`);
+      archiveRequest(filePath, '.failed');
+      return;
+    }
+    if (response === 1) writeConfig({ orchestratorMaySpawn: true });
+    await processSpawnRequest(filePath);
+  } catch (e) {
+    console.error('[worker] spawn question failed:', e);
+  } finally {
+    spawnAsking = false;
+  }
+}
+
 /** Move a processed request out of the queue so it's never reprocessed. */
 function archiveRequest(filePath: string, sub: '.done' | '.failed'): void {
   const queue = spawnRequestsDir();
@@ -5866,6 +5935,9 @@ async function ephemeralWorkerTick(): Promise<void> {
     //     this is off stays in the queue and runs when it is turned on, rather
     //     than being eaten and failed for a reason god never asked about.
     const dir = readConfig().orchestratorMaySpawn ? spawnRequestsDir() : null;
+    // Off: ask the operator instead of leaving the request waiting unseen
+    // (the orchestrator only knew it was stuck because nothing happened).
+    if (!dir) void askToSpawnPending();
     if (dir && existsSync(dir)) {
       let files: string[] = [];
       try { files = readdirSync(dir).filter(f => f.endsWith('.json')).sort(); } catch { /* dir vanished */ }
