@@ -1562,7 +1562,8 @@
       "agent": "agente",
       "activeOne": "Activo",
       "idle": "Libre",
-      "temps": "Temporales"
+      "temps": "Temporales",
+      "providers": "Proveedores de IA"
     },
     "state": {
       "needsYou": "Te necesita",
@@ -1855,7 +1856,10 @@
       "noAgents": "Aún no hay agentes en la planta.",
       "thingsToAsk": "Cosas que pedirle a un agente",
       "copied": "Copiado",
-      "copy": "Copiar"
+      "copy": "Copiar",
+      "offAssigned": "Apagada: los agentes elegidos aquí no la tendrán hasta que la enciendas.",
+      "turnedOnForAgents": "Encendida para los agentes que elegiste.",
+      "restartNote": "Los agentes ya en marcha la recogen al reiniciarse. A los agentes se les dice qué conexiones tienen y las usan por defecto."
     },
     "env": {
       "step1": "Las variables normales llegan a todos los agentes",
@@ -1910,7 +1914,15 @@
       "secretsItGets": "Secretos que recibe:",
       "addSecretFirst": "añade primero una variable Secreto o 1Password",
       "beforeRuns": "Antes de ejecutarse:",
-      "neverWarning": "Solo para comandos cuyo código sea de fiar: el agente puede editar lo que ejecuta."
+      "neverWarning": "Solo para comandos cuyo código sea de fiar: el agente puede editar lo que ejecuta.",
+      "reveal": "Mostrar",
+      "hide": "Ocultar",
+      "hiddenValue": "••••••••",
+      "kindHelp_plain": "No es secreta. Va al entorno de los agentes que elijas y su prompt lista los nombres. Oculta aquí hasta que pulses Mostrar.",
+      "kindHelp_secret": "Cifrada, nunca se vuelve a mostrar y nunca se da a un agente. Un runner (abajo) puede usarla.",
+      "kindHelp_op": "Una referencia de 1Password. Se lee en el momento en que un runner la necesita; los agentes nunca la ven.",
+      "usedBy": "Usada por",
+      "agentsAlso": "A los agentes se les dice que estos nombres existen, no los valores secretos."
     },
     "mcp": {
       "step1": "Servidores que ya usas",
@@ -2120,6 +2132,10 @@
       "whatToBuild": "Qué construir",
       "detailsPh": "Detalles: qué debe hacer y cómo saber que funciona",
       "whatHappened": "Qué ha pasado"
+    },
+    "prov": {
+      "sub": "Claves y endpoints de modelos para OpenCode, Pi, Crush y Qwen. Las claves se cifran aquí y no se vuelven a mostrar.",
+      "hint": "Cada agente recibe en su entorno, al arrancar, la clave del proveedor de su modelo. Reinicia un agente en marcha para aplicar cambios. Para otras variables usa Entorno."
     }
   },
   "hivePicker": {

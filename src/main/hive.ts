@@ -39,6 +39,7 @@ import {
   type AgentProvider
 } from '../shared/agentProvider';
 import { MCP_CATALOG } from '../shared/mcpCatalog';
+import { connectionsPromptLine, envPromptLine, type PromptConnection } from '../shared/agentConnections';
 import { selectBroadcastTargets } from '../shared/broadcast';
 import { preferredAgentRole } from '../shared/agentRole';
 import { mergeTaskLedger } from '../shared/taskLedger';
@@ -898,6 +899,11 @@ export class HiveManager {
       integrations?: Array<{ id: string; label: string }>;
       /** Runners this agent may ask for (envVault.ts): names only, never values. */
       runners?: Array<{ id: string; name: string; description?: string; secrets: string[] }>;
+      /** Keyed connections this agent can really call (keyedConnectionsFor),
+       *  described for its prompt so it uses them by default. */
+      connections?: PromptConnection[];
+      /** Names of the plain variables in this agent's environment. */
+      envNames?: string[];
       theme?: 'light' | 'dark';
       /** Consent state for the default-MCP bundle (W3). Threaded from the live
        *  HarnessConfig by the caller; undefined → catalog defaults apply. */
@@ -1034,7 +1040,7 @@ export class HiveManager {
     if (!isHiveAwareProvider(meta.provider)) {
       const preset = providerPreset(meta.provider ?? 'claude');
       const flag = preset.initialPromptFlag;
-      const prompt = this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath, opts.integrations, opts.runners);
+      const prompt = this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath, opts.integrations, opts.runners, opts.connections, opts.envNames);
       // agy, codex, and grok expose a Claude-style lifecycle-hook surface, so each
       // gets the SAME live status + Stop→inbox-drain Claude does — selected by the
       // preset's `hookBridge`. agy needs a translating shim (its hook stdin/stdout
@@ -1209,7 +1215,7 @@ export class HiveManager {
     // Tools taken away in Capabilities (Web, Shell…) go the same way.
     const blockedTools = disallowedTools(opts.toolBlocks, !!meta.isGod);
     if (blockedTools.length) args.push('--disallowedTools', ...blockedTools);
-    args.push('--append-system-prompt', this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath, opts.integrations, opts.runners));
+    args.push('--append-system-prompt', this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath, opts.integrations, opts.runners, opts.connections, opts.envNames));
 
     // Phase 1 — autonomy: attach lifecycle hooks via --settings (no edits to the
     // user's repo) so the agent reports activity and drains its inbox on Stop.
@@ -1540,29 +1546,15 @@ export class HiveManager {
   ): { servers: Record<string, McpServerEntry>; env: Record<string, string> } {
     const servers: Record<string, McpServerEntry> = {};
     const env: Record<string, string> = {};
-    const keyed: string[] = [];
+    const keyed: string[] = this.keyedConnectionsFor(cfg, grant, agentId, scopes, toolBlocks);
     const granted = grant ? new Set(cleanServerList(grant)) : null;
     // Web taken away (Capabilities): no web-reading servers either.
     const noWeb = blockedMcpServers(toolBlocks);
     for (const e of MCP_CATALOG) {
       if (noWeb.has(e.id)) continue;
-      // Keyed servers never run under the agent: their key would be in its
-      // environment. They go through main's MCP gateway (mcpGateway.ts), which
-      // holds the key; the agent only gets a capability token. A service can
-      // have several connections (two GitHub accounts…): a Capabilities grant
-      // names the service, and each connection is then switched on, scoped to
-      // agents and keyed on its own. A connection missing a required key is
-      // left out: it could only fail.
-      if ((e.secrets ?? []).length > 0) {
-        if (granted && !granted.has(e.id)) continue;
-        for (const inst of this.mcpInstances(e.id)) {
-          if (cfg?.[inst]?.enabled !== true) continue;
-          const scope = scopes?.[inst];
-          if (Array.isArray(scope) && !(agentId && scope.includes(agentId))) continue;
-          if ((e.secrets ?? []).every((f) => f.optional || this.mcpKeyStored(inst, f.env))) keyed.push(inst);
-        }
-        continue;
-      }
+      // Keyed servers never run under the agent (see keyedConnectionsFor):
+      // they go through main's MCP gateway below.
+      if ((e.secrets ?? []).length > 0) continue;
       const consented = cfg?.[e.id]?.enabled;
       const enabled = granted ? granted.has(e.id) : (consented ?? e.defaultEnabled);
       if (!enabled) continue;
@@ -1615,6 +1607,40 @@ export class HiveManager {
       env.MD_MCP_TOKEN = gw.token;
     }
     return { servers, env };
+  }
+
+  /**
+   * The keyed connections (ids) one agent gets. Keyed servers never run under
+   * the agent: their key would be in its environment. They go through main's
+   * MCP gateway (mcpGateway.ts), which holds the key; the agent only gets a
+   * capability token. A service can have several connections (two GitHub
+   * accounts…): a Capabilities grant names the service, and each connection is
+   * then switched on, scoped to agents and keyed on its own. A connection
+   * missing a required key is left out: it could only fail. The prompt's
+   * CONNECTIONS line uses this same list, so what an agent is told matches
+   * what it can call.
+   */
+  keyedConnectionsFor(
+    cfg: McpDefaultsMap,
+    grant?: string[],
+    agentId?: string,
+    scopes?: Record<string, string[]>,
+    toolBlocks?: string[]
+  ): string[] {
+    const keyed: string[] = [];
+    const granted = grant ? new Set(cleanServerList(grant)) : null;
+    const noWeb = blockedMcpServers(toolBlocks);
+    for (const e of MCP_CATALOG) {
+      if (noWeb.has(e.id) || (e.secrets ?? []).length === 0) continue;
+      if (granted && !granted.has(e.id)) continue;
+      for (const inst of this.mcpInstances(e.id)) {
+        if (cfg?.[inst]?.enabled !== true) continue;
+        const scope = scopes?.[inst];
+        if (Array.isArray(scope) && !(agentId && scope.includes(agentId))) continue;
+        if ((e.secrets ?? []).every((f) => f.optional || this.mcpKeyStored(inst, f.env))) keyed.push(inst);
+      }
+    }
+    return keyed;
   }
 
   /** Whether a Connections key is stored (never its value: the hive does not
@@ -1864,7 +1890,9 @@ export class HiveManager {
     knowledgeGraph: boolean,
     kgCliPath?: string,
     integrations?: Array<{ id: string; label: string }>,
-    runners?: Array<{ id: string; name: string; description?: string; secrets: string[] }>
+    runners?: Array<{ id: string; name: string; description?: string; secrets: string[] }>,
+    connections?: PromptConnection[],
+    envNames?: string[]
   ): string {
     // Native-separator path helpers — see the 🪟 note above.
     const inDir = (...parts: string[]): string => join(dir, ...parts);
@@ -1964,6 +1992,8 @@ export class HiveManager {
       memoryLine,
       knowledgeLine,
       integrationsLine,
+      connectionsPromptLine(connections),
+      envPromptLine(envNames),
       runnersLine,
       listsLine,
       godLine,

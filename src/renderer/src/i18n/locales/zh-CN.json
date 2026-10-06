@@ -1562,7 +1562,8 @@
       "agent": "代理",
       "activeOne": "活跃",
       "idle": "空闲",
-      "temps": "临时工"
+      "temps": "临时工",
+      "providers": "AI 提供商"
     },
     "state": {
       "needsYou": "需要你",
@@ -1855,7 +1856,10 @@
       "noAgents": "楼层上还没有代理。",
       "thingsToAsk": "可以让代理做的事",
       "copied": "已复制",
-      "copy": "复制"
+      "copy": "复制",
+      "offAssigned": "已关闭：在此选择的智能体在你开启之前不会获得它。",
+      "turnedOnForAgents": "已为你选择的智能体开启。",
+      "restartNote": "已在运行的智能体重启后生效。智能体会被告知自己拥有哪些连接，并默认使用它们。"
     },
     "env": {
       "step1": "普通变量提供给所有代理",
@@ -1910,7 +1914,15 @@
       "secretsItGets": "获得的机密：",
       "addSecretFirst": "请先添加机密或 1Password 变量",
       "beforeRuns": "运行前：",
-      "neverWarning": "仅用于你信任其代码的命令：代理可以编辑它运行的内容。"
+      "neverWarning": "仅用于你信任其代码的命令：代理可以编辑它运行的内容。",
+      "reveal": "显示",
+      "hide": "隐藏",
+      "hiddenValue": "••••••••",
+      "kindHelp_plain": "非机密。会进入你所选智能体的环境，其提示词会列出变量名。点击“显示”前此处保持隐藏。",
+      "kindHelp_secret": "加密保存，不再显示，也不会交给智能体。运行器（下方）可以使用它。",
+      "kindHelp_op": "1Password 引用。仅在运行器需要时读取；智能体永远看不到。",
+      "usedBy": "使用者",
+      "agentsAlso": "智能体只会被告知这些名称存在，而非机密值。"
     },
     "mcp": {
       "step1": "你已在使用的服务器",
@@ -2120,6 +2132,10 @@
       "whatToBuild": "要构建什么",
       "detailsPh": "细节：它应该做什么，以及如何判断它可用",
       "whatHappened": "发生了什么"
+    },
+    "prov": {
+      "sub": "OpenCode、Pi、Crush 和 Qwen 的模型 API 密钥与端点。密钥在此加密保存，不会再次显示。",
+      "hint": "智能体启动时，其环境中会带上其模型所属提供商的密钥。重启运行中的智能体以应用更改。其他变量请使用“环境”。"
     }
   },
   "hivePicker": {

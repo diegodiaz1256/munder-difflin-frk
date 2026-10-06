@@ -4,7 +4,7 @@
  * identity; next to Pro's hairline cards and system type it read as noise.
  */
 export type ProIconName =
-  | 'tasks' | 'inbox' | 'automations' | 'memory' | 'capabilities' | 'connections' | 'environment' | 'mcp' | 'team' | 'factories' | 'agents' | 'temps';
+  | 'tasks' | 'inbox' | 'automations' | 'memory' | 'capabilities' | 'connections' | 'environment' | 'providers' | 'mcp' | 'team' | 'factories' | 'agents' | 'temps';
 
 const PATHS: Record<ProIconName, string> = {
   // a checklist: three rows, the first two ticked
@@ -27,6 +27,8 @@ const PATHS: Record<ProIconName, string> = {
   mcp: 'M5.5 2v3 M10.5 2v3 M3.5 5h9v2.5a4.5 4.5 0 0 1-9 0z M8 12v2.5',
   // a key: secrets the agents use but never see
   environment: 'M5.5 10.5a3 3 0 1 1 0-6 3 3 0 0 1 0 6z M8.3 8.6L14 8.6 M12 8.6v2.2 M14 8.6v1.6',
+  // a chip: the model behind the agent
+  providers: 'M4.5 4.5h7v7h-7z M6.8 6.8h2.4v2.4H6.8z M6.5 2.5v2 M9.5 2.5v2 M6.5 11.5v2 M9.5 11.5v2 M2.5 6.5h2 M2.5 9.5h2 M11.5 6.5h2 M11.5 9.5h2',
   // a factory: saw-tooth roof and a chimney
   factories: 'M1.5 14V8l3.5-2.5V8l3.5-2.5V8l3.5-2.5V14z M12 5.5V2.5h1.5V14 M4 11h1.5 M7.5 11H9 M1 14h14',
   // a clock

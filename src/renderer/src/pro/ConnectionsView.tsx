@@ -144,8 +144,15 @@ function ConnectionCard({ c, roster, onChange }: { c: Connection; roster: Agent[
   const toggleAgent = (id: string) => {
     const cur = new Set(c.scope ?? []);
     if (cur.has(id)) cur.delete(id); else cur.add(id);
-    void run(() => window.cth.connectionsSetScope(c.id, [...cur]));
+    // Choosing agents for a ready connection is the human saying "these should
+    // have it": a switch left off made that do nothing at all.
+    void run(async () => {
+      const r = await window.cth.connectionsSetScope(c.id, [...cur]);
+      if (r.ok && cur.size > 0 && !c.enabled && c.ready) return window.cth.connectionsSetEnabled(c.id, true);
+      return r;
+    });
   };
+  const assignedButOff = scoped && !c.enabled && c.scope!.length > 0;
 
   return (
     <article className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -225,6 +232,8 @@ function ConnectionCard({ c, roster, onChange }: { c: Connection; roster: Agent[
             })}
           </div>
         )}
+        {assignedButOff && <span className="pro-text" style={{ color: 'var(--cth-coral)' }}>{t('pro.conn.offAssigned')}</span>}
+        <span className="pro-sub" style={{ fontSize: 11.5 }}>{t('pro.conn.restartNote')}</span>
       </div>
 
       {c.examples.length > 0 && (

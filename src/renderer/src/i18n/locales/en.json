@@ -1562,7 +1562,8 @@
       "agent": "agent",
       "activeOne": "Active",
       "idle": "Idle",
-      "temps": "Temps"
+      "temps": "Temps",
+      "providers": "AI providers"
     },
     "state": {
       "needsYou": "Needs you",
@@ -1855,7 +1856,10 @@
       "noAgents": "No agents on the floor yet.",
       "thingsToAsk": "Things to ask an agent",
       "copied": "Copied",
-      "copy": "Copy"
+      "copy": "Copy",
+      "offAssigned": "Off: the agents chosen here will not get it until you turn it on.",
+      "turnedOnForAgents": "Turned on for the agents you chose.",
+      "restartNote": "Agents already running pick this up when restarted. Agents are told which connections they have and use them by default."
     },
     "env": {
       "step1": "Plain variables reach every agent",
@@ -1910,7 +1914,15 @@
       "secretsItGets": "Secrets it gets:",
       "addSecretFirst": "add a Secret or 1Password variable first",
       "beforeRuns": "Before it runs:",
-      "neverWarning": "Only for commands whose code you trust: the agent can edit what it runs."
+      "neverWarning": "Only for commands whose code you trust: the agent can edit what it runs.",
+      "reveal": "Show",
+      "hide": "Hide",
+      "hiddenValue": "••••••••",
+      "kindHelp_plain": "Not secret. Goes into the environment of the agents you choose, and their prompt lists the names. Hidden here until you click Show.",
+      "kindHelp_secret": "Encrypted, never shown again, never given to an agent. A runner (below) can use it.",
+      "kindHelp_op": "A 1Password reference. Read at the moment a runner needs it; agents never see it.",
+      "usedBy": "Used by",
+      "agentsAlso": "Agents are told these names exist, not secret values."
     },
     "mcp": {
       "step1": "Servers you already use",
@@ -2120,6 +2132,10 @@
       "whatToBuild": "What to build",
       "detailsPh": "Details: what it should do, and how to tell it works",
       "whatHappened": "What happened"
+    },
+    "prov": {
+      "sub": "Model API keys and endpoints for OpenCode, Pi, Crush and Qwen. Keys are encrypted here and never shown again.",
+      "hint": "An agent gets the key of the provider its model belongs to, in its environment, when it starts. Restart a running agent to apply changes. For other variables use Environment."
     }
   },
   "hivePicker": {

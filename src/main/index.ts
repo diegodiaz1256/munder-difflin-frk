@@ -88,6 +88,8 @@ import { McpGateway } from './mcpGateway';
 import { TeamNode, type TeamInbound } from './teamNode';
 import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, relayToken, saveTeamState, setRelayToken, teamEnabled, teamPublicStatus } from './team';
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
+import type { PromptConnection } from '../shared/agentConnections';
+import { PROVIDER_BACKENDS, providerKeyEnv } from '../shared/providerBackends';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
 import { RosterStore } from './roster';
 import { buildWorkerLaunch, workerRequestProblem } from './workerLaunch';
@@ -539,13 +541,7 @@ function gitRun(cwd: string, argsIn: string[]): Promise<string> {
  *  (OpenCode/Crush/pi/qwen) read from standard env vars. Keys are stored
  *  WRITE-ONLY in the same encrypted secret broker as integrations, under
  *  `apikey:<backend>`, and materialized MAIN-ONLY at spawn (never over IPC). */
-const BACKEND_KEY_ENV: Record<string, string> = {
-  anthropic: 'ANTHROPIC_API_KEY',
-  openai: 'OPENAI_API_KEY',
-  google: 'GEMINI_API_KEY',
-  openrouter: 'OPENROUTER_API_KEY',
-  groq: 'GROQ_API_KEY'
-};
+const BACKEND_KEY_ENV: Record<string, string> = Object.fromEntries(PROVIDER_BACKENDS.map((b) => [b.id, b.envVar]));
 const providerKeyRef = (backend: string): string => `apikey:${backend}`;
 
 /** A worker worktree that teardown PRESERVED because it held unintegrated work.
@@ -3279,7 +3275,17 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     // told how to use it.
     // Environment: PLAIN variables only (envVault.plainEnvFor); a value the
     // agent's own spawn already sets wins. Secrets never go in here.
-    opts.env = { ...envVault.plainEnvFor(opts.hive.id), ...(opts.env ?? {}) };
+    const plainEnv = envVault.plainEnvFor(opts.hive.id);
+    opts.env = { ...plainEnv, ...(opts.env ?? {}) };
+    // The connections this agent can really call, so its prompt names them: only
+    // Claude Code and OpenCode have the gateway's MCP servers wired in.
+    const connCfg = readConfig();
+    const connectionsForAgent: PromptConnection[] = provider === 'claude' || provider === 'opencode'
+      ? (() => {
+          const ids = new Set(hive.keyedConnectionsFor(connCfg.mcpDefaults, connCfg.agentMcpGrants?.[opts.hive!.id], opts.hive!.id, connCfg.connectionScopes, connCfg.agentToolBlocks?.[opts.hive!.id]));
+          return listConnections().filter((c) => ids.has(c.id)).map((c) => ({ id: c.id, label: c.label, serviceLabel: c.serviceLabel, description: c.description, examples: c.examples }));
+        })()
+      : [];
     let brokerIntegrations: Array<{ id: string; label: string }> = [];
     const runnersForAgent = envVault.describeRunners();
     if (integrationBroker.running()) {
@@ -3309,6 +3315,8 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           tls: proxyTls,
           integrations: brokerIntegrations,
           runners: runnersForAgent,
+          connections: connectionsForAgent,
+          envNames: Object.keys(plainEnv),
           theme: readConfig().terminalTheme ?? 'light',
           // W3 — default-MCP consent state + the bundled skills source dir.
           mcpDefaults: readConfig().mcpDefaults,
@@ -3505,19 +3513,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     const modelIdx = (opts.args ?? []).indexOf('--model');
     const modelSlug = modelIdx >= 0 ? (opts.args?.[modelIdx + 1] ?? '') : '';
     const prefix = modelSlug.includes('/') ? modelSlug.split('/')[0].toLowerCase() : '';
-    const PREFIX_BACKEND: Record<string, string> = {
-      anthropic: 'anthropic', openai: 'openai', google: 'google', gemini: 'google', groq: 'groq', openrouter: 'openrouter'
-    };
-    const scoped = PREFIX_BACKEND[prefix];
-    const backends = scoped ? [scoped] : Object.keys(BACKEND_KEY_ENV);
-    for (const backend of backends) {
-      const key = integrations.getSecret(providerKeyRef(backend));
-      if (!key) continue;
-      extra[BACKEND_KEY_ENV[backend]] = key;
-      // OpenCode/AI-SDK's Google provider reads GOOGLE_GENERATIVE_AI_API_KEY, not
-      // GEMINI_API_KEY — inject both so google/* authenticates (Jim NIT #1).
-      if (backend === 'google') extra.GOOGLE_GENERATIVE_AI_API_KEY = key;
-    }
+    Object.assign(extra, providerKeyEnv(modelSlug, (backend) => integrations.getSecret(providerKeyRef(backend))));
     // 2) Floor auto-state for pi's bundled extension auto-allow (guardrail #5): it
     //    only auto-approves tool calls when this is '1' (i.e. floor auto mode on).
     extra.HIVE_AUTO_APPROVE = cfg.autoMode ? '1' : '0';
@@ -3536,6 +3532,18 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
         oc.provider = {
           local: { npm: '@ai-sdk/openai-compatible', name: 'Local (self-hosted)', options: { baseURL: baseUrl }, models: { [localModel]: { name: localModel } } }
         };
+      }
+      // Connections (keyed MCP servers) through main's gateway, as OpenCode
+      // remote servers: only a capability token, never the key. Same list the
+      // agent's prompt names (hive.keyedConnectionsFor).
+      if (mcpGateway.running()) {
+        const ids = hive.keyedConnectionsFor(cfg.mcpDefaults, cfg.agentMcpGrants?.[opts.hive.id], opts.hive.id, cfg.connectionScopes, cfg.agentToolBlocks?.[opts.hive.id]);
+        if (ids.length) {
+          const token = mcpGateway.grant(opts.hive.id, ids);
+          oc.mcp = Object.fromEntries(ids.map((id) => [`munder-${id}`, {
+            type: 'remote', url: `${mcpGateway.url()}/mcp/${id}`, enabled: true, headers: { Authorization: `Bearer ${token}` }
+          }]));
+        }
       }
       extra.OPENCODE_CONFIG_CONTENT = JSON.stringify(oc);
     }
