@@ -1,3 +1,4 @@
-- **Pi** now sends your provider's key (LiteLLM 401 fixed).
-- **Text boxes** no longer freeze after dialogs on Windows.
-- A click on a text box gives the page its keyboard back.
+- **Offline dictation**: optional local Whisper, no key needed.
+- **Agents stop searching your disk**: an office map and a split protocol.
+- **Pi and OpenCode** record session and cost; Pi updates an old Node.
+- Fixes: garbled Claude theme menu, stuck "reconnecting" bubble.
