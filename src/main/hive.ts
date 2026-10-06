@@ -39,6 +39,7 @@ import {
   type AgentProvider
 } from '../shared/agentProvider';
 import { MCP_CATALOG } from '../shared/mcpCatalog';
+import { GENERATED_DOC_NOTICE, PROTOCOL_DIR, protocolFiles } from './protocolDocs';
 import { connectionsPromptLine, envPromptLine, type PromptConnection } from '../shared/agentConnections';
 import type { Access } from '../shared/connectionAccess';
 import { selectBroadcastTargets } from '../shared/broadcast';
@@ -783,7 +784,7 @@ export class HiveManager {
 
     for (const { filename, contents } of GENERATED_HIVE_DOCS) {
       const path = join(root, filename);
-      if (!existsSync(path)) writeFileSync(path, contents, 'utf8');
+      if (!existsSync(path)) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, contents, 'utf8'); }
     }
 
     const registry = join(root, 'registry.json');
@@ -848,7 +849,9 @@ export class HiveManager {
     const root = this.root();
     if (!root) return;
     for (const { filename, contents } of GENERATED_HIVE_DOCS) {
-      writeFileSync(join(root, filename), contents, 'utf8');
+      const path = join(root, filename);
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, contents, 'utf8');
     }
   }
 
@@ -1949,7 +1952,13 @@ export class HiveManager {
       : '';
     const ctxLine = 'LIVE CONTEXT: each agent row in the LIVE ROSTER carries a `ctx NN%` tag — its live context-window occupancy. Treat it as the real headroom signal when routing: prefer an agent with a LOW `ctx` for a big task; treat a HIGH `ctx` (near 100%) as busy rather than idle, even if the cumulative token count looks modest.';
 
-    const memoryLine = semanticMemory
+    // Only Claude Code gets the office's MCP servers (--mcp-config in
+    // ensureAgent). Told about munder-* tools it did not have, another CLI went
+    // looking for them.
+    const hasOfficeMcp = isClaudeProvider(meta.provider ?? 'claude');
+    const memoryLine = semanticMemory && !hasOfficeMcp
+      ? 'Semantic memory: the whole hive shares a searchable MemPalace at the path in your MEMPALACE_PALACE_PATH environment variable. To recall what the office already knows, run `mempalace search "<query>"` FIRST (search by meaning over every agent’s notes and the research/ deliverables) before reading files or redoing work; `mempalace wake-up` gives a digest at the start of a task. Your notes in memory.md are mined into the palace automatically — write durable facts there.'
+      : semanticMemory
       // The palace location is named, not spelled as `$MEMPALACE_PALACE_PATH`:
       // `mempalace` reads that env var itself, and the POSIX `$` form was noise
       // (or an empty expansion) for a Windows agent that tried to use it literally.
@@ -1997,7 +2006,7 @@ export class HiveManager {
     const runCli = inRoot('bin', 'md-run.cjs');
     const runnersLine = runners && runners.length
       ? `SECRETS: the human keeps secrets (API keys, passwords, database URLs) out of your reach — you will never see their values, and you must not try to read, print or exfiltrate them. Commands that need them are RUNNERS the app executes for you, in your worktree, with the secrets set; you get the output with every secret masked as ***. Available: ${runners.map((r) => `${r.id}${r.description ? ` (${r.description})` : ''}${r.secrets.length ? ` [uses ${r.secrets.join(', ')}]` : ''}`).join('; ')}. Run one with \`"${hiveNode}" "${runCli}" <runner>\` (\`"${hiveNode}" "${runCli}"\` lists them). The human may be asked to approve a run, especially after you changed files. If a task needs a secret no runner provides, ask the human for a runner — never ask for the value.`
-      : '';
+      : `RUNNERS: commands the human sets up to run with secrets you never see. None exist yet; one added later works at once: \`"${hiveNode}" "${runCli}"\` lists them, \`"${hiveNode}" "${runCli}" <runner>\` runs one (output masked). Never ask for a secret's value.`;
     // The lists that exist now, so an agent uses them instead of inventing
     // its own place for the human's things.
     let existingLists: ReturnType<typeof parseList>[] = [];
@@ -2005,7 +2014,7 @@ export class HiveManager {
       existingLists = readdirSync(inRoot('lists')).filter((f) => f.endsWith('.md')).slice(0, 30)
         .map((f) => parseList(f.replace(/\.md$/, ''), readFileSync(inRoot('lists', f), 'utf8')));
     } catch { /* no lists yet */ }
-    const listsLine = listsInstruction(inRoot('lists'), existingLists);
+    const listsLine = listsInstruction(inRoot('lists'), existingLists, hasOfficeMcp);
     // Deliverables: one place the human can find them (Manager → Deliverables).
     const deliverablesLine = `DELIVERABLES: anything you produce for the human to read or use — a report, analysis, plan, table (CSV), image, export — goes in ${inRoot('research')} (a subfolder per task is fine), with a clear file name; Markdown for documents. Say the path in your reply${meta.isGod ? `, and set the "deliverable" field of its task card in ${inRoot('tasks.json')} to that path (relative to ${root}, e.g. research/<topic>/report.md) — also when an agent reports one to you` : ' and in your done message to god, who records it on the task card'}. Files you write in research/ while your task card is in "doing" are linked to that task by the app, so finish them there. Code changes stay in their repository as usual; do not copy code into research/.`;
     const integrationsLine = integrations && !integrations.length
@@ -2025,14 +2034,22 @@ export class HiveManager {
     const slackLine = meta.isGod
       ? 'SLACK REPLIES: When composing a Slack reply (or writing the `result` field of a Slack-origin kanban card), you MUST: (1) directly address what the user asked — never a bare "done"; (2) include the relevant specifics, outcome, and details; (3) format for Slack mrkdwn — open with a short *bold* headline, use bullet points for multiple items, wrap code/paths in `backtick` blocks, keep it concise (no walls of text). When finishing a Slack-origin task, always write a complete, user-facing, well-formatted `result` on the kanban card — the system posts it verbatim to Slack as the done reply.'
       : `SLACK REPLIES: If god dispatches you a task that came from Slack, it will include an exact \`"${hiveNode}" "<helper>" --channel … --thread … --text "…"\` reply command — when you finish, run it VERBATIM to post your result back to that thread yourself. The reply must be SUBSTANTIVE Slack mrkdwn (a short *bold* headline + the actual outcome/specifics/links), NEVER a bare "done".`;
+    // Agents that did not know where something was searched the whole disk for
+    // it (even Scranton Branch's own source code). One map, absolute paths, and
+    // a rule: what is not here does not exist for you.
+    const officeMapLine = `WHERE THINGS ARE (full paths; do not search the disk for them): protocol index ${inRoot('PROTOCOL.md')}; plan ${inRoot('board.md')}; task cards ${inRoot('tasks.json')}; who is on the floor ${inRoot('registry.json')} and their live state ${inRoot('fleet.json')}; deliverables ${inRoot('research')}; the human's lists ${inRoot('lists')}; REST APIs \`"${hiveNode}" "${apiCli}"\`; runners \`"${hiveNode}" "${runCli}"\` (both list what you may use when run with no arguments). Never look for office files or tools elsewhere on the disk, in other projects, or in Scranton Branch's own installation or source code: if something is not here, in your folder, your working directory or this prompt, it does not exist for you — ask ${meta.isGod ? 'the human' : 'god'} instead of hunting for it.`;
+    const hireLine = meta.isGod
+      ? `HIRING A PERMANENT EMPLOYEE (not a temp): write a manifest to ${inRoot('research', 'hires')}/<name>.json — {"spec":"munder-difflin/hire@1","name":"…","description":"one-line role","goal":"standing mission","provider":"claude|codex|cursor|antigravity","model":"…","character":"…","isolate":false,"tokenCap":0} (only spec and name are required). The app opens the Add-Agent review prefilled and the human confirms; then the agent appears in registry.json and you dispatch to its inbox. An invalid file comes back to your inbox as "[hire manifest rejected]" with the reason.`
+      : '';
     return [
-      `You are "${meta.name}" (${meta.id}), an autonomous agent in a collaborating hive of Claude agents.`,
-      `Your private workspace is ${dir}. The shared hive is ${root}. Full protocol: ${inRoot('PROTOCOL.md')}.`,
+      `You are "${meta.name}" (${meta.id}), an autonomous agent in a collaborating hive of agents.`,
+      `Your private workspace is ${dir}. The shared hive is ${root}. Protocol: ${inRoot('PROTOCOL.md')} is a short index; each topic is its own small file in ${inRoot(PROTOCOL_DIR)} — open only the one you need, never all of them.`,
+      officeMapLine,
       '',
       'HIVE PROTOCOL — follow it every task:',
       `1. At the START of a task, read ${inDir('memory.md')} and EVERY file in ${inDir('inbox')} (messages other agents sent you). After handling an inbox message, move its file into ${inDir('inbox', '.done')}.`,
       `2. Record durable knowledge in ${inDir('memory.md')}, one dated bullet each, ${memoryInstruction(this.projectTypeOf(meta.cwd))}. Correct or remove a bullet when it stops being true: people read this per project, and stale facts mislead the next agent.`,
-      `3. To ask another agent for something or share information, write ONE message JSON into ${inDir('outbox')} (schema in PROTOCOL.md). NEVER write into another agent's folder — the orchestrator delivers your outbox.`,
+      `3. To ask another agent for something or share information, write ONE message JSON into ${inDir('outbox')} (schema: ${inRoot(PROTOCOL_DIR, 'messages.md')}). NEVER write into another agent's folder — the orchestrator delivers your outbox.`,
       '4. At the END of a task, append what you learned to memory.md so future-you remembers.',
       guardrailsLine,
       memoryLine,
@@ -2047,6 +2064,7 @@ export class HiveManager {
       scheduleLine,
       teamLine,
       spawnQueueLine,
+      hireLine,
       runtimeLine,
       slackLine,
       ctxLine,
@@ -3429,9 +3447,6 @@ export class HiveManager {
 
 // ─── Generated hive docs (written into the hive for every agent) ─────────────
 
-const GENERATED_DOC_NOTICE =
-  '<!-- Generated and managed by Munder Difflin. Local edits may be replaced during hive bootstrap. -->';
-
 /** The Claude Code command reference written to <hive>/COMMANDS.md, rendered from
  *  the SAME source as the UI "commands" tab so they never drift. Leads with the
  *  orchestrator note: slash = own session only, cli = shell/fleet; monitor
@@ -3459,164 +3474,6 @@ function renderCommandsMd(): string {
   return lines.join('\n');
 }
 const COMMANDS_MD = renderCommandsMd();
-
-const PROTOCOL_MD = `${GENERATED_DOC_NOTICE}
-
-# Hive protocol
-
-You are one of several Claude agents sharing this hive. Coordination is entirely
-file-based; the harness (main process) is the only thing that runs git and the
-only thing that moves messages between agents.
-
-## Your workspace — \`agents/<your-id>/\`
-- \`identity.md\`  — who you are (read-only; the harness writes it).
-- \`memory.md\`    — your long-term memory. Read at the start of a task; append to it as you learn.
-- \`inbox/\`       — messages addressed to you. Read them at the start of a task.
-- \`inbox/.done/\` — move a message here once you've handled it.
-- \`outbox/\`      — drop messages here to send them. The harness delivers them.
-
-**Never write into another agent's folder.** Write to your own \`outbox/\`; the
-orchestrator routes it. This keeps every file single-writer.
-
-## Sending a message
-Write one JSON file into \`outbox/\` (any filename ending in \`.json\`):
-
-\`\`\`json
-{
-  "to": "<agent-id> | god | broadcast",
-  "act": "request | inform | propose | query | agree | refuse | done",
-  "subject": "one-line summary",
-  "body": "the details",
-  "conversation": "carry this across a thread (optional)",
-  "in_reply_to": "<message id you're replying to> (optional)"
-}
-\`\`\`
-
-The harness fills in \`id\`, \`from\`, \`hops\`, and timestamps.
-
-## Rules of the road
-- Only \`request\`, \`query\`, and \`propose\` expect a reply. \`inform\` and \`done\` are terminal —
-  don't reply to them, or two agents will loop forever.
-- For anything ambiguous, cross-cutting, or needing sign-off, message \`god\` — the
-  god agent clarifies answers for you so you rarely need the human directly.
-- There is NO separate human-approval queue. Human-in-the-loop is native to Claude
-  Code: a tool you run that needs permission prompts in your own session (the human
-  can approve it remotely from their phone via \`/remote-control\`). If you genuinely
-  need a human decision, raise it with \`god\` (a message \`"to": "human"\` is routed to
-  the god/orchestrator, the human's proxy on the floor).
-- \`board.md\` is the shared plan. Don't edit it directly — \`propose\` changes to \`god\`,
-  who is its sole scribe.
-- Re-reading a message you already moved to \`.done/\` is a no-op. Don't reprocess.
-
-## The work: board.md vs tasks.json
-There are two shared surfaces, both in the hive root:
-- \`board.md\` — the freeform narrative plan. The god agent is its sole scribe; others \`propose\` edits.
-- \`tasks.json\` — the structured task ledger (a kanban: \`todo / doing / blocked / done\`, with title,
-  assignee, priority, deps). Keep the task you're working reflected in its status.
-
-## Outside services, secrets and deliverables
-Never ask the human for a key, a token or a password: the app holds them and adds them for you.
-- **Connections** (GitHub, Database, Notion, Sentry…) are MCP tools named \`munder-<id>\`; your
-  system prompt lists the ones you have and whether they are read-only for you.
-- **REST APIs** (Jira, Linear, Stripe, your own…) go through \`md-api\` in \`bin/\`: run it with no
-  arguments to list the ones you may use right now, then \`md-api <api> GET /path\`. An API the
-  human connects later works at once, no restart. A refusal says why (switched off, no key,
-  not for you, read-only).
-- **Secrets** for commands run through **runners** (\`md-run\`): the app runs them and masks the output.
-- **Deliverables** for the human go in \`research/\`; say the path when you report.
-
-## Asking the human (the ASK ME card)
-When a card can only move with the human — a question to answer, or an action only they can do
-(create an account, approve a spend, hand over credentials, test on their device) — the god sets the
-card \`"status": "blocked"\` and appends the ask to its \`humanQA\` array:
-
-\`\`\`json
-{ "q": "the ask, in markdown", "askedAt": "<iso timestamp>" }
-\`\`\`
-
-The harness shows the open ask on the ASK ME board and in the ASK ME tab, and the human's reply lands
-in the same entry as \`"a"\` plus an inbox message to god. Every past entry stays on the card — that
-trail is the decision history.
-
-**Write the ask short, and in markdown.** The card renders it, so plain-text asterisks and backticks
-show up literally, and a card is not a terminal — an ask longer than a short paragraph plus its
-options (roughly 700 characters) is a report, not a question. Cut the narrative and keep the decision:
-- open with ONE **bold** sentence saying exactly what you need from them;
-- \`backticks\` for paths, commands, values, and identifiers;
-- \`-\` bullets or \`1.\` numbering for every option or step;
-- a blank line between paragraphs; a single newline is rendered as a line break, so each option
-  stays on its own line.
-
-When the ask originates in another agent's report, REWRITE it into that shape. Never paste the report
-body in as the question, and never make the human read the investigation to find the decision. Do NOT park human questions in separate files (no \`HumanQuestion.md\`),
-and never sit idle waiting for a reply — move on to other work and pick the answer up when it arrives.
-
-## Guardrails: circuit breaker & token budgets
-A circuit breaker watches every agent for runaway behavior (looping on the same tool, error storms,
-overspending). It escalates gently: \`steer\` → \`constrain\` → \`stop\`. If a \`Circuit breaker: steer\`
-or \`Circuit breaker: constrain\` message lands in your inbox, you ARE the problem it caught — stop
-repeating, summarize what you've tried, and do exactly what the message says (constrain = go read-only
-and get god's sign-off before more tool calls). Be **token-frugal**: the floor has a token budget and
-each agent can have its own token limit; crossing it trips the breaker. Prefer references over pasted
-content, and \`/compact\` your own session when context gets heavy.
-
-## Fleet monitoring (orchestrator)
-You (god) are responsible for situational awareness. To see the live state of every agent, read
-\`fleet.json\` in the hive root — it is refreshed continuously with each agent's tokens, cost, status,
-breaker level, last tool, last-active time, and inbox backlog. Pair it with \`registry.json\` (the roster)
-and \`log.jsonl\` (the event feed). IMPORTANT: \`claude agents\` will NOT show your hive's sibling
-sessions (they're spawned independently) — \`fleet.json\` is your source of truth for them. For a deeper
-look at one agent, read its \`agents/<id>/memory.md\` and \`inbox/\`, or send it a \`query\`. A full
-Claude Code command reference (slash = your own session only; CLI = your shell, can target the fleet)
-is in \`COMMANDS.md\` in the hive root.
-
-## Spawning a worker (orchestrator)
-You can start an ephemeral worker yourself. Write ONE JSON file into \`spawn-requests/<id>.json\` in
-the hive root:
-
-\`\`\`json
-{
-  "objective": "what the worker must do (required)",
-  "cwd": "/absolute/path/to/the/repo (required: a registered repo, this office, or an agent's folder)",
-  "name": "display name (optional)",
-  "command": "engine CLI (optional; overrides the provider default; an agent CLI only, no settings/MCP/backend flags)",
-  "provider": "claude | codex | cursor | antigravity | … (optional; selects its default CLI when command is omitted)",
-  "model": "model override (optional)",
-  "isolate": true,
-  "tokenCap": 0,
-  "slack": { "channel": "C…", "thread_ts": "…" },
-  "character": "meredith",
-  "accent": "coral"
-}
-\`\`\`
-
-The harness polls that directory, spawns \`worker-<id>\`, and moves the request to
-\`spawn-requests/.done/\` once it starts or to \`spawn-requests/.failed/\` with a reason. \`isolate\`
-defaults to true, giving the worker its own git worktree. \`slack\` routes its failures back to a
-thread. This is the ONLY spawn route you can complete on your own: a hire manifest under
-\`research/hires/\` needs the human to confirm it in the UI.
-
-\`character\` and \`accent\` set how the worker looks on the office floor, and both are optional.
-Naming a worker after a cast member already gets you that avatar, so you only need \`character\` when
-the name and the face should differ. An unrecognised value falls back rather than failing the spawn.
-
-**It can be switched off.** The operator controls this under Settings → Autonomy & Budgets, and it is
-OFF by default, because every worker you start spends tokens nobody approved. While it is off your
-request is NOT failed or deleted, it waits in \`spawn-requests/\` and runs if the operator turns it on.
-If a request of yours has sat there without moving, that is why, and it is a decision to raise with the
-human rather than retry. Route work to an agent already on the floor first either way.
-
-## Semantic memory (optional — when \`mempalace\` is installed)
-When \`MEMPALACE_PALACE_PATH\` is set in your environment, the hive shares a
-searchable MemPalace and you have the \`mempalace\` CLI:
-- \`mempalace search "<query>"\` — recall relevant past knowledge across the whole
-  team by meaning (not just keywords). Add \`--wing <agent-id>\` to scope to one
-  agent, \`--results N\` to widen.
-- \`mempalace wake-up\` — a short digest of what matters, good at the start of a task.
-
-Your \`memory.md\` is mined into the palace automatically, so the durable facts you
-write there become searchable by every agent. You don't run \`mine\` yourself.
-`;
 
 // ─── md-api (written to <hive>/bin/md-api.cjs) ───────────────────────────────
 // `md-api <integration> <METHOD> <path> [json-body]` → the loopback key broker.
@@ -3689,9 +3546,9 @@ fetch(url, { method: id ? 'POST' : 'GET', headers })
 `;
 
 const GENERATED_HIVE_DOCS = [
-  { filename: 'PROTOCOL.md', contents: PROTOCOL_MD },
+  ...protocolFiles(),
   { filename: 'COMMANDS.md', contents: COMMANDS_MD }
-] as const;
+];
 
 // ─── cth-hook shim (written to <hive>/bin/cth-hook.cjs) ──────────────────────
 // A minimal pipe: read the hook payload on stdin, tag it with this agent's id,

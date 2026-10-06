@@ -18,7 +18,8 @@ const { HiveManager } = loadTs('src/main/hive.ts');
 
 const GENERATED_NOTICE_PREFIX = '<!-- Generated and managed by Munder Difflin.';
 const GENERATED_DOCS = [
-  { filename: 'PROTOCOL.md', sentinel: 'PROTOCOL_SENTINEL\n', heading: '# Hive protocol' },
+  { filename: 'PROTOCOL.md', sentinel: 'PROTOCOL_SENTINEL\n', heading: '# Hive protocol — index' },
+  { filename: path.join('protocol', 'messages.md'), sentinel: 'MESSAGES_SENTINEL\n', heading: '# Sending a message' },
   { filename: 'COMMANDS.md', sentinel: 'COMMANDS_SENTINEL\n', heading: '# Claude Code commands' }
 ];
 

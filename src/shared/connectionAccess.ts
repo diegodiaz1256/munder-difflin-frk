@@ -104,7 +104,7 @@ export interface ConnectionFacts {
   webBlocked: boolean;
   ceiling?: Access;
   record?: Record<string, Access>;
-  /** The agent's CLI can use the app's MCP servers (Claude Code, OpenCode). */
+  /** The agent's CLI can use the app's MCP servers (Claude Code only, see hive.ensureAgent). */
   mcpCapable: boolean;
 }
 

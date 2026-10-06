@@ -3305,9 +3305,10 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     const plainEnv = envVault.plainEnvFor(opts.hive.id);
     opts.env = { ...plainEnv, ...(opts.env ?? {}) };
     // The connections this agent can really call, so its prompt names them: only
-    // Claude Code and OpenCode have the gateway's MCP servers wired in.
+    // Claude Code has the gateway's MCP servers wired in (hive.ensureAgent). OpenCode
+    // was listed too, with nothing configuring them, and went looking for the tools.
     const connCfg = readConfig();
-    const connectionsForAgent: PromptConnection[] = provider === 'claude' || provider === 'opencode'
+    const connectionsForAgent: PromptConnection[] = provider === 'claude'
       ? (() => {
           const ids = new Set(hive.keyedConnectionsFor(connCfg.mcpDefaults, connCfg.agentMcpGrants?.[opts.hive!.id], opts.hive!.id, connCfg.connectionScopes, connCfg.agentToolBlocks?.[opts.hive!.id]));
           return listConnections().filter((c) => ids.has(c.id)).map((c) => ({ id: c.id, label: c.label, serviceLabel: c.serviceLabel, description: c.description, examples: c.examples, access: connectionAccessFor(opts.hive!.id, c.id) === 'readwrite' ? 'readwrite' as const : 'read' as const }));
@@ -4153,7 +4154,7 @@ ipcMain.handle('connections:agents', (_evt, id: unknown) => {
     const r = explainConnection(a.id, {
       service: conn.service, enabled: conn.enabled, ready: conn.ready, scope: conn.scope,
       grant: cfg.agentMcpGrants?.[a.id], webBlocked: blockedMcpServers(cfg.agentToolBlocks?.[a.id]).has(conn.service),
-      ceiling: cfg.connectionPolicy?.[id], record: cfg.agentMcpAccess?.[a.id], mcpCapable: provider === 'claude' || provider === 'opencode'
+      ceiling: cfg.connectionPolicy?.[id], record: cfg.agentMcpAccess?.[a.id], mcpCapable: provider === 'claude'
     });
     return { agentId: a.id, name: a.name, ...r };
   });

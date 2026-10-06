@@ -58,9 +58,10 @@ export function moveItem(l: PersonalList, text: string, to: string): PersonalLis
 }
 
 /** The instruction agents get about lists, naming the ones that exist. */
-export function listsInstruction(dir: string, existing: Array<Pick<PersonalList, 'slug' | 'title' | 'sections'>> = []): string {
+/** `tools`: the agent has the munder-lists MCP server (only Claude Code gets the office's MCP servers). */
+export function listsInstruction(dir: string, existing: Array<Pick<PersonalList, 'slug' | 'title' | 'sections'>> = [], tools = true): string {
   const known = existing.length
     ? ` Lists that exist now: ${existing.map((l) => `${l.slug}.md ("${l.title}": ${l.sections.map((x) => x.name).join(' / ') || 'no sections'})`).join('; ')}.`
     : ' There are none yet.';
-  return `LISTS: the human keeps personal lists in ${dir} — one markdown file per topic, one "## Section" per state (e.g. Have / Want), each item a "- [ ] text — optional note" line.${known} When the human tells you something that belongs in one (things they own, want, plan, like), use the munder-lists tools (lists_overview, list_add, list_move, list_create) — or edit that folder if you do not have them: add the item, or move it between sections (bought → from Want to Have); look at what exists first and use the list that fits; only create a new file when none does. These lists are the one place for it: not your memory.md, and never Claude Code's own memory (~/.claude/projects/…/memory), which the office cannot see. Keep the human's wording; never delete an item they did not ask you to.`;
+  return `LISTS: the human keeps personal lists in ${dir} — one markdown file per topic, one "## Section" per state (e.g. Have / Want), each item a "- [ ] text — optional note" line.${known} When the human tells you something that belongs in one (things they own, want, plan, like), ${tools ? 'use the munder-lists tools (lists_overview, list_add, list_move, list_create)' : 'edit the file in that folder'}: add the item, or move it between sections (bought → from Want to Have); look at what exists first and use the list that fits; only create a new file when none does. These lists are the one place for it: not your memory.md, and never Claude Code's own memory (~/.claude/projects/…/memory), which the office cannot see. Keep the human's wording; never delete an item they did not ask you to.`;
 }
