@@ -340,6 +340,10 @@ export const contextBridge = {
   }
 };
 export const webUtils = { getPathForFile: (): string => '' };
+/** No Chromium here: the office browser (main/browser.ts) says so instead of crashing. */
+export const session = {
+  fromPartition(): never { throw new Error('The office browser needs the desktop app: the server edition has no Chromium.'); }
+};
 
 /** Bound per window by the engine before the preload module is evaluated. */
 export let ipcRenderer: ReturnType<typeof rendererBridge> = null as never;
@@ -347,7 +351,7 @@ export function bindIpcRenderer(wc: FakeWebContents): void { ipcRenderer = rende
 
 export default {
   app, ipcMain, BrowserWindow, safeStorage, Notification, dialog, shell, clipboard, nativeImage,
-  Menu, powerMonitor, powerSaveBlocker, screen, contextBridge, webUtils, get ipcRenderer() { return ipcRenderer; }
+  Menu, powerMonitor, powerSaveBlocker, screen, contextBridge, webUtils, session, get ipcRenderer() { return ipcRenderer; }
 };
 
 // A first boot writes nothing here; keeps the data dir obviously ours.

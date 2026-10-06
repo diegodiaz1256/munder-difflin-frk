@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { limitSceneFps } from './frameBudget';
 import { useTranslation } from 'react-i18next';
 import { actionLabel } from './actionLabel';
 import i18n from '@/i18n';
@@ -1711,6 +1712,7 @@ export function OfficeFloor() {
         }
       };
       app.ticker.add(onTick);
+      (app as any).__fps = limitSceneFps(app.ticker, () => useStore.getState().agents.some((a) => a.status !== 'idle'));
       // init() is async: the floor may already be behind a fullscreen terminal by
       // the time we get here, and app.init() starts the ticker itself.
       if (pausedRef.current) app.ticker.stop();
@@ -1771,6 +1773,7 @@ export function OfficeFloor() {
         (a as any).__resize?.disconnect?.();
         try { (a as any).__unsub?.(); } catch { /* noop */ }
         try { (a as any).__offMessage?.(); } catch { /* noop */ }
+        try { (a as any).__fps?.(); } catch { /* noop */ }
         try { clearInterval((a as any).__taskBoardPoll); } catch { /* noop */ }
         safeDestroy(a);
       }

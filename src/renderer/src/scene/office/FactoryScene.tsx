@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { limitSceneFps } from './frameBudget';
 import { Application, Container, Texture, type Ticker } from 'pixi.js';
 import 'pixi.js/unsafe-eval';
 import { TiledMapRenderer } from './TiledMapRenderer';
@@ -211,6 +212,7 @@ export function FactoryScene({ floor, events, dimmed, onPick }: {
         while (envelopes.length > 16) envelopes.shift()?.destroy();
       };
 
+      (app as unknown as { __fps?: () => void }).__fps = limitSceneFps(app.ticker);
       app.ticker.add((ticker: Ticker) => {
         const dt = ticker.deltaMS / 1000;
         camera.update(dt);
@@ -238,6 +240,7 @@ export function FactoryScene({ floor, events, dimmed, onPick }: {
       alive = false;
       api.current = null;
       try { (app as unknown as { __ro?: ResizeObserver }).__ro?.disconnect(); } catch { /* noop */ }
+      try { (app as unknown as { __fps?: () => void }).__fps?.(); } catch { /* noop */ }
       for (const rt of runtimes.values()) { try { rt.character?.destroy(); } catch { /* noop */ } }
       try { app.ticker?.stop(); app.destroy(true, { children: true }); } catch { /* noop */ }
     };
