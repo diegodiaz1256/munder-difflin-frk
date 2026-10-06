@@ -223,7 +223,7 @@
     "general": {
       "homeFolder": "Carpeta principal",
       "environment": "Entorno",
-      "keepAwake": "Mantener el Mac despierto mientras trabajan los agentes",
+      "keepAwake": "Mantener el ordenador despierto mientras trabajan los agentes",
       "keepAwakeDesc": "Impide que la pantalla se suspenda para que las programaciones y las terminales se ejecuten a tiempo. Gasta batería: mejor enchufado.",
       "simpleMode": "Explicar las cosas de forma sencilla",
       "simpleModeDesc": "Los agentes te informan en lenguaje llano en vez de jerga técnica.",

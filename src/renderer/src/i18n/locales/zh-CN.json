@@ -223,7 +223,7 @@
     "general": {
       "homeFolder": "主文件夹",
       "environment": "环境",
-      "keepAwake": "智能体运行时保持 Mac 唤醒",
+      "keepAwake": "智能体运行时保持电脑唤醒",
       "keepAwakeDesc": "阻止显示屏休眠，让计划任务和终端准时触发。更耗电——最好接电源。",
       "simpleMode": "用通俗方式解释",
       "simpleModeDesc": "智能体用日常语言而不是工程术语向你汇报。",
