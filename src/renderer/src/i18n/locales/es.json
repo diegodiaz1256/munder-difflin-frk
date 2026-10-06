@@ -2335,5 +2335,64 @@
     "pickFolder": "elegir una carpeta…",
     "creating": "creando…",
     "createInWsl": "crear en WSL"
+  },
+  "mcpCatalog": {
+    "sequential-thinking": {
+      "desc": "Borrador para razonar paso a paso. Sin E/S ni secretos."
+    },
+    "time": {
+      "desc": "Hora actual y conversión entre zonas horarias."
+    },
+    "fetch": {
+      "desc": "Descarga una URL y devuelve su contenido en markdown (solo lectura, HTTP GET)."
+    },
+    "context7": {
+      "desc": "Documentación actualizada de librerías y frameworks."
+    },
+    "filesystem": {
+      "desc": "Leer y editar archivos solo dentro del espacio del agente (limitado a su carpeta al arrancar)."
+    },
+    "git": {
+      "desc": "Ver status/log/diff de git del repositorio del agente (limitado a su carpeta al arrancar)."
+    },
+    "github-token": {
+      "desc": "Leer y escribir issues, PRs y repositorios de GitHub. Necesita un token de acceso personal.",
+      "GITHUB_PERSONAL_ACCESS_TOKEN": {
+        "label": "Token de acceso personal",
+        "help": "Un token fine-grained con acceso a los repositorios en los que trabajan los agentes (Contents, Issues, Pull requests)."
+      }
+    },
+    "db": {
+      "desc": "Consultar una base de datos Postgres, solo lectura. Necesita una cadena de conexión.",
+      "DATABASE_URI": {
+        "label": "Cadena de conexión",
+        "help": "Usa un usuario de base de datos de solo lectura. Necesita uv (uvx) instalado."
+      }
+    },
+    "search-with-key": {
+      "desc": "Búsqueda web con clave. Necesita la clave API de un proveedor de búsqueda.",
+      "BRAVE_API_KEY": {
+        "label": "Clave API",
+        "help": "Del panel de Brave Search API (el plan gratuito sirve)."
+      }
+    },
+    "notion": {
+      "desc": "Buscar, leer y editar las páginas de Notion compartidas con la integración.",
+      "NOTION_TOKEN": {
+        "label": "Secreto de la integración",
+        "help": "Crea una integración interna y comparte con ella las páginas que puede usar (••• → Conexiones)."
+      }
+    },
+    "sentry": {
+      "desc": "Consultar issues, eventos y releases en Sentry.",
+      "SENTRY_ACCESS_TOKEN": {
+        "label": "Token de usuario",
+        "help": "Permisos: org:read, project:read, project:write, team:read, team:write, event:write."
+      },
+      "SENTRY_HOST": {
+        "label": "Host (solo autoalojado)",
+        "help": "Déjalo vacío para sentry.io."
+      }
+    }
   }
 }
