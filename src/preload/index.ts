@@ -31,7 +31,8 @@ export type {
 export interface EnvVarView { name: string; kind: 'plain' | 'secret' | 'op'; value?: string; agents?: string[] | null; note?: string; stored?: boolean }
 export type McpTransportView = { kind: 'stdio'; command: string; args: string[] } | { kind: 'http'; url: string };
 export interface McpMineView { id: string; name: string; transport: McpTransportView; env: Record<string, string>; secretEnv: string[]; enabled: boolean; agents: string[] | null; source?: string; secretsStored: Record<string, boolean> }
-export interface McpFoundView { source: string; file: string; name: string; transport: McpTransportView; env: Array<{ name: string; secret: boolean; value?: string }>; headerNames: string[]; imported: boolean }
+export interface McpFoundView { source: string; file: string; name: string; transport: McpTransportView; env: Array<{ name: string; secret: boolean; value?: string }>; headerNames: string[]; imported: boolean; agent?: string; suggest: { kind: 'connection' | 'builtin'; id: string; label: string } | null }
+export interface McpOverviewView { agentId: string; name: string; provider: string; servers: Array<{ name: string; id: string; origin: 'connection' | 'builtin' | 'yours' | 'office'; access?: 'none' | 'read' | 'readwrite' }> }
 export interface RunnerView { id: string; name: string; command: string; description?: string; secrets: string[]; approval: 'always' | 'on-change' | 'never'; timeoutSec?: number }
 
 /** Factories as the renderer sees them (main/factories.ts; FACTORY-MCP.md). */
@@ -401,6 +402,8 @@ export interface HarnessConfig {
   agentTokenCaps?: Record<string, number>;
   /** Per-agent MCP grants (Pro Capabilities): agent id → catalog ids. */
   agentMcpGrants?: Record<string, string[]>;
+  /** Claude Code agents reach only the MCP servers managed in the app (default on). */
+  mcpOnlyManaged?: boolean;
   /** Claude Code tool groups taken from an agent (Capabilities): agent id → group ids (shared/nativeTools.ts). */
   agentToolBlocks?: Record<string, string[]>;
   autoDeliveryPausedAgents?: string[];
@@ -990,6 +993,8 @@ const api = {
   hiveSend: (msg: Partial<HiveMessage>, from?: string): Promise<{ ok: boolean; error?: string; message?: HiveMessage }> =>
     ipcRenderer.invoke('hive:send', msg, from),
 
+  /** What an agent has done lately (hook events with what each tool was asked), oldest first. */
+  hiveSteps: (agentId: string): Promise<HookEvent[]> => ipcRenderer.invoke('hive:steps', agentId),
   onHiveHookEvent: (
     cb: (e: HookEvent) => void
   ): (() => void) => {
@@ -1438,6 +1443,8 @@ const api = {
   envOpStatus: (): Promise<{ installed: boolean; version?: string }> => ipcRenderer.invoke('env:opStatus'),
   // Manager → MCP (main/mcpServers.ts). Keys are write-only.
   mcpList: (): Promise<{ mine: McpMineView[]; found: McpFoundView[] }> => ipcRenderer.invoke('mcp:list'),
+  /** What each agent is given, decided by the app: server, where it came from, and what it may do. */
+  mcpOverview: (): Promise<McpOverviewView[]> => ipcRenderer.invoke('mcp:overview'),
   mcpImport: (source: string, name: string, secretNames?: string[]): Promise<{ ok: boolean; id?: string; error?: string }> =>
     ipcRenderer.invoke('mcp:import', source, name, secretNames),
   mcpSave: (input: { id?: string; name: string; transport: McpTransportView; env: Record<string, string> }, secretNames: string[]): Promise<{ ok: boolean; id?: string; error?: string }> =>

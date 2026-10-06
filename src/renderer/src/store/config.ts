@@ -130,6 +130,7 @@ export interface HarnessConfig {
   /** Manager → Connections "Choose agents": a keyed MCP server listed here reaches
    *  only these agent ids (on their next spawn). Absent → every agent. */
   connectionScopes?: Record<string, string[]>;
+  mcpOnlyManaged?: boolean;
   /** Extra Connections beyond each service's first (two GitHub accounts…):
    *  id `<service>--<slug>`, the service's catalog id, and a name. */
   connectionInstances?: Array<{ id: string; service: string; label: string }>;

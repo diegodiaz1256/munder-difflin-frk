@@ -90,7 +90,7 @@ import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, rel
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
 import type { PromptConnection } from '../shared/agentConnections';
 import { PROVIDER_BACKENDS, providerKeyEnv } from '../shared/providerBackends';
-import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
+import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES, hasPlaceholderHost, probeSpecFor } from '../shared/integrations';
 import { RosterStore } from './roster';
 import { buildWorkerLaunch, workerRequestProblem } from './workerLaunch';
 import { tokenizeCommand } from '../shared/commandLine';
@@ -465,7 +465,13 @@ const mcpServers = new McpServers({
   writeCustom: (list) => writeConfig({ customMcp: list }),
   getSecret: (ref) => integrations.getSecret(ref),
   setSecret: (ref, v) => integrations.setSecret(ref, v),
-  deleteSecret: (ref) => integrations.deleteSecret(ref)
+  deleteSecret: (ref) => integrations.deleteSecret(ref),
+  // Where the agents run (their folder, a Codex agent's own CODEX_HOME), so what they set up for themselves is seen.
+  agentPlaces: () => {
+    const root = hive.root();
+    const reg = hive.enabled() ? hive.registry() : null;
+    return reg ? Object.values(reg.agents).filter((a) => a.status !== 'gone' && a.cwd).map((a) => ({ name: a.name, cwd: a.cwd, ...(root && a.provider === 'codex' ? { codexHome: join(root, 'agents', a.id, '.codex') } : {}) })) : [];
+  }
 });
 
 // Environment & secrets (envVault.ts): agents use secrets, never see them.
@@ -3324,6 +3330,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           mcpGrant: readConfig().agentMcpGrants?.[opts.hive.id],
           toolBlocks: readConfig().agentToolBlocks?.[opts.hive.id],
           mcpScopes: readConfig().connectionScopes,
+          mcpOnlyManaged: readConfig().mcpOnlyManaged !== false,
           skillsDir: skillsResourceDir(),
           // The shared palace is mutated by the agent's own `mempalace` calls, so
           // the OS sandbox must let it through (empty when memory is off).
@@ -3759,20 +3766,25 @@ ipcMain.handle('integrations:test', async (_evt, payload: unknown) => {
   if (!rec) return { ok: false, error: 'unknown integration' };
   const probe = validateBaseUrl(rec.baseUrl);
   if (!probe.ok) return { ok: false, error: probe.error };
+  if (hasPlaceholderHost(rec.baseUrl)) return { ok: false, error: 'Replace "your-domain" in the base URL with your own site first.' };
+  // An explicit path wins; otherwise the service's own cheap authenticated read
+  // (a bare baseUrl such as Jira's /rest/api/3 is not an endpoint: it is a 404).
+  const spec = typeof p.path === 'string' && p.path ? { method: 'GET' as const, path: p.path } : probeSpecFor(rec.baseUrl);
   // Confine the probe path through the SAME gate as the worker forward() path, so an
   // absolute URL / backslash-host / traversal in p.path can't override the origin and
   // exfiltrate the secret to an attacker host. Resolve (and reject) BEFORE the secret
   // is ever materialized, so a bad path never even decrypts it.
-  const target = resolveUpstreamUrl(rec.baseUrl, typeof p.path === 'string' ? p.path : '');
+  const target = resolveUpstreamUrl(rec.baseUrl, spec.path);
   if (!target) return { ok: false, error: 'path escapes the integration baseUrl', code: 'bad_request' };
   const secret = integrations.getSecret(rec.secretRef);
-  const headers = buildAuthHeaders(rec.authType, rec.authHeader, secret);
+  const headers = { ...(('headers' in spec && spec.headers) || {}), ...buildAuthHeaders(rec.authType, rec.authHeader, secret) };
   try {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 15_000);
-    const r = await fetch(target, { method: 'GET', headers, redirect: 'manual', signal: ac.signal });
+    const r = await fetch(target, { method: spec.method, headers, body: 'body' in spec ? spec.body : undefined, redirect: 'manual', signal: ac.signal });
     clearTimeout(timer);
-    return { ok: r.ok, status: r.status };
+    // The service said no: say which request, so a 404/401 can be read, not guessed.
+    return { ok: r.ok, status: r.status, ...(r.ok ? {} : { error: `${spec.method} ${target.pathname}${target.search} `.trim() }) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
@@ -3922,6 +3934,15 @@ ipcMain.handle('env:opStatus', () => new Promise((resolve) => {
 // Manager → MCP: your own servers and the ones set up for other tools. Keys
 // go one way into the encrypted store (mcpServers.ts).
 const mcpErr = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) });
+// What each agent really gets, decided here — never by the agent. Grants nothing.
+ipcMain.handle('mcp:overview', () => {
+  if (!hive.enabled()) return [];
+  const cfg = readConfig();
+  return Object.values(hive.registry().agents).filter((a) => a.status !== 'gone' && !a.isAssistant).map((a) => ({
+    agentId: a.id, name: a.name, provider: a.provider ?? 'claude',
+    servers: hive.managedMcpFor(a.id, a.cwd, cfg.mcpDefaults, cfg.agentMcpGrants?.[a.id], cfg.connectionScopes, cfg.agentToolBlocks?.[a.id])
+  }));
+});
 ipcMain.handle('mcp:list', () => ({ mine: mcpServers.listCustom(), found: mcpServers.scanForUi() }));
 ipcMain.handle('mcp:import', (_evt, source: unknown, name: unknown, secretNames: unknown) => {
   if (typeof source !== 'string' || typeof name !== 'string') return mcpErr('bad request');
@@ -4244,6 +4265,7 @@ ipcMain.handle('hive:setAgentHold', (_evt, id: unknown, hold: unknown) => {
 });
 ipcMain.handle('hive:board', () => hive.board());
 ipcMain.handle('hive:tasks', () => hive.tasks());
+ipcMain.handle('hive:steps', (_evt, agentId: unknown) => (typeof agentId === 'string' ? hookServer.stepsFor(agentId) : []));
 ipcMain.handle('hive:log', (_evt, n: unknown) => hive.logTail(typeof n === 'number' ? n : 200));
 ipcMain.handle('hive:memory', (_evt, id: unknown) => (typeof id === 'string' ? hive.memory(id) : ''));
 // The memory graph's source (shared/memoryGraph.ts): every agent's memory.md

@@ -235,6 +235,8 @@ export interface HarnessConfig {
   /** Manager → Connections "Choose agents": a keyed MCP server listed here reaches
    *  only these agent ids (on their next spawn). Absent → every agent. */
   connectionScopes?: Record<string, string[]>;
+  /** Agents (Claude Code) reach only the MCP servers managed in the app. Absent → true. */
+  mcpOnlyManaged?: boolean;
   /** The most any agent may do with a connection (shared/connectionAccess.ts):
    *  connection id → none | read | readwrite. Absent → read-only. */
   connectionPolicy?: Record<string, Access>;

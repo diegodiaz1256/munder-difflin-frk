@@ -919,6 +919,10 @@ export class HiveManager {
        *  listed here reaches only these agent ids. Absent → everyone it would
        *  otherwise reach. */
       mcpScopes?: Record<string, string[]>;
+      /** Claude Code loads only the servers the app hands it (--strict-mcp-config), not
+       *  the user's own ~/.claude.json, a project's .mcp.json or ones the agent adds.
+       *  Default on: agents reach only what is managed. */
+      mcpOnlyManaged?: boolean;
       /** App-resources `skills/` source dir (W3). The bundled read-only skills are
        *  copied into the agent's `.claude/skills/` per spawn; undefined or missing
        *  is a no-op (tolerated until Kevin populates the resource dir). */
@@ -1201,12 +1205,15 @@ export class HiveManager {
     if (Object.keys(mcp.servers).length) {
       this.writeJson(mcpPath, this.forAgentJson({ mcpServers: mcp.servers }));
       args.push('--mcp-config', mcpPath);
+      if (opts.mcpOnlyManaged !== false) args.push('--strict-mcp-config');
       // Only the gateway capability token rides in env (the file says `${...}`);
       // keys never reach the agent at all.
       Object.assign(env, mcp.env);
     } else if (existsSync(mcpPath)) {
       try { rmSync(mcpPath, { force: true }); } catch { /* stale, harmless */ }
     }
+    // Nothing managed to hand over, and still nothing else allowed.
+    if (opts.mcpOnlyManaged !== false && !Object.keys(mcp.servers).length) args.push('--strict-mcp-config');
 
     // The orchestrator delegates through the office (spawn-requests, inboxes).
     // Claude Code's own sub-agent tool starts a helper inside its session that
@@ -1547,7 +1554,9 @@ export class HiveManager {
     grant?: string[],
     agentId?: string,
     scopes?: Record<string, string[]>,
-    toolBlocks?: string[]
+    toolBlocks?: string[],
+    /** Only list what the agent would get: no gateway capability is granted. */
+    dryRun = false
   ): { servers: Record<string, McpServerEntry>; env: Record<string, string> } {
     const servers: Record<string, McpServerEntry> = {};
     const env: Record<string, string> = {};
@@ -1602,7 +1611,7 @@ export class HiveManager {
     if (agentId && root) servers['munder-lists'] = { command: this.nodeCommand(), args: [join(root, 'bin', 'md-lists.cjs'), join(root, 'lists')] };
     // No gateway (tests, or it failed to bind) → no keyed servers at all: the
     // fallback is "without GitHub", never "with the key in the agent's env".
-    const gw = keyed.length && agentId ? this.mcpGateway(agentId, keyed, this.mcpAccessMap(agentId, keyed)) : null;
+    const gw = keyed.length && agentId ? (dryRun ? { url: 'http://127.0.0.1:0', token: '' } : this.mcpGateway(agentId, keyed, this.mcpAccessMap(agentId, keyed))) : null;
     if (gw) {
       for (const id of keyed) {
         // `${MD_MCP_TOKEN}` is expanded by Claude Code from the process env, so
@@ -1612,6 +1621,20 @@ export class HiveManager {
       env.MD_MCP_TOKEN = gw.token;
     }
     return { servers, env };
+  }
+
+  /** What this agent is given, by MCP server name and where it came from — the
+   *  managed list, as the app (not the agent) decides it. Grants nothing. */
+  managedMcpFor(agentId: string, cwd: string, cfg: McpDefaultsMap, grant?: string[], scopes?: Record<string, string[]>, toolBlocks?: string[]): Array<{ name: string; id: string; origin: 'connection' | 'builtin' | 'yours' | 'office'; access?: Access }> {
+    const { servers } = this.buildDefaultMcpServers(cwd, cfg, grant, agentId, scopes, toolBlocks, true);
+    const keyed = new Set(this.keyedConnectionsFor(cfg, grant, agentId, scopes, toolBlocks));
+    return Object.keys(servers).map((name) => {
+      const id = name.replace(/^munder-/, '');
+      if (keyed.has(id)) return { name, id, origin: 'connection' as const, access: this.mcpAccess(agentId, id) };
+      if (id.startsWith('custom--')) return { name, id, origin: 'yours' as const };
+      if (id === 'memory' || id === 'lists') return { name, id, origin: 'office' as const };
+      return { name, id, origin: 'builtin' as const };
+    });
   }
 
   /**
