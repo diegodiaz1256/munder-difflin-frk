@@ -37,7 +37,7 @@ export function BootBanner() {
 
   if (godStatus === 'failed' && godError) {
     return (
-      <div role="alert" className="pro-card" style={{ display: 'flex', gap: 12, alignItems: 'center', margin: '0 0 12px', boxShadow: 'inset 0 0 0 1.5px var(--cth-coral)', background: 'var(--cth-coral-light)' }}>
+      <div role="alert" className="pro-card" style={{ display: 'flex', gap: 12, alignItems: 'center', margin: '16px 22px 0', boxShadow: 'inset 0 0 0 1.5px var(--cth-coral)', background: 'var(--cth-coral-light)' }}>
         <span style={{ flex: 1, minWidth: 0 }}><strong>{t('app.godFailed')}</strong> {godError}</span>
         <button className="pro-btn pro-btn-primary" onClick={() => window.location.reload()}>{t('app.godRetry')}</button>
       </div>
