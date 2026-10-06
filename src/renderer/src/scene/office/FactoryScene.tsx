@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { limitSceneFps } from './frameBudget';
 import { Application, Container, Texture, type Ticker } from 'pixi.js';
 import 'pixi.js/unsafe-eval';
