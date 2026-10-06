@@ -24,6 +24,7 @@ import {
   buildSpawnCommand,
   tokenizeCommand,
   modelsForProvider,
+  ownModelsFor,
   inferAgentProvider,
   providerPreset,
   isClaudeProvider
@@ -187,6 +188,11 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
   const initialModel = isClaudeProvider(initialProvider) ? config.defaultModel : undefined;
 
   const [name, setName] = useState(pendingHire?.name ?? 'Jim');
+  // Pi's own ~/.pi/agent/models.json, offered beside the catalog models.
+  const [piOwn, setPiOwn] = useState<string[]>([]);
+  useEffect(() => {
+    void window.cth.engineStatus?.('pi')?.then((s) => setPiOwn(s.ownModels ?? [])).catch(() => undefined);
+  }, []);
   const [character, setCharacter] = useState<OfficeCharacterName>(knownCharacter(pendingHire?.character));
   const [accent, setAccent] = useState<AccentColorName>(knownAccent(pendingHire?.accent));
   // No project registered yet (a new office): the office folder itself, so a
@@ -931,7 +937,8 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
                           // hardcoded list (e.g. claude-fable-5). Surface it as a real,
                           // selected card instead of leaving the picker looking unset —
                           // the command field already carries it either way.
-                          const known = modelsForProvider(provider);
+                          const catalog = modelsForProvider(provider);
+                          const known = [...catalog, ...ownModelsFor(config, provider, piOwn).filter((o) => !catalog.some((m) => m.id === o.id))];
                           return model && !known.some((m) => m.id === model)
                             ? [...known, { id: model, label: tr('addAgent.fromHire', { model }) }]
                             : known;

@@ -2305,7 +2305,8 @@
       "customModels": "Modelos:",
       "customRemoveModel": "Clic para quitarlo",
       "customModelPh": "añadir un id de modelo",
-      "customFetch": "Pedir al servidor"
+      "customFetch": "Pedir al servidor",
+      "emptyAuth": "\"{{id}}\" tiene una entrada de acceso vacía, que oculta la clave de models.json. Ejecuta /logout en el motor y elige {{id}}; vuelve a iniciar sesión si la necesitas."
     }
   },
   "hivePicker": {

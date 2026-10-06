@@ -164,6 +164,7 @@ export interface HarnessConfig {
   /** Per-CLI-provider default model slug, used to pre-fill the model picker. */
   providerDefaultModels?: Partial<Record<AgentProvider, string>>;
   customModelProviders?: Array<{ id: string; label: string; baseUrl: string; models: string[] }>;
+  engineModels?: Partial<Record<'pi' | 'opencode', string[]>>;
   /** Certificates for agents' HTTPS (custom endpoints, company gateways):
    *  verify on/off, an extra CA file, and trusting the Windows / WSL stores.
    *  See src/main/caBundle.ts. */
@@ -379,6 +380,19 @@ export { tokenizeCommand } from '@shared/commandLine';
 /** The model preset list for a given provider's picker, on this build. */
 export function modelsForProvider(provider: AgentProvider): ModelOption[] {
   return modelsForProviderAtVersion(provider, runningAppVersion());
+}
+
+/** For Pi / OpenCode, the models the human set up themselves: their custom
+ *  OpenAI-compatible providers, the list the engine last reported (AI providers →
+ *  Load models) and Pi's own models.json. The hosted catalog knows none of these. */
+export function ownModelsFor(config: HarnessConfig, provider: AgentProvider, piOwn: string[] = []): ModelOption[] {
+  if (provider !== 'pi' && provider !== 'opencode') return [];
+  const ids = [
+    ...(config.customModelProviders ?? []).flatMap((p) => p.models.map((m) => `${p.id}/${m}`)),
+    ...(provider === 'pi' ? piOwn : []),
+    ...(config.engineModels?.[provider] ?? [])
+  ];
+  return [...new Set(ids)].slice(0, 60).map((id) => ({ id, label: id }));
 }
 
 /** The Claude presets, for the surfaces that only ever offer Claude models.

@@ -88,3 +88,39 @@ test('broker, read & write: writes pass; none: nothing passes', async (t) => {
   assert.equal((await none.call('GET', 'myself')).status, 403);
   assert.deepEqual(none.hits, []);
 });
+
+// ─── the report: an agent started before Jira was usable never got it ──────
+
+test('live capability: an API enabled after the agent started works at once; refusals say why', async (t) => {
+  const up = http.createServer((req, res) => { req.resume(); req.on('end', () => res.end('{"me":1}')); });
+  await new Promise((r) => up.listen(0, '127.0.0.1', r));
+  t.after(() => up.close());
+  const record = { id: 'jira', label: 'Jira', kind: 'custom-rest', baseUrl: `http://127.0.0.1:${up.address().port}/rest/api/2`, authType: 'none', enabled: true, createdAt: 0, updatedAt: 0 };
+  let usable = false;                                         // the human has not finished saving Jira yet
+  const broker = new IntegrationBroker({
+    getRecord: (id) => (id === 'jira' ? record : undefined), getSecret: () => undefined,
+    live: () => (usable ? { ids: ['jira'], access: { jira: 'read' } } : { ids: [], access: {} }),
+    whyNot: () => (usable ? undefined : 'its key has not been saved in Connections → REST APIs')
+  });
+  await broker.start();
+  t.after(() => broker.stop());
+  const token = broker.grant('pty-1', [], {}, 'jim-4');      // spawned while Jira was not usable
+  const h = { authorization: `Bearer ${token}` };
+
+  const before = await fetch(`${broker.url()}/i/jira/myself`, { headers: h });
+  assert.equal(before.status, 403);
+  assert.match((await before.json()).error, /its key has not been saved.*no restart needed/);
+  assert.deepEqual((await (await fetch(`${broker.url()}/i`, { headers: h })).json()).apis, []);
+
+  usable = true;                                              // the human saves the key — no respawn
+  const after = await fetch(`${broker.url()}/i/jira/myself`, { headers: h });
+  assert.equal(after.status, 200);
+  assert.deepEqual((await (await fetch(`${broker.url()}/i`, { headers: h })).json()).apis, [{ id: 'jira', label: 'Jira', access: 'read' }]);
+  // ...and the level is live too: read-only refuses a write.
+  assert.equal((await fetch(`${broker.url()}/i/jira/issue`, { method: 'POST', headers: h, body: '{}' })).status, 403);
+});
+
+test('a grant without an agent id keeps the spawn-time behaviour', async (t) => {
+  const { call } = await setup(t, 'readwrite');
+  assert.equal((await call('GET', 'myself')).status, 200);
+});

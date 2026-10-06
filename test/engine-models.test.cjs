@@ -65,3 +65,18 @@ test('model listings: OpenAI /models and Ollama /api/tags', () => {
   assert.deepEqual(modelsFromListing({ models: [{ name: 'llama3.1:8b' }, { model: 'qwen' }] }), ['llama3.1:8b', 'qwen']);
   assert.deepEqual(modelsFromListing(null), []);
 });
+
+test('resume: the pinned model comes back, and keys only go to the provider in use', () => {
+  const { effectiveModel, keyScope, piSettingsWithModel, piOwnModels, authProviders } = loadTs('src/shared/engineModels.ts');
+  assert.equal(effectiveModel(undefined, 'wanda/qwen3', undefined).model, 'wanda/qwen3');
+  assert.equal(effectiveModel('openai/gpt-5.5', 'wanda/qwen3').model, 'openai/gpt-5.5');
+  const known = (p) => p === 'openai' || p === 'anthropic';
+  assert.equal(keyScope('wanda', known), 'none');
+  assert.equal(keyScope('openai', known), 'one');
+  const s = JSON.parse(piSettingsWithModel('{"theme":"dark"}', 'wanda/qwen3'));
+  assert.deepEqual([s.theme, s.defaultProvider, s.defaultModel], ['dark', 'wanda', 'qwen3']);
+  assert.deepEqual(piOwnModels('{"providers":{"wanda":{"models":[{"id":"qwen3"},{"id":""}]}}}'), ['wanda/qwen3']);
+  const a = authProviders('{"wanda":{"type":"api_key","key":""},"openai":{"type":"api_key","key":"sk-1"}}');
+  assert.equal(a.find((x) => x.id === 'wanda').empty, true);
+  assert.equal(a.find((x) => x.id === 'openai').empty, undefined);
+});

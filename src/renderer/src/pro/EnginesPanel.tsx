@@ -44,7 +44,11 @@ function EngineCard({ engine, label, config }: { engine: Engine; label: string; 
     setLoading(true); setError(null);
     const r = await window.cth.engineModels(engine).catch((e) => ({ ok: false, models: [], error: String(e) }));
     setLoading(false);
-    if (r.ok) setModels(r.models); else { setModels(null); setError(r.error ?? t('pro.engines.noModels')); }
+    if (r.ok) {
+      setModels(r.models);
+      // Kept for Add Agent's model list.
+      void window.cth.updateConfig({ engineModels: { ...(config.engineModels ?? {}), [engine]: r.models } });
+    } else { setModels(null); setError(r.error ?? t('pro.engines.noModels')); }
   };
   const save = async () => {
     const next = { ...(config.providerDefaultModels ?? {}), [engine]: model.trim() || undefined };
@@ -54,7 +58,11 @@ function EngineCard({ engine, label, config }: { engine: Engine; label: string; 
   };
   const providers = status?.providers ?? [];
   // Your own providers' models are offered too (provider/model).
-  const custom = (config.customModelProviders ?? []).flatMap((p) => p.models.map((m) => `${p.id}/${m}`));
+  const custom = [
+    ...(config.customModelProviders ?? []).flatMap((p) => p.models.map((m) => `${p.id}/${m}`)),
+    ...(status?.ownModels ?? []),
+    ...(config.engineModels?.[engine] ?? [])
+  ];
 
   return (
     <article className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -70,6 +78,9 @@ function EngineCard({ engine, label, config }: { engine: Engine; label: string; 
           ? t('pro.engines.signedInTo', { list: providers.map((p) => `${p.id}${p.kind === 'oauth' ? ` (${t('pro.engines.subscription')})` : ''}`).join(', ') })
           : t('pro.engines.notSignedInBody')}
       </span>
+      {providers.filter((p) => p.empty).map((p) => (
+        <span key={p.id} className="pro-text" style={{ color: 'var(--cth-coral)', fontSize: 12 }}>{t('pro.engines.emptyAuth', { id: p.id })}</span>
+      ))}
       <div className="pro-row" style={{ gap: 8, flexWrap: 'wrap' }}>
         <button className="pro-btn pro-btn-primary" disabled={!status?.ok} onClick={() => setSigningIn(true)}>{t('pro.engines.signIn')}</button>
         <button className="pro-btn" onClick={refresh}>{t('pro.engines.check')}</button>

@@ -77,7 +77,7 @@ test('md-api calls an integration through the broker, which adds the key', async
 
   const none = await run(cli, ['linear', 'GET', '/'], {});
   assert.equal(none.code, 2);
-  assert.match(none.err, /no REST integrations are available/);
+  assert.match(none.err, /started without the app key broker.*restart this agent/);
 });
 
 test('the prompt lists the granted integrations with the exact md-api command', async (t) => {

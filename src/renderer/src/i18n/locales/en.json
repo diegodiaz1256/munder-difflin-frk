@@ -2305,7 +2305,8 @@
       "customModels": "Models:",
       "customRemoveModel": "Click to remove",
       "customModelPh": "add a model id",
-      "customFetch": "Fetch from server"
+      "customFetch": "Fetch from server",
+      "emptyAuth": "\"{{id}}\" has an empty sign-in entry, which hides the key in models.json. Run /logout in the engine and pick {{id}}, then sign in again if you need it."
     }
   },
   "hivePicker": {
