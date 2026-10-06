@@ -24,6 +24,7 @@ import { STEP_EVENTS, summarizeToolInput, redact, writtenPathsOf } from '../shar
 import { isAbsolute, join as joinPath } from 'node:path';
 import { parseRateLimits, type RateLimits } from '../shared/rateLimits';
 import { WEB_FETCH_HINT, webFetchFailed } from '../shared/browsePage';
+import { rosterSignature } from '../shared/tokenDiet';
 
 /** Maximum JSON payload bytes in one newline-delimited hook frame. */
 const MAX_HOOK_FRAME_BYTES = 256 * 1024;
@@ -151,6 +152,8 @@ export class HookServer {
    *  prompt only bloats the transcript. One entry per agent is sufficient: an
    *  agent has one live session, and a new session id replaces the old entry. */
   private deliveredGoalByAgent = new Map<string, { sessionId: string | null; goal: string | null }>();
+  /** The roster signature last given to the orchestrator, per session (tokenDiet.ts). */
+  private deliveredRosterByAgent = new Map<string, { sessionId: string | null; sig: string }>();
 
   constructor(
     private hive: HiveManager,
@@ -568,9 +571,19 @@ export class HookServer {
     // Hand the roster the LIVE context-window occupancy (contextById) so each
     // agent line can carry a `ctx NN%` — god then sees whose context is nearly
     // full when it routes work, instead of guessing from cumulative token spend.
-    const roster = wantsRoster
+    let roster = wantsRoster
       ? this.hive.rosterContext((id) => this.contextFor(id))
       : null;
+    // Only when it tells something new (a session start, or who is on the floor,
+    // their roles, holds, inbox, breaker or a nearly full context changed): it
+    // used to ride on every prompt, inbox nudges included.
+    if (roster && agentId) {
+      const sig = rosterSignature(roster);
+      const sessionId = p.session_id ?? null;
+      const last = this.deliveredRosterByAgent.get(agentId);
+      if (event !== 'SessionStart' && last && last.sessionId === sessionId && last.sig === sig) roster = null;
+      else this.deliveredRosterByAgent.set(agentId, { sessionId, sig });
+    }
 
     // Standing goal (hire Briefing) — durable roster field, re-read every cycle so
     // an Edit Agent save is picked up on the next UserPromptSubmit without
