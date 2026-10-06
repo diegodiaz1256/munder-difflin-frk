@@ -31,6 +31,9 @@ interface ProState {
   view: ProView;
   setLayout: (layout: Layout) => void;
   setView: (view: ProView) => void;
+  /** Deliverables opened from a task: show that task's only (null = all). Not persisted. */
+  focusTask: string | null;
+  setFocusTask: (taskId: string | null) => void;
 }
 
 export const useProStore = create<ProState>((set) => ({
@@ -43,5 +46,7 @@ export const useProStore = create<ProState>((set) => ({
   setView: (view) => {
     try { window.localStorage.setItem(LS_VIEW, JSON.stringify(view)); } catch { /* noop */ }
     set({ view });
-  }
+  },
+  focusTask: null,
+  setFocusTask: (focusTask) => set({ focusTask })
 }));

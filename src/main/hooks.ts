@@ -634,6 +634,9 @@ export class HookServer {
     this.getWebContents()?.send('control:approvalRequest', { agentId, tool, reason });
   }
 
+  /** Told about every step-worthy event as it happens (main links deliverables to tasks). */
+  onStep?: (agentId: string, e: HookEvent) => void;
+
   /** Recent step-worthy events per agent, for the steps timeline (memory only). */
   private readonly stepLog = new Map<string, HookEvent[]>();
 
@@ -673,6 +676,7 @@ export class HookServer {
       log.push(payload);
       if (log.length > 600) log.splice(0, log.length - 600);
       this.stepLog.set(agentId, log);
+      try { this.onStep?.(agentId, payload); } catch (e) { console.error('[hooks] onStep:', e); }
     }
     this.getWebContents()?.send('hive:hookEvent', payload);
   }

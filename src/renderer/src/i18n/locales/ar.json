@@ -1374,7 +1374,8 @@
     "assign": "إسناد",
     "priority": "الأولوية {{level}}/5",
     "deliverable": "المُخرَج",
-    "openDeliverable": "فتح"
+    "openDeliverable": "فتح",
+    "linkedFiles": "ملفات مرتبطة: {{count}}"
   },
   "queueComposer": {
     "recording": "● يسجّل — انقر إيقاف للتفريغ النصي",
@@ -2246,7 +2247,9 @@
       "openOutside": "افتح في تطبيقه",
       "openOutsideTip": "يفتح الملف ببرنامجك الافتراضي لهذا النوع من الملفات.",
       "openOutsideNo": "للأمان يُعرض هذا النوع من الملفات في مجلده فقط: قد يشغّل شيئًا.",
-      "openFailed": "تعذّر فتحه."
+      "openFailed": "تعذّر فتحه.",
+      "showAll": "عرض الكل",
+      "noneForTask": "لا شيء لهذه المهمة بعد."
     }
   },
   "hivePicker": {

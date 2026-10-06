@@ -1374,7 +1374,8 @@
     "assign": "assign",
     "priority": "Priority {{level}}/5",
     "deliverable": "DELIVERABLE",
-    "openDeliverable": "Open"
+    "openDeliverable": "Open",
+    "linkedFiles": "linked files: {{count}}"
   },
   "queueComposer": {
     "recording": "● recording — click stop to transcribe",
@@ -2246,7 +2247,9 @@
       "openOutside": "Open in its app",
       "openOutsideTip": "Opens the file in your default program for this kind of file.",
       "openOutsideNo": "For safety this kind of file is only shown in its folder: it could run something.",
-      "openFailed": "Could not open it."
+      "openFailed": "Could not open it.",
+      "showAll": "Show all",
+      "noneForTask": "Nothing for this task yet."
     }
   },
   "hivePicker": {

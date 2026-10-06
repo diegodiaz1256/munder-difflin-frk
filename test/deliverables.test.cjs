@@ -74,3 +74,31 @@ test('only documents open in their own app; anything that could run is only reve
   for (const ok of ['r.md', 'R.PDF', 't.csv', 'a.docx', 'b.xlsx', 'p.png', 'x.json', 'page.html']) assert.equal(canOpenExternally(ok), true, ok);
   for (const no of ['setup.exe', 'run.bat', 'x.cmd', 'a.ps1', 'b.sh', 'c.desktop', 'd.app', 'e.dmg', 'f.lnk', 'g.docm', 'h.xlsm', 'i.js', 'j.vbs', 'k.jar', 'Makefile', 'l.msi', 'm.scr']) assert.equal(canOpenExternally(no), false, no);
 });
+
+// ─── deliverables ↔ tasks ───────────────────────────────────────────────────
+
+test('a write is linked to the task its agent has in doing (the newest if several)', () => {
+  const { currentTaskOf } = loadTs('src/shared/deliverables.ts');
+  const tasks = [
+    { id: 'a', assignee: 'pam', status: 'done', createdAt: '2026-01-03' },
+    { id: 'b', assignee: 'pam', status: 'doing', createdAt: '2026-01-01' },
+    { id: 'c', assignee: 'pam', status: 'doing', createdAt: '2026-01-02' },
+    { id: 'd', assignee: 'jim', status: 'doing', createdAt: '2026-01-05' }
+  ];
+  assert.equal(currentTaskOf(tasks, 'pam'), 'c');
+  assert.equal(currentTaskOf(tasks, 'jim'), 'd');
+  assert.equal(currentTaskOf(tasks, 'dwight'), null);
+});
+
+test('only files inside research/ are linked; links keep one entry per file, newest wins', () => {
+  const { isInside, addLink, linkFor } = loadTs('src/shared/deliverables.ts');
+  assert.equal(isInside('/h/hive/research/x/a.md', '/h/hive/research'), true);
+  assert.equal(isInside('/h/hive/researcher/a.md', '/h/hive/research'), false);
+  assert.equal(isInside('\\\\wsl.localhost\\U\\h\\hive\\research\\a.md', '\\\\wsl.localhost\\U\\h\\hive\\research'), true);
+  assert.equal(isInside('C:\\Office\\Hive\\Research\\a.md', 'c:/office/hive/research'), true);
+  let links = addLink([], { path: '/r/a.md', taskId: 't1', agentId: 'pam', ts: 1 });
+  links = addLink(links, { path: '/R/A.md', taskId: 't2', agentId: 'pam', ts: 2 });
+  assert.equal(links.length, 1);
+  assert.equal(linkFor(links, '/r/a.md').taskId, 't2');
+  assert.equal(addLink(Array.from({ length: 5 }, (_, i) => ({ path: `/r/${i}`, taskId: 't', agentId: 'a', ts: i })), { path: '/r/x', taskId: 't', agentId: 'a', ts: 9 }, 3).length, 3);
+});

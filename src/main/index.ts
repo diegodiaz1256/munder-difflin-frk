@@ -92,7 +92,7 @@ import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, rel
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
 import type { PromptConnection } from '../shared/agentConnections';
 import { PROVIDER_BACKENDS, providerKeyEnv } from '../shared/providerBackends';
-import { DELIVERABLES_DIR, canOpenExternally, writtenFiles } from '../shared/deliverables';
+import { DELIVERABLES_DIR, addLink, canOpenExternally, currentTaskOf, isInside, linkFor, writtenFiles, type DeliverableLink } from '../shared/deliverables';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES, hasPlaceholderHost, probeSpecFor } from '../shared/integrations';
 import { RosterStore } from './roster';
 import { buildWorkerLaunch, workerRequestProblem } from './workerLaunch';
@@ -4299,12 +4299,38 @@ ipcMain.handle('hive:setAgentHold', (_evt, id: unknown, hold: unknown) => {
 });
 ipcMain.handle('hive:board', () => hive.board());
 ipcMain.handle('hive:tasks', () => hive.tasks());
+// Deliverables ↔ tasks: when an agent writes a file in research/, it is linked
+// to the task the agent has in "doing". Kept in deliverableLinks.json, which only
+// main writes — tasks.json stays the orchestrator's.
+function readDeliverableLinks(): DeliverableLink[] {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root) return [];
+  try {
+    const raw = JSON.parse(readFileSync(join(root, 'deliverableLinks.json'), 'utf8')) as { links?: unknown };
+    return Array.isArray(raw.links) ? raw.links.filter((l): l is DeliverableLink => !!l && typeof l.path === 'string' && typeof l.taskId === 'string') : [];
+  } catch { return []; }
+}
+hookServer.onStep = (agentId, e) => {
+  if (e.event !== 'PreToolUse' || e.blocked || !e.detail || !e.tool || !['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(e.tool)) return;
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root) return;
+  const wsl = hive.wslRoot();
+  const path = wsl ? fromLinuxPath(e.detail, wsl.distro, () => distroHomeUnc(wsl.distro)) : e.detail;
+  if (!isInside(path, join(root, DELIVERABLES_DIR))) return;
+  const taskId = currentTaskOf((hive.tasks() as { tasks?: Array<{ id: string; assignee?: string; status?: string; createdAt?: string }> }).tasks ?? [], agentId);
+  if (!taskId) return;
+  const links = readDeliverableLinks();
+  if (linkFor(links, path)?.taskId === taskId) return;
+  try { writeFileSync(join(root, 'deliverableLinks.json'), JSON.stringify({ links: addLink(links, { path, taskId, agentId, ts: e.ts ?? Date.now() }) }, null, 2)); }
+  catch (err) { console.error('[deliverables] could not record a link:', err); }
+};
+
 // Deliverables (shared/deliverables.ts): the office's research/ folder, newest
 // first, and the files each agent wrote this session (from its tool calls).
 // Metadata only; the viewer reads a file through the root-confined fs IPC.
 ipcMain.handle('deliverables:list', async () => {
   const root = hive.enabled() ? hive.root() : null;
-  if (!root) return { root: null, dir: null, distro: null, files: [], written: [] };
+  if (!root) return { root: null, dir: null, distro: null, files: [], written: [], links: [] };
   // A WSL floor: agents write Linux paths; the app opens them through \\wsl.localhost.
   const wsl = hive.wslRoot();
   const toHost = (p: string): string => (wsl ? fromLinuxPath(p, wsl.distro, () => distroHomeUnc(wsl.distro)) : p);
@@ -4334,7 +4360,7 @@ ipcMain.handle('deliverables:list', async () => {
       .filter((f) => !norm(f.path).startsWith(norm(agentsDir) + '/'))
       .map((f) => ({ ...f, agentId: a.id, name: a.name }))
   ).sort((x, y) => y.ts - x.ts).slice(0, 200);
-  return { root, dir, distro: wsl?.distro ?? null, files, written };
+  return { root, dir, distro: wsl?.distro ?? null, files, written, links: readDeliverableLinks() };
 });
 // Open a deliverable in its default program. Only document types (see
 // canOpenExternally): the path comes from an agent, and fs:revealPath's rule

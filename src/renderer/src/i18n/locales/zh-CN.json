@@ -1374,7 +1374,8 @@
     "assign": "分配",
     "priority": "优先级 {{level}}/5",
     "deliverable": "交付物",
-    "openDeliverable": "打开"
+    "openDeliverable": "打开",
+    "linkedFiles": "已关联文件：{{count}}"
   },
   "queueComposer": {
     "recording": "● 录音中——点击停止转写",
@@ -2246,7 +2247,9 @@
       "openOutside": "用其应用打开",
       "openOutsideTip": "用你为此类文件设置的默认程序打开。",
       "openOutsideNo": "出于安全，此类文件只在文件夹中显示：它可能会运行某些内容。",
-      "openFailed": "无法打开。"
+      "openFailed": "无法打开。",
+      "showAll": "显示全部",
+      "noneForTask": "此任务暂无内容。"
     }
   },
   "hivePicker": {

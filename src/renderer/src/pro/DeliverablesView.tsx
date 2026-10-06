@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MarkdownPreview } from '@/markdown/MarkdownPreview';
 import { canOpenExternally, deliverablePaths, parseDelimited, previewKind, splitPath, extOf } from '@shared/deliverables';
-import type { Agent } from '@/store/store';
+import { useStore, type Agent } from '@/store/store';
 import type { KeyedTask } from './data';
+import { useProStore } from './proStore';
 
 /**
  * Deliverables — what the agents made for you, in one place: files linked from
@@ -13,16 +14,21 @@ import type { KeyedTask } from './data';
  */
 
 type Listing = Awaited<ReturnType<typeof window.cth.deliverablesList>>;
-interface Item { abs: string; title: string; sub: string; ts?: number; group: 'tasks' | 'office' | 'agents' }
+interface Item { abs: string; title: string; sub: string; ts?: number }
+interface Group { key: string; label: string; items: Item[] }
 
 const fmtSize = (n: number): string => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 const fmtWhen = (ts: number): string => new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const pathKey = (p: string): string => p.replace(/\\/g, '/').replace(/\/+/g, '/').toLowerCase();
 
 export function DeliverablesView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agent[] }) {
   const { t } = useTranslation();
   const [data, setData] = useState<Listing | null>(null);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string | null>(null);
+  // Arriving from a task's "Open": show that task's deliverables only.
+  const focusTask = useProStore((s) => s.focusTask);
+  const setFocusTask = useProStore((s) => s.setFocusTask);
 
   useEffect(() => {
     let alive = true;
@@ -33,25 +39,51 @@ export function DeliverablesView({ tasks, roster }: { tasks: KeyedTask[]; roster
     return () => { alive = false; clearInterval(id); };
   }, []);
 
-  const items = useMemo<Item[]>(() => {
+  /** One group per task that has deliverables (from its card's field or linked
+   *  automatically when its agent wrote into research/), then research/ files
+   *  with no task, then what agents wrote elsewhere this session. */
+  const groups = useMemo<Group[]>(() => {
     if (!data?.root) return [];
-    const who = (id?: string) => roster.find((a) => a.id === id)?.name ?? id ?? '';
-    const fromTasks = tasks.flatMap((task) => deliverablePaths(task.deliverable, data.root!, data.distro).map((abs) => ({
-      abs, group: 'tasks' as const, title: splitPath(abs).name,
-      sub: [task.key, task.title, task.assignee && who(task.assignee)].filter(Boolean).join(' · ')
-    })));
-    const office = data.files.map((f) => ({ abs: f.abs, group: 'office' as const, title: f.rel, sub: `${fmtWhen(f.mtime)} · ${fmtSize(f.size)}`, ts: f.mtime }));
-    const officeSet = new Set(office.map((o) => o.abs));
-    const agents = data.written.filter((w) => !officeSet.has(w.path)).map((w) => ({
-      abs: w.path, group: 'agents' as const, title: splitPath(w.path).name,
-      sub: `${w.name} · ${t(w.created ? 'pro.dlv.created' : 'pro.dlv.edited')} ${fmtWhen(w.ts)} · ${w.path}`, ts: w.ts
+    // The orchestrator is not in every roster list: fall back to the whole floor.
+    const who = (id?: string) => (roster.find((a) => a.id === id) ?? useStore.getState().agents.find((a) => a.id === id))?.name ?? id ?? '';
+    const office = new Map(data.files.map((f) => [pathKey(f.abs), f]));
+    const placed = new Set<string>();
+    const describe = (abs: string): Item => {
+      const f = office.get(pathKey(abs));
+      return f
+        ? { abs: f.abs, title: f.rel, sub: `${fmtWhen(f.mtime)} · ${fmtSize(f.size)}`, ts: f.mtime }
+        : { abs, title: splitPath(abs).name, sub: abs };
+    };
+    const out: Group[] = [];
+    for (const task of tasks) {
+      const paths = [...deliverablePaths(task.deliverable, data.root!, data.distro), ...data.links.filter((l) => l.taskId === task.id).map((l) => l.path)];
+      const items: Item[] = [];
+      for (const abs of paths) {
+        const k = pathKey(abs);
+        if (items.some((i) => pathKey(i.abs) === k)) continue;
+        items.push(describe(abs));
+        placed.add(k);
+      }
+      if (items.length) out.push({ key: `task:${task.id}`, label: [task.key, task.title, task.assignee && who(task.assignee)].filter(Boolean).join(' · '), items });
+    }
+    const unlinked = data.files.filter((f) => !placed.has(pathKey(f.abs))).map((f) => describe(f.abs));
+    if (unlinked.length) out.push({ key: 'office', label: t('pro.dlv.group_office'), items: unlinked });
+    const elsewhere = data.written.filter((w) => !office.has(pathKey(w.path)) && !placed.has(pathKey(w.path))).map((w) => ({
+      abs: w.path, title: splitPath(w.path).name, ts: w.ts,
+      sub: `${w.name} · ${t(w.created ? 'pro.dlv.created' : 'pro.dlv.edited')} ${fmtWhen(w.ts)} · ${w.path}`
     }));
-    return [...fromTasks, ...office, ...agents];
+    if (elsewhere.length) out.push({ key: 'agents', label: t('pro.dlv.group_agents'), items: elsewhere });
+    return out;
   }, [data, tasks, roster, t]);
 
   const q = query.trim().toLowerCase();
-  const shown = q ? items.filter((i) => `${i.title} ${i.sub} ${i.abs}`.toLowerCase().includes(q)) : items;
-  const current = selected ?? shown[0]?.abs ?? null;
+  const shown = groups
+    .filter((g) => !focusTask || g.key === `task:${focusTask}`)
+    .map((g) => ({ ...g, items: q ? g.items.filter((i) => `${g.label} ${i.title} ${i.sub} ${i.abs}`.toLowerCase().includes(q)) : g.items }))
+    .filter((g) => g.items.length);
+  const all = shown.flatMap((g) => g.items);
+  const current = selected && all.some((i) => i.abs === selected) ? selected : all[0]?.abs ?? null;
+  const focused = focusTask ? tasks.find((x) => x.id === focusTask) : undefined;
 
   return (
     <div className="pro-page">
@@ -69,25 +101,30 @@ export function DeliverablesView({ tasks, roster }: { tasks: KeyedTask[]; roster
         <div style={{ flex: 1, minHeight: 480, display: 'flex', gap: 12 }}>
           <aside style={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
             <input className="pro-input" placeholder={t('pro.dlv.search')} value={query} onChange={(e) => setQuery(e.target.value)} />
+            {focusTask && (
+              <div className="pro-row" style={{ gap: 6 }}>
+                <span className="pro-chip pro-chip-on" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 250 }}>{focused ? [focused.key, focused.title].filter(Boolean).join(' · ') : focusTask}</span>
+                <button className="pro-btn" style={{ padding: '2px 8px' }} onClick={() => setFocusTask(null)}>{t('pro.dlv.showAll')}</button>
+              </div>
+            )}
             <div className="pro-card" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 0 }}>
-              {items.length === 0 && <p className="pro-sub" style={{ margin: 0, padding: 14, fontSize: 12.5 }}>{t('pro.dlv.empty', { dir: data.dir })}</p>}
-              {(['tasks', 'office', 'agents'] as const).map((g) => {
-                const list = shown.filter((i) => i.group === g);
-                if (!list.length) return null;
-                return (
-                  <section key={g}>
-                    <div className="pro-sub" style={{ fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', padding: '10px 14px 4px' }}>{t(`pro.dlv.group_${g}`)}</div>
-                    {list.map((i) => (
-                      <button key={`${g}:${i.abs}`} onClick={() => setSelected(i.abs)} aria-current={current === i.abs}
-                        style={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%', textAlign: 'start', padding: '8px 14px', border: 'none', borderBottom: '1px solid var(--pro-line)', cursor: 'pointer',
-                          background: current === i.abs ? 'var(--cth-lemon-light)' : 'transparent', font: 'inherit', color: 'inherit' }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, overflowWrap: 'anywhere' }}>{i.title}</span>
-                        <span className="pro-sub" style={{ fontSize: 11, overflowWrap: 'anywhere' }}>{i.sub}</span>
-                      </button>
-                    ))}
-                  </section>
-                );
-              })}
+              {all.length === 0 && <p className="pro-sub" style={{ margin: 0, padding: 14, fontSize: 12.5 }}>{t(focusTask ? 'pro.dlv.noneForTask' : 'pro.dlv.empty', { dir: data.dir })}</p>}
+              {shown.map((g) => (
+                <section key={g.key}>
+                  <div className={g.key.startsWith('task:') ? undefined : 'pro-sub'}
+                    style={g.key.startsWith('task:')
+                      ? { fontSize: 12, fontWeight: 600, padding: '10px 14px 4px', background: 'var(--cth-cream-100)', borderBottom: '1px solid var(--pro-line)' }
+                      : { fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', padding: '10px 14px 4px' }}>{g.label}</div>
+                  {g.items.map((i) => (
+                    <button key={`${g.key}:${i.abs}`} onClick={() => setSelected(i.abs)} aria-current={current === i.abs}
+                      style={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%', textAlign: 'start', padding: '8px 14px', border: 'none', borderBottom: '1px solid var(--pro-line)', cursor: 'pointer',
+                        background: current === i.abs ? 'var(--cth-lemon-light)' : 'transparent', font: 'inherit', color: 'inherit' }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, overflowWrap: 'anywhere' }}>{i.title}</span>
+                      <span className="pro-sub" style={{ fontSize: 11, overflowWrap: 'anywhere' }}>{i.sub}</span>
+                    </button>
+                  ))}
+                </section>
+              ))}
             </div>
           </aside>
           <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>

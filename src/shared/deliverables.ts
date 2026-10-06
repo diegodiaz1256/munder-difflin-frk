@@ -138,3 +138,37 @@ const OPEN_EXTERNALLY = new Set([
 export function canOpenExternally(name: string): boolean {
   return OPEN_EXTERNALLY.has(extOf(name));
 }
+
+// ─── which task a deliverable belongs to ────────────────────────────────────
+
+export interface DeliverableLink { path: string; taskId: string; agentId: string; ts: number }
+
+/** The task an agent is working on now: its card in "doing" (the most recently
+ *  created one if, unusually, it has several). None → the write is not linked. */
+export function currentTaskOf(tasks: Array<{ id: string; assignee?: string; status?: string; createdAt?: string }>, agentId: string): string | null {
+  const mine = tasks.filter((t) => t.assignee === agentId && t.status === 'doing');
+  if (!mine.length) return null;
+  mine.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')));
+  return mine[0].id;
+}
+
+const normPath = (p: string): string => p.replace(/\\/g, '/').replace(/\/+/g, '/').toLowerCase();
+
+/** Is `path` inside `dir` (either separator, any case)? */
+export function isInside(path: string, dir: string): boolean {
+  const d = normPath(dir).replace(/\/$/, '');
+  return normPath(path).startsWith(`${d}/`);
+}
+
+/** Record a link, newest wins per path; capped. Returns a new list. */
+export function addLink(links: DeliverableLink[], link: DeliverableLink, max = 2000): DeliverableLink[] {
+  const key = normPath(link.path);
+  const next = [...links.filter((l) => normPath(l.path) !== key), link];
+  return next.length > max ? next.slice(next.length - max) : next;
+}
+
+/** The task a file is linked to, if any. */
+export function linkFor(links: DeliverableLink[], path: string): DeliverableLink | undefined {
+  const key = normPath(path);
+  return links.find((l) => normPath(l.path) === key);
+}

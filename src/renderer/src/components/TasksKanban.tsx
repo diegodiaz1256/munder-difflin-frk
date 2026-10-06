@@ -323,6 +323,14 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
 }) {
   const { t } = useTranslation();
   const rtl = useRtl();
+  // Files an agent wrote into research/ while this card was its task (linked by
+  // the app, not the orchestrator) — counted here, listed in Deliverables.
+  const [linkedCount, setLinkedCount] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    void window.cth.deliverablesList?.().then((d) => { if (alive) setLinkedCount(d.links.filter((l) => l.taskId === task.id).length); }).catch(() => {});
+    return () => { alive = false; };
+  }, [task.id]);
   const col = COLUMNS.find((c) => c.key === task.status) ?? COLUMNS[0];
   // Belt + suspenders: parseTasks normalizes these, but the ledger is a
   // hand-written file — never trust a card's shape at the point of use.
@@ -381,13 +389,14 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
             </div>
 
             {/* What the card produced: open it in Manager → Deliverables. */}
-            {task.deliverable && (
+            {(task.deliverable || linkedCount > 0) && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontFamily: 'var(--cth-font-display)', fontSize: 8, color: 'var(--cth-ink-500)' }}>{t('kanban.deliverable')}</span>
-                <span style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 12, color: 'var(--cth-ink-900)', overflowWrap: 'anywhere', flex: 1, minWidth: 0 }}>{task.deliverable}</span>
+                <span style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 12, color: 'var(--cth-ink-900)', overflowWrap: 'anywhere', flex: 1, minWidth: 0 }}>{task.deliverable ?? ''}{linkedCount > 0 ? `${task.deliverable ? ' · ' : ''}${t('kanban.linkedFiles', { count: linkedCount })}` : ''}</span>
                 <PixelButton variant="secondary" size="sm" onClick={() => {
                   const pro = useProStore.getState();
                   pro.setLayout('pro');
+                  pro.setFocusTask(task.id);
                   pro.setView({ kind: 'section', section: 'deliverables' });
                   onClose();
                 }}>{t('kanban.openDeliverable')}</PixelButton>
