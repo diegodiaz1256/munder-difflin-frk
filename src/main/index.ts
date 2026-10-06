@@ -87,7 +87,9 @@ import { EnvVault, fingerprintOf } from './envVault';
 import { addConnection, connectionAccessFor, setConnectionAccess, connectionKeyStored, connectionLaunchEnv, instancesOf, listConnections, removeConnection, renameConnection, serviceOf, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
 import { McpGateway, type McpCallRecord } from './mcpGateway';
 import { effectiveApiAccess, explainConnection, isAccess, type Access } from '../shared/connectionAccess';
-import { blockedMcpServers } from '../shared/nativeTools';
+import { blockedMcpServers, cleanToolBlocks } from '../shared/nativeTools';
+import { browseChars, formatBrowsed, formatSearch } from '../shared/browsePage';
+import { browsePage, searchWeb } from './browser';
 import { TeamNode, type TeamInbound } from './teamNode';
 import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, relayToken, saveTeamState, setRelayToken, teamEnabled, teamPublicStatus } from './team';
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
@@ -540,6 +542,15 @@ const integrationBroker = new IntegrationBroker({
         .split('\n').filter((l) => /^[a-zS]/.test(l)).join('\n');
       return envVault.run(runnerId, { agentName: name, cwd: pty.cwd, fingerprint: fingerprintOf(head, hidden ? `${status}\n${hidden}` : status) });
     }
+  },
+  // The office browser (browser.ts). Web switched off for an agent in
+  // Capabilities closes this too, checked here as well as in its MCP list.
+  browser: {
+    blocked: (agentId) => (agentId && cleanToolBlocks(readConfig().agentToolBlocks?.[agentId]).includes('web')
+      ? 'Web is switched off for this agent (Capabilities), so the office browser is too.'
+      : null),
+    browse: async (url, o) => formatBrowsed(await browsePage(url), browseChars(o.maxChars || undefined), o.links),
+    search: async (query) => { const r = await searchWeb(query); return formatSearch(query, r.results, r.text); }
   }
 });
 

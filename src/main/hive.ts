@@ -51,7 +51,8 @@ import { assignTaskKeys, normalizeTaskKeyLedger, taskKeyPrefix } from '../shared
 import { cleanServerList } from '../shared/roleBundles';
 import { detectProjectType, memoryInstruction, memoryTemplate, parseMemory, type ProjectType } from '../shared/memorySections';
 import { listsInstruction, parseList } from '../shared/lists';
-import { blockedMcpServers, disallowedTools } from '../shared/nativeTools';
+import { blockedMcpServers, cleanToolBlocks, disallowedTools } from '../shared/nativeTools';
+import { MD_BROWSE } from './browseCli';
 import { MD_LISTS_MCP } from './listsMcp';
 
 /** The subset of HarnessConfig the hive consumes for the default-MCP merge.
@@ -832,6 +833,8 @@ export class HiveManager {
     writeFileSync(join(root, 'bin', 'md-run.cjs'), MD_RUN_CLI, 'utf8');
     // munder-lists: the human's lists as MCP tools (listsMcp.ts).
     writeFileSync(join(root, 'bin', 'md-lists.cjs'), MD_LISTS_MCP, 'utf8');
+    // md-browse: the office browser (browser.ts), as a command and an MCP server.
+    writeFileSync(join(root, 'bin', 'md-browse.cjs'), MD_BROWSE, 'utf8');
     // The bundled-node launcher every shim above is invoked through — MUST be
     // written before any hook installer runs (they probe for it).
     this.writeNodeLauncher();
@@ -1048,7 +1051,7 @@ export class HiveManager {
     if (!isHiveAwareProvider(meta.provider)) {
       const preset = providerPreset(meta.provider ?? 'claude');
       const flag = preset.initialPromptFlag;
-      const prompt = this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath, opts.integrations, opts.runners, opts.connections, opts.envNames);
+      const prompt = this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath, opts.integrations, opts.runners, opts.connections, opts.envNames, cleanToolBlocks(opts.toolBlocks).includes('web'));
       // agy, codex, and grok expose a Claude-style lifecycle-hook surface, so each
       // gets the SAME live status + Stop→inbox-drain Claude does — selected by the
       // preset's `hookBridge`. agy needs a translating shim (its hook stdin/stdout
@@ -1230,7 +1233,7 @@ export class HiveManager {
     // what each may do): no permission prompt per call, or an agent just waits.
     const allowedConnections = Object.keys(mcp.servers).filter((n) => mcp.env.MD_MCP_TOKEN && (mcp.servers[n] as { type?: string }).type === 'http');
     if (allowedConnections.length) args.push('--allowedTools', ...allowedConnections.map((n) => `mcp__${n}`));
-    args.push('--append-system-prompt', this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath, opts.integrations, opts.runners, opts.connections, opts.envNames));
+    args.push('--append-system-prompt', this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath, opts.integrations, opts.runners, opts.connections, opts.envNames, cleanToolBlocks(opts.toolBlocks).includes('web')));
 
     // Phase 1 — autonomy: attach lifecycle hooks via --settings (no edits to the
     // user's repo) so the agent reports activity and drains its inbox on Stop.
@@ -1612,6 +1615,9 @@ export class HiveManager {
     // agents kept those things in their own memory instead.
     const root = this.root();
     if (agentId && root) servers['munder-lists'] = { command: this.nodeCommand(), args: [join(root, 'bin', 'md-lists.cjs'), join(root, 'lists')] };
+    // The office browser, unless Web is switched off for this agent (the broker
+    // refuses it then as well).
+    if (agentId && root && !cleanToolBlocks(toolBlocks).includes('web')) servers['munder-browser'] = { command: this.nodeCommand(), args: [join(root, 'bin', 'md-browse.cjs')] };
     // No gateway (tests, or it failed to bind) → no keyed servers at all: the
     // fallback is "without GitHub", never "with the key in the agent's env".
     const gw = keyed.length && agentId ? (dryRun ? { url: 'http://127.0.0.1:0', token: '' } : this.mcpGateway(agentId, keyed, this.mcpAccessMap(agentId, keyed))) : null;
@@ -1635,7 +1641,7 @@ export class HiveManager {
       const id = name.replace(/^munder-/, '');
       if (keyed.has(id)) return { name, id, origin: 'connection' as const, access: this.mcpAccess(agentId, id) };
       if (id.startsWith('custom--')) return { name, id, origin: 'yours' as const };
-      if (id === 'memory' || id === 'lists') return { name, id, origin: 'office' as const };
+      if (id === 'memory' || id === 'lists' || id === 'browser') return { name, id, origin: 'office' as const };
       return { name, id, origin: 'builtin' as const };
     });
   }
@@ -1937,7 +1943,8 @@ export class HiveManager {
     integrations?: Array<{ id: string; label: string }>,
     runners?: Array<{ id: string; name: string; description?: string; secrets: string[] }>,
     connections?: PromptConnection[],
-    envNames?: string[]
+    envNames?: string[],
+    webOff = false
   ): string {
     // Native-separator path helpers — see the 🪟 note above.
     const inDir = (...parts: string[]): string => join(dir, ...parts);
@@ -2038,6 +2045,9 @@ export class HiveManager {
     // it (even Scranton Branch's own source code). One map, absolute paths, and
     // a rule: what is not here does not exist for you.
     const officeMapLine = `WHERE THINGS ARE (full paths; do not search the disk for them): protocol index ${inRoot('PROTOCOL.md')}; plan ${inRoot('board.md')}; task cards ${inRoot('tasks.json')}; who is on the floor ${inRoot('registry.json')} and their live state ${inRoot('fleet.json')}; deliverables ${inRoot('research')}; the human's lists ${inRoot('lists')}; REST APIs \`"${hiveNode}" "${apiCli}"\`; runners \`"${hiveNode}" "${runCli}"\` (both list what you may use when run with no arguments). Never look for office files or tools elsewhere on the disk, in other projects, or in Scranton Branch's own installation or source code: if something is not here, in your folder, your working directory or this prompt, it does not exist for you — ask ${meta.isGod ? 'the human' : 'god'} instead of hunting for it.`;
+    // The office browser: a real Chromium for pages a plain fetch cannot read.
+    const browseCli = inRoot('bin', 'md-browse.cjs');
+    const browserLine = webOff ? '' : `BROWSER: for a page that is empty, needs JavaScript or refuses a plain fetch (403, "enable JavaScript", a bot wall for non-browsers), use the office browser — the app's own Chromium${hasOfficeMcp ? ': the munder-browser tools browse_page and web_search, or' : ':'} \`"${hiveNode}" "${browseCli}" <url>\` (add --links for the page's links) and \`"${hiveNode}" "${browseCli}" --search "<query>"\`. It does not solve captchas or bot challenges; if a page asks for one, say so instead of trying to get around it.`;
     const hireLine = meta.isGod
       ? `HIRING A PERMANENT EMPLOYEE (not a temp): write a manifest to ${inRoot('research', 'hires')}/<name>.json — {"spec":"munder-difflin/hire@1","name":"…","description":"one-line role","goal":"standing mission","provider":"claude|codex|cursor|antigravity","model":"…","character":"…","isolate":false,"tokenCap":0} (only spec and name are required). The app opens the Add-Agent review prefilled and the human confirms; then the agent appears in registry.json and you dispatch to its inbox. An invalid file comes back to your inbox as "[hire manifest rejected]" with the reason.`
       : '';
@@ -2045,6 +2055,7 @@ export class HiveManager {
       `You are "${meta.name}" (${meta.id}), an autonomous agent in a collaborating hive of agents.`,
       `Your private workspace is ${dir}. The shared hive is ${root}. Protocol: ${inRoot('PROTOCOL.md')} is a short index; each topic is its own small file in ${inRoot(PROTOCOL_DIR)} — open only the one you need, never all of them.`,
       officeMapLine,
+      browserLine,
       '',
       'HIVE PROTOCOL — follow it every task:',
       `1. At the START of a task, read ${inDir('memory.md')} and EVERY file in ${inDir('inbox')} (messages other agents sent you). After handling an inbox message, move its file into ${inDir('inbox', '.done')}.`,
