@@ -8,6 +8,7 @@ import { expandTilde } from './fs';
 import { buildPtyEnv } from './ptyEnv';
 import { homedir } from 'node:os';
 import { linuxizeText, parseWslPath, toLinuxPath, wslCommand } from './wsl';
+import { spawnSize, type PtySize } from '../shared/ptySize';
 import {
   captureFromLoginShell,
   isSafeCommandName,
@@ -373,6 +374,8 @@ export function parseNpmCmdShim(shimPath: string, content: string): NpmShimTarge
 
 export class PtyManager {
   private sessions = new Map<string, PtySession>();
+  /** The size each id's terminal was last fitted to; kept across its processes (ptySize.ts). */
+  private fitted = new Map<string, PtySize>();
   private webContents: WebContents | null = null;
   /** Fired when a PTY exits on its OWN (child finished/crashed/killed
    *  externally), so the main process can run the SAME lifecycle teardown
@@ -743,8 +746,7 @@ export class PtyManager {
       }
       const proc = pty.spawn(file, spawnArgs, {
         name: 'xterm-256color',
-        cols: opts.cols ?? 100,
-        rows: opts.rows ?? 30,
+        ...spawnSize({ cols: opts.cols, rows: opts.rows }, this.fitted.get(opts.id)),
         // wsl.exe gets the floor's folder through --cd; its own working
         // directory stays a plain Windows one.
         cwd: wsl ? homedir() : opts.cwd,
@@ -841,6 +843,8 @@ export class PtyManager {
   }
 
   resize(id: string, cols: number, rows: number): { ok: boolean; error?: string } {
+    // Kept even before the process exists: a view fitted first, spawn second.
+    if (cols > 0 && rows > 0) this.fitted.set(id, { cols, rows });
     const s = this.sessions.get(id);
     if (!s) return { ok: false, error: `no pty: ${id}` };
     try {
