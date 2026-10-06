@@ -46,3 +46,9 @@ test('a command reads without its leading cd into a long path', () => {
   assert.equal(A.tidyDetail('cd /home/z/office && npm test'), 'npm test');
   assert.equal(A.tidyDetail('npm test'), 'npm test');
 });
+
+test('archived agents keep their names in Now (from the log\'s spawn entries)', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src/renderer/src/pro/activityStore.ts'), 'utf8');
+  assert.match(src, /e\.kind === 'spawn' && typeof e\.agentId === 'string' && typeof e\.name === 'string'\) logNames\.set/);
+  assert.match(src, /\?\? logNames\.get\(id\) \?\? id/);
+});
