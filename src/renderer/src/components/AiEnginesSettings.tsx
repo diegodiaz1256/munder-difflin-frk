@@ -4,6 +4,7 @@ import type { HarnessConfig, AgentProvider } from '@/store/config';
 import { PixelButton } from './PixelButton';
 import { ProviderLogo } from './ProviderLogo';
 import { useStore } from '@/store/store';
+import { PROVIDER_BACKENDS } from '@shared/providerBackends';
 
 /**
  * AiEnginesSettings — the v0.3.1 per-provider config surface for the BYOK CLI
@@ -18,20 +19,13 @@ import { useStore } from '@/store/store';
 
 /** Backend model-providers whose keys the CLIs read from standard env vars. Must
  *  match BACKEND_KEY_ENV in src/main/index.ts. */
-const BACKENDS: Array<{ id: string; label: string; envVar: string }> = [
-  { id: 'anthropic', label: 'Anthropic', envVar: 'ANTHROPIC_API_KEY' },
-  { id: 'openai', label: 'OpenAI', envVar: 'OPENAI_API_KEY' },
-  { id: 'google', label: 'Google · Gemini', envVar: 'GEMINI_API_KEY' },
-  { id: 'openrouter', label: 'OpenRouter', envVar: 'OPENROUTER_API_KEY' },
-  { id: 'groq', label: 'Groq', envVar: 'GROQ_API_KEY' }
-];
+const BACKENDS = PROVIDER_BACKENDS;
 
 /** CLI engines that take a per-provider local base-URL + default model. `hint`
  *  values are technical endpoint descriptions — kept English (technical data). */
 const CLIS: Array<{ id: AgentProvider; label: string; hint: string }> = [
   { id: 'opencode', label: 'OpenCode', hint: 'http://localhost:11434/v1 (Ollama) — injected as a local provider' },
   { id: 'crush', label: 'Crush', hint: 'OpenAI-compatible endpoint — used as the proxy upstream' },
-  { id: 'pi', label: 'Pi', hint: 'local models are file-based (models.json); base-URL reserved' },
   { id: 'qwen', label: 'Qwen', hint: 'OpenAI-compatible endpoint — used as the proxy upstream' }
 ];
 

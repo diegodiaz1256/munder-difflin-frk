@@ -14,6 +14,7 @@
  * Electron-free: file reads, config and the secret store are injected.
  */
 import { join } from 'node:path';
+import { suggestFor, type McpSuggestion } from '../shared/mcpSuggest';
 
 export type McpTransport =
   | { kind: 'stdio'; command: string; args: string[] }
@@ -28,6 +29,8 @@ export interface FoundServer {
   transport: McpTransport;
   env: Record<string, string>;
   headers: Record<string, string>;
+  /** Set when an agent's own folder holds it: the agent that can reach it. */
+  agent?: string;
 }
 
 export interface CustomServer {
@@ -54,6 +57,10 @@ export interface McpServersDeps {
   getSecret: (ref: string) => string | undefined;
   setSecret: (ref: string, value: string) => { ok: boolean; error?: string };
   deleteSecret: (ref: string) => void;
+  /** Where agents run, so what they set up for themselves is found too. Unset → none. */
+  agentPlaces?: () => Array<{ name: string; cwd: string; codexHome?: string }>;
+  /** Other home folders whose tool settings agents read (a WSL distro's home). */
+  extraHomes?: () => Array<{ label: string; home: string }>;
 }
 
 const SECRET_NAME = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|AUTH|CREDENTIAL|PAT|PRIVATE)/i;
@@ -173,18 +180,59 @@ export class McpServers {
     const codex = join(home, '.codex', 'config.toml');
     const ct = this.deps.readFile(codex);
     if (ct) out.push(...parseCodexToml(ct, codex));
+    // The same tools' settings in another home (a WSL floor's distro).
+    for (const { label, home: h } of this.deps.extraHomes?.() ?? []) {
+      const cj2 = join(h, '.claude.json');
+      const c2 = this.json(cj2) as { mcpServers?: unknown; projects?: Record<string, { mcpServers?: unknown }> } | null;
+      if (c2) {
+        out.push(...fromMcpServers(c2.mcpServers, `Claude Code (${label})`, cj2));
+        for (const [proj, p] of Object.entries(c2.projects ?? {})) out.push(...fromMcpServers(p?.mcpServers, `Claude Code (${label}: ${proj.split(/[\\/]/).filter(Boolean).pop() ?? proj})`, cj2));
+      }
+      for (const [rel, src] of [[['.cursor', 'mcp.json'], 'Cursor'], [['.gemini', 'settings.json'], 'Gemini CLI / Antigravity']] as Array<[string[], string]>) {
+        const f = join(h, ...rel);
+        out.push(...fromMcpServers((this.json(f) as { mcpServers?: unknown } | null)?.mcpServers, `${src} (${label})`, f));
+      }
+      const cx = join(h, '.codex', 'config.toml');
+      const cxt = this.deps.readFile(cx);
+      if (cxt) out.push(...parseCodexToml(cxt, cx).map((f) => ({ ...f, source: `Codex (${label})` })));
+    }
+    return [...out, ...this.scanAgents()];
+  }
+
+  /** What agents set up for themselves: a project `.mcp.json` / Cursor config in
+   *  their folder (Claude Code's project scope and friends) and a Codex agent's
+   *  own config. Without this an agent could add a server and nobody would see it. */
+  scanAgents(): FoundServer[] {
+    const out: FoundServer[] = [];
+    const seen = new Set<string>();
+    for (const place of this.deps.agentPlaces?.() ?? []) {
+      const files: Array<[string, string]> = [
+        [join(place.cwd, '.mcp.json'), 'mcp'],
+        [join(place.cwd, '.cursor', 'mcp.json'), 'mcp'],
+        ...(place.codexHome ? [[join(place.codexHome, 'config.toml'), 'codex'] as [string, string]] : [])
+      ];
+      for (const [file, kind] of files) {
+        if (seen.has(file)) continue;
+        seen.add(file);
+        const found = kind === 'codex'
+          ? (() => { const t = this.deps.readFile(file); return t ? parseCodexToml(t, file) : []; })()
+          : fromMcpServers((this.json(file) as { mcpServers?: unknown } | null)?.mcpServers, `Agent ${place.name}`, file);
+        for (const f of found) out.push({ ...f, source: `Agent ${place.name}`, agent: place.name });
+      }
+    }
     return out;
   }
 
   /** Found servers for the UI: env values that look secret are hidden, and
    *  each says whether it is already imported. */
-  scanForUi(): Array<Omit<FoundServer, 'env' | 'headers'> & { env: Array<{ name: string; secret: boolean; value?: string }>; headerNames: string[]; imported: boolean }> {
+  scanForUi(): Array<Omit<FoundServer, 'env' | 'headers'> & { env: Array<{ name: string; secret: boolean; value?: string }>; headerNames: string[]; imported: boolean; suggest: McpSuggestion | null }> {
     const mine = new Set(this.deps.readCustom().map((c) => c.id));
     return this.scan().map((f) => ({
-      source: f.source, file: f.file, name: f.name, transport: f.transport,
+      source: f.source, file: f.file, name: f.name, transport: f.transport, ...(f.agent ? { agent: f.agent } : {}),
       env: Object.entries(f.env).map(([name, value]) => looksSecret(name, value) ? { name, secret: true } : { name, secret: false, value }),
       headerNames: Object.keys(f.headers),
-      imported: mine.has(customId(f.name))
+      imported: mine.has(customId(f.name)),
+      suggest: suggestFor(f.transport, Object.keys(f.env))
     }));
   }
 

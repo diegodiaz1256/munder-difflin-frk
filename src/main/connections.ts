@@ -13,6 +13,7 @@
 import { MCP_CATALOG, mcpCatalogEntry, type McpCatalogEntry } from '../shared/mcpCatalog';
 import { readConfig, writeConfig } from './config';
 import { getSecret, setSecret, deleteSecret, hasSecret } from './integrations';
+import { effectiveAccess, isAccess, DEFAULT_CEILING, type Access } from '../shared/connectionAccess';
 
 export interface ConnectionField {
   env: string;
@@ -46,6 +47,8 @@ export interface ConnectionStatus {
   ready: boolean;
   /** Agent ids it is limited to, or null for every agent. */
   scope: string[] | null;
+  /** The most any agent may do with it (a role can only lower this). */
+  access: Access;
   /** Whether Test can actually reach the service for this kind. */
   testable: boolean;
 }
@@ -135,6 +138,7 @@ export function listConnections(): ConnectionStatus[] {
       enabled: cfg.mcpDefaults?.[inst.id]?.enabled === true,
       ready: fields.every((f) => f.optional || f.stored),
       scope: Array.isArray(scope) ? scope : null,
+      access: cfg.connectionPolicy?.[inst.id] ?? DEFAULT_CEILING,
       testable: e.id in TESTS
     };
   }));
@@ -172,7 +176,8 @@ export function removeConnection(id: unknown): { ok: boolean; error?: string } {
   const cfg = readConfig();
   const mcpDefaults = { ...(cfg.mcpDefaults ?? {}) }; delete mcpDefaults[inst.id];
   const connectionScopes = { ...(cfg.connectionScopes ?? {}) }; delete connectionScopes[inst.id];
-  writeConfig({ connectionInstances: extra.filter((x) => x.id !== inst.id), mcpDefaults, connectionScopes });
+  const connectionPolicy = { ...(cfg.connectionPolicy ?? {}) }; delete connectionPolicy[inst.id];
+  writeConfig({ connectionInstances: extra.filter((x) => x.id !== inst.id), mcpDefaults, connectionScopes, connectionPolicy });
   return { ok: true };
 }
 
@@ -193,6 +198,23 @@ export function setConnectionEnabled(serverId: unknown, on: unknown): { ok: bool
   if (typeof serverId !== 'string' || !serviceOf(serverId)) return { ok: false, error: 'unknown connection' };
   const cfg = readConfig();
   writeConfig({ mcpDefaults: { ...(cfg.mcpDefaults ?? {}), [serverId]: { enabled: on === true } } });
+  return { ok: true };
+}
+
+/** What one agent may do with one connection: the connection's ceiling, lowered
+ *  by what its role grants for that service. MAIN-ONLY (read by the gateway). */
+export function connectionAccessFor(agentId: string, connectionId: string): Access {
+  const cfg = readConfig();
+  const service = serviceOf(connectionId);
+  if (!service) return 'none';
+  return effectiveAccess(cfg.connectionPolicy?.[connectionId], cfg.agentMcpAccess?.[agentId], service);
+}
+
+/** Set the most any agent may do with a connection. */
+export function setConnectionAccess(serverId: unknown, access: unknown): { ok: boolean; error?: string } {
+  if (typeof serverId !== 'string' || !serviceOf(serverId)) return { ok: false, error: 'unknown connection' };
+  if (!isAccess(access)) return { ok: false, error: 'invalid access level' };
+  writeConfig({ connectionPolicy: { ...(readConfig().connectionPolicy ?? {}), [serverId]: access } });
   return { ok: true };
 }
 

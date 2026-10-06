@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HarnessConfig } from '@/store/config';
 import type { Agent } from '@/store/store';
 import { Icon } from '@/components/Icon';
 import { SkillsTab } from '@/components/SkillsTab';
 import { MCP_CATALOG, mcpCatalogEntry } from '@shared/mcpCatalog';
+import type { Access } from '@shared/connectionAccess';
 import { BUNDLE_ICONS, allRoleBundles, mcpLabel, type BundleIcon, type RoleBundle } from '@shared/roleBundles';
 import { NATIVE_TOOL_GROUPS } from '@shared/nativeTools';
 import { useProStore } from './proStore';
@@ -18,7 +19,13 @@ function consented(config: HarnessConfig, id: string): boolean {
   return e.tier === 'safe-readonly' || config.mcpDefaults?.[id]?.enabled === true;
 }
 
-type Draft = { id?: string; label: string; icon: BundleIcon; servers: string[] };
+type Level = Access;
+type Draft = { id?: string; label: string; icon: BundleIcon; servers: string[]; access?: Record<string, Level> };
+
+/** Services that hold a key: the ones whose use a role can limit to reading. */
+const isKeyed = (id: string): boolean => (mcpCatalogEntry(id)?.secrets ?? []).length > 0;
+/** A role's level for a service; one it does not set is read-only. */
+const levelOf = (access: Record<string, Level> | undefined, id: string): Level => access?.[id] ?? 'read';
 
 /**
  * Capabilities — what each agent can reach. Grant a role bundle (a set of MCP
@@ -41,10 +48,10 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
   const bundles = allRoleBundles(config.customRoleBundles);
   const custom = bundles.filter((b) => b.custom);
 
-  const grant = async (agentId: string, servers: string[] | undefined) => {
+  const grant = async (agentId: string, servers: string[] | undefined, access?: Record<string, Level>) => {
     setSaving(true);
     try {
-      await window.cth.setAgentMcpGrant(agentId, servers);
+      await window.cth.setAgentMcpGrant(agentId, servers, access);
       const who = roster.find((a) => a.id === agentId)?.name ?? agentId;
       setNote(t('pro.caps.saved', { name: who }));
     } catch (e) {
@@ -74,7 +81,8 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
 
   const toggle = (agentId: string, id: string) => {
     const cur = effectiveServers(config, agentId);
-    void grant(agentId, cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
+    // The levels already given stay; a service added by hand starts read-only.
+    void grant(agentId, cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id], config.agentMcpAccess?.[agentId] as Record<string, Level> | undefined);
   };
 
   /** Write the user's bundle list (config:changed refreshes `config`). */
@@ -94,7 +102,12 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
   const saveDraft = () => {
     if (!draft || !draft.label.trim()) return;
     const rest = custom.filter((b) => b.id !== draft.id).map(({ custom: _c, ...b }) => b);
-    const edited = { id: draft.id ?? '', label: draft.label.trim(), icon: draft.icon, servers: draft.servers };
+    const access = {
+      ...Object.fromEntries(draft.servers.filter(isKeyed).map((s) => [s, levelOf(draft.access, s)])),
+      // REST API levels (api:<id>) set in the editor.
+      ...Object.fromEntries(Object.entries(draft.access ?? {}).filter(([k]) => k.startsWith('api:')))
+    };
+    const edited = { id: draft.id ?? '', label: draft.label.trim(), icon: draft.icon, servers: draft.servers, access };
     const next = draft.id
       ? custom.map(({ custom: _c, ...b }) => (b.id === draft.id ? edited : b))
       : [...rest, edited];
@@ -151,20 +164,20 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
                   </span>
                   <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6, flex: 1 }}>
                     {b.servers.length === 0 && <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.caps.noServers')}</span>}
-                    {b.servers.map((s) => <span key={s} className={`pro-chip${consented(config, s) ? '' : ' pro-chip-off'}`}>{mcpLabel(s)}</span>)}
+                    {b.servers.map((s) => <span key={s} className={`pro-chip${consented(config, s) ? '' : ' pro-chip-off'}`}>{mcpLabel(s)}{isKeyed(s) ? ` · ${levelOf(b.access, s) === 'readwrite' ? t('pro.caps.accessWriteShort') : t('pro.caps.accessReadShort')}` : ''}</span>)}
                   </span>
                   <span className="pro-row" style={{ flexWrap: 'wrap', gap: 6 }}>
-                    <button className="pro-btn pro-btn-primary" disabled={!target || saving || match} onClick={() => target && void grant(target, b.servers)}>
+                    <button className="pro-btn pro-btn-primary" disabled={!target || saving || match} onClick={() => target && void grant(target, b.servers, b.access)}>
                       {match ? t('pro.caps.hasIt', { name: targetAgent?.name ?? t('pro.nav.agent') }) : t('pro.caps.grantBtn', { name: targetAgent?.name ?? '…' })}
                     </button>
                     {b.custom ? (
                       <>
-                        <button className="pro-btn" disabled={saving} onClick={() => setDraft({ id: b.id, label: b.label, icon: b.icon, servers: b.servers })}>{t('pro.caps.edit')}</button>
+                        <button className="pro-btn" disabled={saving} onClick={() => setDraft({ id: b.id, label: b.label, icon: b.icon, servers: b.servers, access: b.access })}>{t('pro.caps.edit')}</button>
                         <button className="pro-btn" disabled={saving} onClick={() => remove(b)}>{t('pro.caps.delete')}</button>
                       </>
                     ) : (
                       <button className="pro-btn" disabled={saving} title={t('pro.caps.duplicateTitle')}
-                        onClick={() => setDraft({ label: t('pro.caps.copyOf', { name: bundleName(b) }), icon: b.icon, servers: b.servers })}>{t('pro.caps.duplicate')}</button>
+                        onClick={() => setDraft({ label: t('pro.caps.copyOf', { name: bundleName(b) }), icon: b.icon, servers: b.servers, access: b.access })}>{t('pro.caps.duplicate')}</button>
                     )}
                   </span>
                 </article>
@@ -211,7 +224,7 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
                         title={on && !usable ? t('pro.caps.notSwitchedOn', { name: e.label }) : e.description}
                         disabled={saving}
                         onClick={() => toggle(a.id, e.id)}>
-                        {e.label}
+                        {e.label}{on && isKeyed(e.id) ? ` · ${levelOf(config.agentMcpAccess?.[a.id] as Record<string, Level> | undefined, e.id) === 'readwrite' ? t('pro.caps.accessWriteShort') : t('pro.caps.accessReadShort')}` : ''}
                       </button>
                     );
                   })}
@@ -239,6 +252,10 @@ function BundleEditor({ draft, config, saving, onChange, onCancel, onSave, onCon
   const { t } = useTranslation();
   const flip = (id: string) =>
     onChange({ ...draft, servers: draft.servers.includes(id) ? draft.servers.filter((s) => s !== id) : [...draft.servers, id] });
+  // REST APIs (Connections → REST APIs): the role's level for each. Not set =
+  // read-only, as for an agent with no role.
+  const [apis, setApis] = useState<Array<{ id: string; label: string }>>([]);
+  useEffect(() => { void window.cth.integrationsList().then((r) => setApis(r.map((x) => ({ id: x.id, label: x.label })))).catch(() => {}); }, []);
   const needsKey = draft.servers.filter((s) => !consented(config, s));
   return (
     <section className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 12, borderColor: 'var(--cth-lemon)' }}>
@@ -267,6 +284,45 @@ function BundleEditor({ draft, config, saving, onChange, onCancel, onSave, onCon
           );
         })}
       </div>
+      {apis.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.caps.apiHelp')}</span>
+          {apis.map((a) => {
+            const cur = draft.access?.[`api:${a.id}`] ?? 'read';
+            return (
+              <div key={a.id} className="pro-row" style={{ gap: 8 }}>
+                <span style={{ minWidth: 120, fontSize: 13 }}>{a.label}</span>
+                <div className="pro-switch" role="radiogroup" aria-label={a.label}>
+                  {(['none', 'read', 'readwrite'] as const).map((lv) => (
+                    <button key={lv} role="radio" aria-checked={cur === lv} aria-pressed={cur === lv}
+                      onClick={() => onChange({ ...draft, access: { ...(draft.access ?? {}), [`api:${a.id}`]: lv } })}>
+                      {lv === 'none' ? t('pro.conn.access_none') : lv === 'read' ? t('pro.caps.accessRead') : t('pro.caps.accessWrite')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {draft.servers.filter(isKeyed).length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.caps.accessHelp')}</span>
+          {draft.servers.filter(isKeyed).map((s) => (
+            <div key={s} className="pro-row" style={{ gap: 8 }}>
+              <span style={{ minWidth: 120, fontSize: 13 }}>{mcpLabel(s)}</span>
+              <div className="pro-switch" role="radiogroup" aria-label={mcpLabel(s)}>
+                {(['read', 'readwrite'] as const).map((lv) => (
+                  <button key={lv} role="radio" aria-checked={levelOf(draft.access, s) === lv} aria-pressed={levelOf(draft.access, s) === lv}
+                    onClick={() => onChange({ ...draft, access: { ...(draft.access ?? {}), [s]: lv } })}>
+                    {lv === 'read' ? t('pro.caps.accessRead') : t('pro.caps.accessWrite')}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       {needsKey.length > 0 && (
         <p className="pro-sub" style={{ fontSize: 12, margin: 0 }}>
           {t(needsKey.length === 1 ? 'pro.caps.needsKeyOne' : 'pro.caps.needsKeyMany', { names: needsKey.map(mcpLabel).join(', ') })}{' '}

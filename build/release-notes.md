@@ -1,5 +1,3 @@
-- **Memory by project** and your own lists (have / want).
-- **Model and effort per role**; Web and Shell as capabilities.
-- Cards say **asks you** when a menu waits.
-- **Windows first run** installs Node and Claude.
-- **5h / weekly usage** in the title bar.
+- **Pi** now sends your provider's key (LiteLLM 401 fixed).
+- **Text boxes** no longer freeze after dialogs on Windows.
+- A click on a text box gives the page its keyboard back.

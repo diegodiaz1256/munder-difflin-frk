@@ -12,6 +12,7 @@ import {
 import { defaultMcpDefaults } from '../shared/mcpCatalog';
 import { MAX_AGENT_TOKEN_CAP } from '../shared/tokenCaps';
 import { cleanServerList } from '../shared/roleBundles';
+import { cleanAccessMap, isAccess, type Access } from '../shared/connectionAccess';
 import { expandTilde, normalizeHiveHome } from './fs';
 import { distroHomeUnc, fromLinuxPath, parseWslPath } from './wsl';
 import { hasPlainSecrets, mergeSecrets, splitSecrets, type SecretCodec } from './configSecrets';
@@ -234,6 +235,19 @@ export interface HarnessConfig {
   /** Manager → Connections "Choose agents": a keyed MCP server listed here reaches
    *  only these agent ids (on their next spawn). Absent → every agent. */
   connectionScopes?: Record<string, string[]>;
+  /** Agents (Claude Code) reach only the MCP servers managed in the app. Absent → true. */
+  mcpOnlyManaged?: boolean;
+  /** The most any agent may do with a connection (shared/connectionAccess.ts):
+   *  connection id → none | read | readwrite. Absent → read-only. */
+  connectionPolicy?: Record<string, Access>;
+  /** The most any agent may do with a REST API (Connections → REST APIs), by
+   *  integration id. Absent → read-only. */
+  integrationPolicy?: Record<string, Access>;
+  /** REST APIs limited to some agents (integration id → agent ids). Absent → every agent. */
+  integrationScopes?: Record<string, string[]>;
+  /** What each agent's role grants per service: agent id → service id → level.
+   *  Written with the grant. No entry → read-only on the connections it had. */
+  agentMcpAccess?: Record<string, Record<string, Access>>;
   /** Extra Connections beyond each service's first (two GitHub accounts…):
    *  id `<service>--<slug>`, the service's catalog id, and a name. */
   connectionInstances?: Array<{ id: string; service: string; label: string }>;
@@ -250,7 +264,7 @@ export interface HarnessConfig {
   factories?: Array<{ id: string; name: string; url: string; addedAt: number }>;
   /** The user's own role bundles (Pro Capabilities), after the built-ins.
    *  Saved through config:saveRoleBundles, which validates them. */
-  customRoleBundles?: Array<{ id: string; label: string; icon: string; servers: string[] }>;
+  customRoleBundles?: Array<{ id: string; label: string; icon: string; servers: string[]; access?: Record<string, Access> }>;
   /** Enable semantic memory (MemPalace CLI). No-op if mempalace isn't installed. */
   semanticMemory: boolean;
   /** Embedding model for the palace: lightweight 'minilm' or multilingual 'embeddinggemma'. */
@@ -359,6 +373,11 @@ export interface HarnessConfig {
    *  upstream). API KEYS are NOT stored here — they live write-only in the secret
    *  broker (integrations.ts), read MAIN-ONLY at spawn. */
   providerBaseUrls?: Partial<Record<AgentProvider, string>>;
+  /** Your own OpenAI-compatible model providers (Ollama, LM Studio, vLLM…), given
+   *  to every OpenCode and Pi agent. Keys are in the encrypted store (apikey:custom:<id>). */
+  customModelProviders?: Array<{ id: string; label: string; baseUrl: string; models: string[] }>;
+  /** The model list each engine's CLI last reported (AI providers → Load models), for Add Agent. */
+  engineModels?: Partial<Record<'pi' | 'opencode', string[]>>;
   /** Per-CLI-provider default model slug, used to pre-fill the model picker. */
   providerDefaultModels?: Partial<Record<AgentProvider, string>>;
   /** Certificates for agents' HTTPS (custom endpoints, company gateways):
@@ -802,16 +821,27 @@ export function writeConfig(patch: Partial<HarnessConfig>): HarnessConfig {
 
 /** Set or clear one agent's MCP grant (Pro Capabilities) against the latest
  *  config on disk, the same read-modify-write as setAgentTokenCap below. */
-export function setAgentMcpGrant(agentId: unknown, servers: unknown): HarnessConfig {
+export function setAgentMcpGrant(agentId: unknown, servers: unknown, access?: unknown): HarnessConfig {
   if (typeof agentId !== 'string' || agentId.trim().length === 0) {
     throw new Error('invalid agent id');
   }
   if (servers !== undefined && !Array.isArray(servers)) throw new Error('invalid MCP grant');
   const current = readConfig();
   const agentMcpGrants = { ...(current.agentMcpGrants ?? {}) };
-  if (servers === undefined) delete agentMcpGrants[agentId];
-  else agentMcpGrants[agentId] = cleanServerList(servers);
-  return persistConfig({ ...current, agentMcpGrants });
+  const agentMcpAccess = { ...(current.agentMcpAccess ?? {}) };
+  if (servers === undefined) { delete agentMcpGrants[agentId]; delete agentMcpAccess[agentId]; }
+  else {
+    const list = cleanServerList(servers);
+    agentMcpGrants[agentId] = list;
+    // What the role allows, per service; a service it names without a level is read-only.
+    const given = cleanAccessMap(access);
+    agentMcpAccess[agentId] = {
+      ...Object.fromEntries(list.map((s) => [s, isAccess(given[s]) ? given[s] : 'read'])),
+      // The role's REST API levels ride along (api:<id>).
+      ...Object.fromEntries(Object.entries(given).filter(([k]) => k.startsWith('api:')))
+    } as Record<string, Access>;
+  }
+  return persistConfig({ ...current, agentMcpGrants, agentMcpAccess });
 }
 
 /** Set or clear one agent's token ceiling against the latest config on disk.

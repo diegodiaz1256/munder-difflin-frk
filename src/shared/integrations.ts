@@ -336,3 +336,41 @@ export const INTEGRATION_TEMPLATES: IntegrationTemplate[] = [
     idSuggestion: 'hubspot'
   }
 ];
+
+/** One cheap, read-only request that proves a key works against a service. */
+export interface ProbeSpec {
+  method: 'GET' | 'POST';
+  /** Relative to the integration's baseUrl (may carry a query). */
+  path: string;
+  headers?: Record<string, string>;
+  body?: string;
+}
+
+/** True while a template's placeholder host (`your-domain`) is still in place. */
+export function hasPlaceholderHost(baseUrl: string): boolean {
+  try { return /(^|\.)your-domain(\.|$)/i.test(new URL(baseUrl).hostname); } catch { return false; }
+}
+
+/**
+ * What "Test connection" should call. A baseUrl alone is rarely an endpoint (Jira's
+ * `/rest/api/3` answers 404), so well-known services get their own cheap
+ * authenticated read; anything else is probed at its base, as before.
+ */
+export function probeSpecFor(baseUrl: string): ProbeSpec {
+  let u: URL;
+  try { u = new URL(baseUrl); } catch { return { method: 'GET', path: '' }; }
+  const host = u.hostname.toLowerCase();
+  const path = u.pathname.replace(/\/+$/, '');
+  if (host.endsWith('.atlassian.net')) {
+    if (path.startsWith('/wiki/api')) return { method: 'GET', path: '/spaces?limit=1' };
+    if (path.startsWith('/rest/api')) return { method: 'GET', path: '/myself' };
+  }
+  if (host === 'api.github.com') return { method: 'GET', path: '/user' };
+  if (host === 'api.notion.com') return { method: 'GET', path: '/users/me', headers: { 'notion-version': '2022-06-28' } };
+  if (host === 'api.stripe.com') return { method: 'GET', path: '/balance' };
+  if (host === 'sentry.io' && path.startsWith('/api/')) return { method: 'GET', path: '/organizations/' };
+  if (host === 'api.linear.app' && path === '/graphql') {
+    return { method: 'POST', path: '', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: '{ viewer { id } }' }) };
+  }
+  return { method: 'GET', path: '' };
+}

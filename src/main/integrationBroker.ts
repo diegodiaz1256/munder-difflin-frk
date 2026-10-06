@@ -26,6 +26,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
+import { isReadRequest, type Access } from '../shared/connectionAccess';
 import {
   type IntegrationRecord,
   buildAuthHeaders,
@@ -55,6 +56,11 @@ const STRIP_RESPONSE = new Set([
 interface Capability {
   workerId: string;
   allowedIds: Set<string>;
+  /** Per integration: 'read' lets only reads through (isReadRequest). Absent → unrestricted. */
+  access: Map<string, Access>;
+  /** The agent this capability belongs to. With `deps.live`, what it may use is
+   *  looked up on every request from this id, not frozen at spawn. */
+  agentId?: string;
   grantedAt: number;
 }
 
@@ -63,6 +69,12 @@ export interface IntegrationBrokerDeps {
   getRecord: (id: string) => IntegrationRecord | undefined;
   /** Decrypt a secret by ref (injected — the secret store). Main-internal. */
   getSecret: (secretRef: string | undefined) => string | undefined;
+  /** What an agent may use RIGHT NOW (enabled, keyed, chosen, its level). When
+   *  set, a capability carrying an agentId is checked against this on every
+   *  request, so turning an API on (or off) applies at once, no respawn. */
+  live?: (agentId: string) => { ids: string[]; access: Record<string, Access> };
+  /** Why an agent may not use an integration, in words (for the 403). */
+  whyNot?: (agentId: string, integrationId: string) => string | undefined;
   /** Runners (envVault.ts): what an agent may run with secrets it never sees. */
   runners?: {
     describe: (workerId: string) => Array<{ id: string; name: string; description?: string; secrets: string[] }>;
@@ -131,12 +143,24 @@ export class IntegrationBroker {
   /** Mint a per-worker capability token granting access to `allowedIds`. Any prior
    *  token for this worker is revoked first. The token is a random handle — never a
    *  secret, never persisted. */
-  grant(workerId: string, allowedIds: string[]): string {
+  grant(workerId: string, allowedIds: string[], access?: Record<string, Access>, agentId?: string): string {
     this.revoke(workerId);
     const token = randomBytes(32).toString('base64url');
-    this.byToken.set(token, { workerId, allowedIds: new Set(allowedIds), grantedAt: Date.now() });
+    this.byToken.set(token, { workerId, allowedIds: new Set(allowedIds), access: new Map(Object.entries(access ?? {})), agentId, grantedAt: Date.now() });
     this.byWorker.set(workerId, token);
     return token;
+  }
+
+  /** What a capability allows right now: looked up live for an agent's
+   *  capability when the app provides `live`, else what was granted at spawn. */
+  private allowed(cap: Capability): { ids: Set<string>; access: Map<string, Access> } {
+    if (cap.agentId && this.deps.live) {
+      try {
+        const l = this.deps.live(cap.agentId);
+        return { ids: new Set(l.ids), access: new Map(Object.entries(l.access)) };
+      } catch { /* fall back to the spawn-time grant */ }
+    }
+    return { ids: cap.allowedIds, access: cap.access };
   }
 
   /** Revoke a worker's capability (called on teardown). Idempotent. */
@@ -204,6 +228,15 @@ export class IntegrationBroker {
       return IntegrationBroker.sendError(res, 405, 'method_not_allowed', 'GET /run or POST /run/<id>');
     }
 
+    // 3a') GET /i: the APIs this agent may use right now (md-api with no arguments).
+    if (/^\/i\/?(\?.*)?$/.test(rawUrl) && (req.method ?? 'GET').toUpperCase() === 'GET') {
+      const now = this.allowed(cap);
+      const apis = [...now.ids].map((id) => ({ id, label: this.deps.getRecord(id)?.label ?? id, access: now.access.get(id) ?? 'readwrite' }));
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ apis }));
+      return;
+    }
+
     // 3) Parse /i/<integrationId>/<path...>.
     const m = /^\/i\/([^/?#]+)(?:\/([^?#]*))?(\?[^#]*)?$/.exec(rawUrl);
     if (!m) return IntegrationBroker.sendError(res, 404, 'not_found', 'expected /i/<integrationId>/<path>');
@@ -211,9 +244,12 @@ export class IntegrationBroker {
     const path = m[2] ?? '';
     const query = m[3] ?? '';
 
-    // 4) Authorize against this worker's capability.
-    if (!cap.allowedIds.has(integrationId)) {
-      return IntegrationBroker.sendError(res, 403, 'forbidden', 'integration not in this worker capability');
+    // 4) Authorize: live (what the agent may use now) or the spawn-time grant.
+    const now = this.allowed(cap);
+    if (!now.ids.has(integrationId) || now.access.get(integrationId) === 'none') {
+      const why = cap.agentId ? this.deps.whyNot?.(cap.agentId, integrationId) : undefined;
+      return IntegrationBroker.sendError(res, 403, 'forbidden',
+        why ? `${integrationId} is not available to this agent: ${why}. Changes in Connections apply at once, no restart needed.` : 'integration not in this worker capability');
     }
     // 5) Resolve the record (still enabled?).
     const rec = this.deps.getRecord(integrationId);
@@ -231,7 +267,9 @@ export class IntegrationBroker {
       if (!secret) return IntegrationBroker.sendError(res, 503, 'no_secret', 'no secret configured for this integration');
     }
 
-    void this.forward(req, res, rec, upstream, secret);
+    // The full upstream path: an API whose base is the endpoint (Linear's /graphql)
+    // sends an empty relative one.
+    void this.forward(req, res, rec, upstream, secret, now.access.get(integrationId), upstream.pathname);
   }
 
   private async forward(
@@ -239,7 +277,9 @@ export class IntegrationBroker {
     res: ServerResponse,
     rec: IntegrationRecord,
     upstream: URL,
-    secret: string | undefined
+    secret: string | undefined,
+    access?: Access,
+    path = ''
   ): Promise<void> {
     // Buffer the request body with a hard cap (write methods).
     const method = (req.method ?? 'GET').toUpperCase();
@@ -254,6 +294,12 @@ export class IntegrationBroker {
         }
         return IntegrationBroker.sendError(res, 400, 'bad_request', 'could not read request body');
       }
+    }
+
+    // Read-only access (Connections → REST APIs, or the agent's role): reads and
+    // searches only. Checked before the secret ever goes upstream.
+    if (access === 'read' && !isReadRequest(method, path, body?.toString('utf8'))) {
+      return IntegrationBroker.sendError(res, 403, 'read_only', `${method} ${path} would change things; your access to this API is read-only. Ask the human to give your role read & write access (Capabilities) or raise the API's limit (Connections).`);
     }
 
     // Sanitize worker headers, then inject the auth header(s). Injected auth ALWAYS

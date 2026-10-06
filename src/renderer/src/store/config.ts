@@ -135,6 +135,9 @@ export interface HarnessConfig {
   /** Manager → Connections "Choose agents": a keyed MCP server listed here reaches
    *  only these agent ids (on their next spawn). Absent → every agent. */
   connectionScopes?: Record<string, string[]>;
+  mcpOnlyManaged?: boolean;
+  integrationPolicy?: Record<string, 'none' | 'read' | 'readwrite'>;
+  integrationScopes?: Record<string, string[]>;
   /** Extra Connections beyond each service's first (two GitHub accounts…):
    *  id `<service>--<slug>`, the service's catalog id, and a name. */
   connectionInstances?: Array<{ id: string; service: string; label: string }>;
@@ -148,7 +151,8 @@ export interface HarnessConfig {
   factories?: Array<{ id: string; name: string; url: string; addedAt: number }>;
   /** The user's own role bundles (Pro Capabilities), after the built-ins.
    *  Saved through config:saveRoleBundles, which validates them. */
-  customRoleBundles?: Array<{ id: string; label: string; icon: string; servers: string[] }>;
+  customRoleBundles?: Array<{ id: string; label: string; icon: string; servers: string[]; access?: Record<string, 'none' | 'read' | 'readwrite'> }>;
+  agentMcpAccess?: Record<string, Record<string, 'none' | 'read' | 'readwrite'>>;
   autoDeliveryPausedAgents?: string[];
   maxTurns?: number;
   circuitBreaker?: CircuitBreakerConfig;
@@ -164,6 +168,8 @@ export interface HarnessConfig {
   providerBaseUrls?: Partial<Record<AgentProvider, string>>;
   /** Per-CLI-provider default model slug, used to pre-fill the model picker. */
   providerDefaultModels?: Partial<Record<AgentProvider, string>>;
+  customModelProviders?: Array<{ id: string; label: string; baseUrl: string; models: string[] }>;
+  engineModels?: Partial<Record<'pi' | 'opencode', string[]>>;
   /** Certificates for agents' HTTPS (custom endpoints, company gateways):
    *  verify on/off, an extra CA file, and trusting the Windows / WSL stores.
    *  See src/main/caBundle.ts. */
@@ -379,6 +385,19 @@ export { tokenizeCommand } from '@shared/commandLine';
 /** The model preset list for a given provider's picker, on this build. */
 export function modelsForProvider(provider: AgentProvider): ModelOption[] {
   return modelsForProviderAtVersion(provider, runningAppVersion());
+}
+
+/** For Pi / OpenCode, the models the human set up themselves: their custom
+ *  OpenAI-compatible providers, the list the engine last reported (AI providers →
+ *  Load models) and Pi's own models.json. The hosted catalog knows none of these. */
+export function ownModelsFor(config: HarnessConfig, provider: AgentProvider, piOwn: string[] = []): ModelOption[] {
+  if (provider !== 'pi' && provider !== 'opencode') return [];
+  const ids = [
+    ...(config.customModelProviders ?? []).flatMap((p) => p.models.map((m) => `${p.id}/${m}`)),
+    ...(provider === 'pi' ? piOwn : []),
+    ...(config.engineModels?.[provider] ?? [])
+  ];
+  return [...new Set(ids)].slice(0, 60).map((id) => ({ id, label: id }));
 }
 
 /** The Claude presets, for the surfaces that only ever offer Claude models.

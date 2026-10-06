@@ -1,38 +1,20 @@
-# Scranton Branch 0.4.6-fork.25
+# Scranton Branch 0.4.6-fork.29
 
-Memory by project and personal lists, control over models and tools per agent, and terminals that tell you when an agent is waiting on you.
+Pi reaches your own providers (LiteLLM and other OpenAI-compatible servers) with their key, and text boxes stay typeable after dialogs on Windows.
 
 ## What's new
 
-### Memory
-- **Memory by project.** Each project gets its own memory with sections that fit what it is (code, data, infrastructure, docs or research), and the Memory screen lets you look at the whole office or one project.
-- **Things, with their other names.** Factions, products, people… gathered from notes into an Entities tab, with aliases and spelling slips matched ("deth gaurd" finds Death Guard).
-- **Your lists.** Memory → Lists keeps what you own, want or plan (a collection, a wishlist…), one column per state. Tell the orchestrator "I bought Mortarion" and it moves it from *Want* to *Have* (agents use the new `munder-lists` tool).
-
-### Agents
-- **Model and effort per role.** Settings → Agents & Models → *Per role*: a model and a thinking effort for the orchestrator, your agents and temps (e.g. temps on Haiku, low effort). Unset, Claude Code uses its own default, which is often *high*.
-- **Claude's own tools are capabilities too.** Capabilities → *Who has what* now has **Web**, **Shell** and **Sub-agents** per agent; switched off, the agent cannot use them (an agent without web search no longer searches anyway).
-- **"Asks you".** When an agent's CLI shows a menu in its terminal (trust this folder, a model picker, a confirmation), its card says *asks you* with the question, and you get a desktop notification when the app is in the background.
-
-### Subscription usage
-- **Your 5-hour and weekly windows in the title bar** (*5h 64% · week 61%*), amber near the limit and red close to it; hover for when each resets and the per-model weekly caps. On a Claude subscription these, not dollars, are what runs out. Each agent's status line shows the 5-hour window too.
-
-### Terminals
-- **The prompt stays at the bottom.** After a menu closed, or coming back from Manager, the terminal could show blank space under Claude's prompt.
-- **Open a terminal here** works on Windows (Windows Terminal or cmd) and in WSL offices (inside the distribution); it failed with `spawn open ENOENT`.
-
-### First run on Windows
-- **The setup help installs for real.** On a machine without Node, it downloaded Node and then skipped every later step, so Claude was never installed and the orchestrator died with *"the command line is too long"*. Each step now runs in order and stops with a clear message if it fails; a checksum mismatch stops the install.
-- The app only relaunches the agent once its CLI is really there, and otherwise says why under the installer output.
-- Cursor's Windows installer runs through PowerShell. The first screen says *Welcome to Scranton Branch*.
-
-### WSL offices
-- **The orchestrator and a worker starting together both start.** One of them could hang at "WSL bridge" until the 90 s timeout.
+- **Pi + your own providers.** Pi agents sent the key's variable name instead of the key (LiteLLM: 401 "Received=MD_M****ELLM"). They now send the key itself.
+- **Text boxes no longer freeze** on Windows after stopping an agent, answering a dialog or picking a file or folder. If the page ever loses its keyboard, a click on a text box brings it back.
 
 ## Earlier releases
 
 | Version | Highlights |
 |---|---|
+| fork.28 | APIs (Jira) apply to running agents at once, Pi keeps its model after a restart, your own models in New agent. |
+| fork.27 | Pi and OpenCode sign-in and models in the app, local models, REST API access per role. |
+| fork.26 | Connections with per-role permissions, Deliverables linked to tasks, readable agent steps, MCP managed in the app. |
+| fork.25 | Memory by project and lists, model and effort per role, Spanish everywhere, 5h/weekly usage in the title bar. |
 | fork.24 | Memory offline with a concept graph, hires as a CV, Remote Control button, WSL orchestrator always starts. |
 | fork.23 | Upgrades install over the previous version instead of running its uninstaller. |
 | fork.22 | Offices in deeply nested folders keep their agents' hooks. |
@@ -50,26 +32,26 @@ Memory by project and personal lists, control over models and tools per agent, a
 ### macOS
 | | |
 |---|---|
-| Universal (Apple Silicon + Intel) | [`Scranton-Branch-0.4.6-fork.25-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.25-mac-universal.dmg) |
+| Universal (Apple Silicon + Intel) | [`Scranton-Branch-0.4.6-fork.29-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.29-mac-universal.dmg) |
 
 ### Windows
 | | |
 |---|---|
-| Installer (x64), *recommended* | [`Scranton-Branch-0.4.6-fork.25-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.25-win-x64-setup.exe) |
-| Portable (x64, no install) | [`Scranton-Branch-0.4.6-fork.25-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.25-win-x64-portable.exe) |
+| Installer (x64), *recommended* | [`Scranton-Branch-0.4.6-fork.29-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.29-win-x64-setup.exe) |
+| Portable (x64, no install) | [`Scranton-Branch-0.4.6-fork.29-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.29-win-x64-portable.exe) |
 
 ### Linux
 | | |
 |---|---|
-| AppImage (x86_64) | [`Scranton-Branch-0.4.6-fork.25-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.25-linux-x86_64.AppImage) |
-| Server, no GUI (x64) | [`scranton-branch-server-0.4.6-fork.25-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.25-linux-x64.tar.gz) |
-| Server, no GUI (arm64) | [`scranton-branch-server-0.4.6-fork.25-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.25-linux-arm64.tar.gz) |
+| AppImage (x86_64) | [`Scranton-Branch-0.4.6-fork.29-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.29-linux-x86_64.AppImage) |
+| Server, no GUI (x64) | [`scranton-branch-server-0.4.6-fork.29-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.29-linux-x64.tar.gz) |
+| Server, no GUI (arm64) | [`scranton-branch-server-0.4.6-fork.29-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.29-linux-arm64.tar.gz) |
 
 Server: unpack, then run `sudo ./install.sh`. Setup, Docker and secrets are in [SERVER.md](https://github.com/diegodiaz1256/scranton-branch/blob/main/SERVER.md).
 
 Builds are not code-signed yet: macOS asks you to allow the app in System Settings → Privacy & Security, and Windows SmartScreen asks you to confirm ("More info" → "Run anyway").
 
-Source: [`v0.4.6-fork.25`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v0.4.6-fork.25.tar.gz)
+Source: [`v0.4.6-fork.29`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v0.4.6-fork.29.tar.gz)
 
 ## About this fork
 

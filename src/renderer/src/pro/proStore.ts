@@ -6,7 +6,7 @@ import { create } from 'zustand';
  * origin partitioning) don't apply to two UI preferences.
  */
 
-export type ProSection = 'tasks' | 'inbox' | 'automations' | 'memory' | 'capabilities' | 'connections' | 'environment' | 'mcp' | 'team' | 'factories' | 'agents' | 'temps';
+export type ProSection = 'tasks' | 'inbox' | 'deliverables' | 'automations' | 'memory' | 'capabilities' | 'connections' | 'environment' | 'providers' | 'mcp' | 'team' | 'factories' | 'agents' | 'temps';
 export type ProView = { kind: 'section'; section: ProSection } | { kind: 'agent'; agentId: string };
 export type Layout = 'classic' | 'pro';
 
@@ -31,6 +31,9 @@ interface ProState {
   view: ProView;
   setLayout: (layout: Layout) => void;
   setView: (view: ProView) => void;
+  /** Deliverables opened from a task: show that task's only (null = all). Not persisted. */
+  focusTask: string | null;
+  setFocusTask: (taskId: string | null) => void;
 }
 
 export const useProStore = create<ProState>((set) => ({
@@ -43,5 +46,7 @@ export const useProStore = create<ProState>((set) => ({
   setView: (view) => {
     try { window.localStorage.setItem(LS_VIEW, JSON.stringify(view)); } catch { /* noop */ }
     set({ view });
-  }
+  },
+  focusTask: null,
+  setFocusTask: (focusTask) => set({ focusTask })
 }));

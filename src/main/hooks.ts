@@ -19,7 +19,9 @@ import type { HarnessConfig } from './config';
 import type { ControlRegistry } from './control';
 import type { CircuitBreaker } from './breaker';
 import { estimateCostUsd } from './pricing';
-import { validateHookEvent } from '../shared/hookEvents';
+import { validateHookEvent, type HookEvent } from '../shared/hookEvents';
+import { STEP_EVENTS, summarizeToolInput, redact, writtenPathsOf } from '../shared/agentSteps';
+import { isAbsolute, join as joinPath } from 'node:path';
 import { parseRateLimits, type RateLimits } from '../shared/rateLimits';
 
 /** Maximum JSON payload bytes in one newline-delimited hook frame. */
@@ -633,19 +635,64 @@ export class HookServer {
     this.getWebContents()?.send('control:approvalRequest', { agentId, tool, reason });
   }
 
+  /** Told about every step-worthy event as it happens (main links deliverables to tasks). */
+  onStep?: (agentId: string, e: HookEvent) => void;
+
+  /** Recent step-worthy events per agent, for the steps timeline (memory only). */
+  private readonly stepLog = new Map<string, HookEvent[]>();
+
+  /** What an agent has done lately, oldest first. */
+  stepsFor(agentId: string): HookEvent[] {
+    return [...(this.stepLog.get(agentId) ?? [])];
+  }
+
+  /** Forget an agent's steps (it left the floor). */
+  clearSteps(agentId: string): void {
+    this.stepLog.delete(agentId);
+  }
+
+  private writtenFiles(agentId: string | undefined, p: HookPayload): string[] {
+    const paths = writtenPathsOf(p.tool_name, p.tool_input);
+    if (!paths.length) return [];
+    let cwd = p.cwd;
+    if (!cwd && agentId) { try { cwd = this.hive.registry().agents[agentId]?.cwd; } catch { /* no registry */ } }
+    // A Linux path from an agent inside WSL is absolute too (main maps it later).
+    const abs = (f: string) => (f.startsWith('/') || isAbsolute(f) ? f : cwd ? joinPath(cwd, f) : null);
+    return paths.map(abs).filter((f): f is string => !!f).slice(0, 50);
+  }
+
   private emit(agentId: string | undefined, event: string, p: HookPayload, blocked = false): void {
-    const payload = {
+    // For the steps timeline: what the tool was asked to do (redacted, short), or
+    // the words of a prompt. Kept in memory only, never written to disk.
+    const detail = event === 'UserPromptSubmit'
+      ? (p.prompt ? redact(p.prompt).slice(0, 400) : undefined)
+      : STEP_EVENTS.has(event) ? summarizeToolInput(p.tool_name, p.tool_input) || undefined : undefined;
+    // Which files a write writes, for any CLI, made absolute against the folder
+    // the agent works in (Codex and OpenCode patches name them relatively).
+    // Post too: some CLIs only report a tool once it ran (Codex builds, the qwen proxy, grok).
+    const files = (event === 'PreToolUse' || event === 'PostToolUse') && !blocked ? this.writtenFiles(agentId, p) : [];
+    const payload: HookEvent = {
       agentId,
       event,
       tool: p.tool_name,
       notificationType: p.notification_type,
       source: p.source,
       message: p.message,
-      blocked
+      blocked,
+      ...(detail ? { detail } : {}),
+      ...(files.length ? { files } : {}),
+      ts: Date.now()
     };
     if (!validateHookEvent(payload)) {
       console.warn('[hive] rejected invalid hook event:', event);
       return;
+    }
+    if (agentId && STEP_EVENTS.has(event)) {
+      const log = this.stepLog.get(agentId) ?? [];
+      log.push(payload);
+      if (log.length > 600) log.splice(0, log.length - 600);
+      this.stepLog.set(agentId, log);
+      try { this.onStep?.(agentId, payload); } catch (e) { console.error('[hooks] onStep:', e); }
     }
     this.getWebContents()?.send('hive:hookEvent', payload);
   }

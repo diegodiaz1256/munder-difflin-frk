@@ -80,16 +80,22 @@ import * as integrations from './integrations';
 import { applyMissionRequest, type MissionLike } from '../shared/missionRequests';
 import { cleanCustomBundles } from '../shared/roleBundles';
 import { Factories } from './factories';
-import { createWslOffice, describeWslError, distroHomeUnc, fromLinuxPath, listDistros, toWslUnc, mirroredNetworking, parseWslPath, probeInDistro, WSL_INSTALL } from './wsl';
+import { createWslOffice, describeWslError, distroHomeUnc, fromLinuxPath, runInDistroAsync, listDistros, toWslUnc, mirroredNetworking, parseWslPath, probeInDistro, WSL_INSTALL } from './wsl';
 import { WslBridge } from './wslBridge';
 import { McpServers } from './mcpServers';
 import { EnvVault, fingerprintOf } from './envVault';
-import { addConnection, connectionKeyStored, connectionLaunchEnv, instancesOf, listConnections, removeConnection, renameConnection, serviceOf, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
-import { McpGateway } from './mcpGateway';
+import { addConnection, connectionAccessFor, setConnectionAccess, connectionKeyStored, connectionLaunchEnv, instancesOf, listConnections, removeConnection, renameConnection, serviceOf, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
+import { McpGateway, type McpCallRecord } from './mcpGateway';
+import { effectiveApiAccess, explainConnection, isAccess, type Access } from '../shared/connectionAccess';
+import { blockedMcpServers } from '../shared/nativeTools';
 import { TeamNode, type TeamInbound } from './teamNode';
 import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, relayToken, saveTeamState, setRelayToken, teamEnabled, teamPublicStatus } from './team';
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
-import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES } from '../shared/integrations';
+import type { PromptConnection } from '../shared/agentConnections';
+import { PROVIDER_BACKENDS, backendForModel, providerKeyEnv } from '../shared/providerBackends';
+import { LIST_MODELS, SIGN_IN, authProviders, piOwnModels, cleanCustomProviders, effectiveModel, keyScope, piSettingsWithModel, customKeyEnv, modelsFromListing, opencodeProviders, parseModelList, piModelsJson, type ManagedEngine } from '../shared/engineModels';
+import { DELIVERABLES_DIR, addLink, canOpenExternally, currentTaskOf, isInside, linkFor, writtenFiles, type DeliverableLink } from '../shared/deliverables';
+import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES, hasPlaceholderHost, probeSpecFor } from '../shared/integrations';
 import { RosterStore } from './roster';
 import { buildWorkerLaunch, workerRequestProblem } from './workerLaunch';
 import { tokenizeCommand } from '../shared/commandLine';
@@ -435,7 +441,12 @@ const liveWorkers = new Map<string, WorkerRec>();
  *  it without ever seeing a credential. getRecord/getSecret are injected so the broker
  *  stays electron-free + unit-testable. Started in bootstrapHiveServices; each worker is
  *  granted a per-worker capability token at spawn (revoked in teardownPty). */
+/** The last tool calls agents made through the gateway (memory only): who, which
+ *  connection, which tool, allowed or refused. Shown under each Connection. */
+const mcpCalls: McpCallRecord[] = [];
 const mcpGateway = new McpGateway({
+  serviceOf: (id) => serviceOf(id),
+  onCall: (e) => { mcpCalls.push(e); if (mcpCalls.length > 1000) mcpCalls.splice(0, mcpCalls.length - 1000); },
   resolveSpec: (serverId) => {
     if (serverId.startsWith('custom--')) {
       const spec = mcpServers.launchSpec(serverId);
@@ -463,7 +474,19 @@ const mcpServers = new McpServers({
   writeCustom: (list) => writeConfig({ customMcp: list }),
   getSecret: (ref) => integrations.getSecret(ref),
   setSecret: (ref, v) => integrations.setSecret(ref, v),
-  deleteSecret: (ref) => integrations.deleteSecret(ref)
+  deleteSecret: (ref) => integrations.deleteSecret(ref),
+  // Where the agents run (their folder, a Codex agent's own CODEX_HOME), so what they set up for themselves is seen.
+  // A WSL floor's agents keep their own Claude Code / Codex / Cursor settings in the distro's home.
+  extraHomes: () => {
+    const w = hive.enabled() ? hive.wslRoot() : null;
+    const h = w ? distroHomeUnc(w.distro) : null;
+    return w && h ? [{ label: `WSL ${w.distro}`, home: h }] : [];
+  },
+  agentPlaces: () => {
+    const root = hive.root();
+    const reg = hive.enabled() ? hive.registry() : null;
+    return reg ? Object.values(reg.agents).filter((a) => a.status !== 'gone' && a.cwd).map((a) => ({ name: a.name, cwd: a.cwd, ...(root && a.provider === 'codex' ? { codexHome: join(root, 'agents', a.id, '.codex') } : {}) })) : [];
+  }
 });
 
 // Environment & secrets (envVault.ts): agents use secrets, never see them.
@@ -486,7 +509,7 @@ const envVault = new EnvVault({
       detail: `${runner.command}\n\nIn: ${cwd}\nWith secrets: ${runner.secrets.join(', ') || 'none'}${changed ? '\n\nFiles in this worktree changed since you last allowed it: the command runs code the agent may have edited.' : ''}\n\nThe agent only gets the output, with every secret masked.`
     };
     const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
-    if (win && !win.isDestroyed()) win.webContents.focus();
+    refocusAfterDialog(win);
     return response === 0 ? 'once' : response === 1 ? 'always' : 'deny';
   },
   log: (m) => console.log('[env]', m)
@@ -495,6 +518,11 @@ const envVault = new EnvVault({
 const integrationBroker = new IntegrationBroker({
   getRecord: integrations.getRecord,
   getSecret: integrations.getSecret,
+  // Looked up on every request: an API switched on (or its key saved) after an
+  // agent started is usable at once — capabilities used to be frozen at spawn,
+  // so an agent started a moment too early never got it (issue: Jira 403).
+  live: (agentId) => apisFor(agentId),
+  whyNot: (agentId, id) => apiDenyReason(agentId, id),
   runners: {
     describe: () => envVault.describeRunners(),
     run: async (workerId, runnerId) => {
@@ -540,13 +568,7 @@ function gitRun(cwd: string, argsIn: string[]): Promise<string> {
  *  (OpenCode/Crush/pi/qwen) read from standard env vars. Keys are stored
  *  WRITE-ONLY in the same encrypted secret broker as integrations, under
  *  `apikey:<backend>`, and materialized MAIN-ONLY at spawn (never over IPC). */
-const BACKEND_KEY_ENV: Record<string, string> = {
-  anthropic: 'ANTHROPIC_API_KEY',
-  openai: 'OPENAI_API_KEY',
-  google: 'GEMINI_API_KEY',
-  openrouter: 'OPENROUTER_API_KEY',
-  groq: 'GROQ_API_KEY'
-};
+const BACKEND_KEY_ENV: Record<string, string> = Object.fromEntries(PROVIDER_BACKENDS.map((b) => [b.id, b.envVar]));
 const providerKeyRef = (backend: string): string => `apikey:${backend}`;
 
 /** A worker worktree that teardown PRESERVED because it held unintegrated work.
@@ -2725,6 +2747,7 @@ ipcMain.handle('hire:openFile', async () => {
     filters: [{ name: 'Hire manifest', extensions: ['json'] }],
     properties: ['openFile', 'multiSelections']
   });
+  refocusAfterDialog(mainWindow);
   if (res.canceled || res.filePaths.length === 0) {
     return { ok: false, manifests: [], errors: [], error: 'cancelled' };
   }
@@ -2873,7 +2896,7 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
           message: `Close this floor? ${owned} running terminal${owned === 1 ? '' : 's'} on it will be stopped.`,
           detail: 'Other floors keep running.'
         });
-        if (choice === 1) e.preventDefault();
+        if (choice === 1) { e.preventDefault(); refocusAfterDialog(win); }
       }
       return;
     }
@@ -3280,19 +3303,30 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     // told how to use it.
     // Environment: PLAIN variables only (envVault.plainEnvFor); a value the
     // agent's own spawn already sets wins. Secrets never go in here.
-    opts.env = { ...envVault.plainEnvFor(opts.hive.id), ...(opts.env ?? {}) };
-    let brokerIntegrations: Array<{ id: string; label: string }> = [];
+    const plainEnv = envVault.plainEnvFor(opts.hive.id);
+    opts.env = { ...plainEnv, ...(opts.env ?? {}) };
+    // The connections this agent can really call, so its prompt names them: only
+    // Claude Code and OpenCode have the gateway's MCP servers wired in.
+    const connCfg = readConfig();
+    const connectionsForAgent: PromptConnection[] = provider === 'claude' || provider === 'opencode'
+      ? (() => {
+          const ids = new Set(hive.keyedConnectionsFor(connCfg.mcpDefaults, connCfg.agentMcpGrants?.[opts.hive!.id], opts.hive!.id, connCfg.connectionScopes, connCfg.agentToolBlocks?.[opts.hive!.id]));
+          return listConnections().filter((c) => ids.has(c.id)).map((c) => ({ id: c.id, label: c.label, serviceLabel: c.serviceLabel, description: c.description, examples: c.examples, access: connectionAccessFor(opts.hive!.id, c.id) === 'readwrite' ? 'readwrite' as const : 'read' as const }));
+        })()
+      : [];
+    let brokerIntegrations: Array<{ id: string; label: string }> | undefined;
     const runnersForAgent = envVault.describeRunners();
     if (integrationBroker.running()) {
-      const ids = integrations.enabledIds();
-      if (ids.length || runnersForAgent.length) {
-        if (!opts.env?.MD_BROKER_TOKEN) {
-          const token = integrationBroker.grant(opts.id, ids);
-          opts.env = { ...(opts.env ?? {}), MD_BROKER_URL: integrationBroker.url(), MD_BROKER_TOKEN: token };
-        }
-        const labels = new Map(integrations.listRecords().map((r) => [r.id, r.label]));
-        brokerIntegrations = ids.map((id) => ({ id, label: labels.get(id) ?? id }));
-      }
+      const { ids, access } = apisFor(opts.hive.id);
+      // Every agent gets the broker, even with no API enabled yet: what it may use
+      // is looked up per request (broker `live`), so an API connected later works
+      // without restarting it. Re-granting revokes a worker's earlier token.
+      const token = integrationBroker.grant(opts.id, ids, access, opts.hive.id);
+      opts.env = { ...(opts.env ?? {}), MD_BROKER_URL: integrationBroker.url(), MD_BROKER_TOKEN: token };
+      const labels = new Map(integrations.listRecords().map((r) => [r.id, r.label]));
+      brokerIntegrations = ids.map((id) => ({ id, label: `${labels.get(id) ?? id}${access[id] === 'read' ? ', read-only: GET and searches' : ''}` }));
+      // For diagnosis: which APIs this agent had when it started (log.jsonl).
+      try { hive.appendLog({ kind: 'broker-grant', agentId: opts.hive.id, apis: ids.map((id) => `${id}:${access[id]}`) }); } catch { /* log is best-effort */ }
     }
     try {
       spawnStep(opts.id, 'preparing the agent in the hive');
@@ -3310,12 +3344,15 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           tls: proxyTls,
           integrations: brokerIntegrations,
           runners: runnersForAgent,
+          connections: connectionsForAgent,
+          envNames: Object.keys(plainEnv),
           theme: readConfig().terminalTheme ?? 'light',
           // W3 — default-MCP consent state + the bundled skills source dir.
           mcpDefaults: readConfig().mcpDefaults,
           mcpGrant: readConfig().agentMcpGrants?.[opts.hive.id],
           toolBlocks: readConfig().agentToolBlocks?.[opts.hive.id],
           mcpScopes: readConfig().connectionScopes,
+          mcpOnlyManaged: readConfig().mcpOnlyManaged !== false,
           skillsDir: skillsResourceDir(),
           // The shared palace is mutated by the agent's own `mempalace` calls, so
           // the OS sandbox must let it through (empty when memory is off).
@@ -3504,20 +3541,50 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     //    stored keys when the model/prefix is unknown (default model, qwen slugs,
     //    custom). Reduces the blast radius vs handing every CLI all keys.
     const modelIdx = (opts.args ?? []).indexOf('--model');
-    const modelSlug = modelIdx >= 0 ? (opts.args?.[modelIdx + 1] ?? '') : '';
-    const prefix = modelSlug.includes('/') ? modelSlug.split('/')[0].toLowerCase() : '';
-    const PREFIX_BACKEND: Record<string, string> = {
-      anthropic: 'anthropic', openai: 'openai', google: 'google', gemini: 'google', groq: 'groq', openrouter: 'openrouter'
-    };
-    const scoped = PREFIX_BACKEND[prefix];
-    const backends = scoped ? [scoped] : Object.keys(BACKEND_KEY_ENV);
-    for (const backend of backends) {
-      const key = integrations.getSecret(providerKeyRef(backend));
-      if (!key) continue;
-      extra[BACKEND_KEY_ENV[backend]] = key;
-      // OpenCode/AI-SDK's Google provider reads GOOGLE_GENERATIVE_AI_API_KEY, not
-      // GEMINI_API_KEY — inject both so google/* authenticates (Jim NIT #1).
-      if (backend === 'google') extra.GOOGLE_GENERATIVE_AI_API_KEY = key;
+    const argModel = modelIdx >= 0 ? (opts.args?.[modelIdx + 1] ?? '') : '';
+    // The model is pinned per agent: a restart without --model (standup
+    // compaction, resume) gets it back instead of the engine's own default.
+    const pinFile = hive.root() ? join(hive.root()!, 'agents', opts.hive.id, 'engine-model.json') : null;
+    let pinned: string | undefined;
+    if (pinFile) {
+      try { const j = JSON.parse(readFileSync(pinFile, 'utf8')) as { model?: unknown }; if (typeof j.model === 'string') pinned = j.model; } catch { /* none yet */ }
+      if (argModel && argModel !== pinned) { try { mkdirSync(dirname(pinFile), { recursive: true }); writeFileSync(pinFile, JSON.stringify({ model: argModel }), 'utf8'); } catch { /* best-effort */ } }
+    }
+    const piDirEarly = provider === 'pi' ? opts.env?.PI_CODING_AGENT_DIR : undefined;
+    let piDefaultProvider: string | undefined;
+    if (piDirEarly) { try { const j = JSON.parse(readFileSync(join(piDirEarly, 'settings.json'), 'utf8')) as { defaultProvider?: unknown }; if (typeof j.defaultProvider === 'string') piDefaultProvider = j.defaultProvider; } catch { /* none */ } }
+    const eff = effectiveModel(argModel, pinned, piDefaultProvider);
+    if (!argModel && eff.model) opts.args = ['--model', eff.model, ...(opts.args ?? [])];
+    const modelSlug = eff.model ?? '';
+    const prefix = eff.provider ?? '';
+    // Keys follow the model: its backend's key only; a provider of your own (or
+    // one the engine defines itself) gets none — it brings its own.
+    const scope = keyScope(eff.provider, (p) => !!backendForModel(`${p}/x`));
+    if (scope !== 'none') Object.assign(extra, providerKeyEnv(scope === 'one' ? `${eff.provider}/x` : '', (backend) => integrations.getSecret(providerKeyRef(backend))));
+    // 1b) Keys of your own OpenAI-compatible providers, by env var name (the
+    //     configs below point at it; no key is written into a file).
+    for (const p of cleanCustomProviders(cfg.customModelProviders)) {
+      const key = integrations.getSecret(customKeyRef(p.id));
+      if (key) extra[customKeyEnv(p.id)] = key;
+    }
+    // Pi: your models.json (already copied into its agent dir) plus those providers,
+    // and the agent's model as its default so a resumed session keeps it.
+    const piDir = opts.env?.PI_CODING_AGENT_DIR;
+    if (provider === 'pi' && piDir && eff.model) {
+      const file = join(piDir, 'settings.json');
+      let existing: string | null = null;
+      try { existing = readFileSync(file, 'utf8'); } catch { /* none yet */ }
+      try { writeFileSync(file, piSettingsWithModel(existing, eff.model), 'utf8'); } catch (e) { console.error('[pi] could not write settings.json:', e); }
+    }
+    if (provider === 'pi' && piDir) {
+      const custom = cleanCustomProviders(cfg.customModelProviders);
+      if (custom.length) {
+        const file = join(piDir, 'models.json');
+        let existing: string | null = null;
+        try { existing = readFileSync(file, 'utf8'); } catch { /* none yet */ }
+        try { writeFileSync(file, piModelsJson(existing, custom, (id) => !!extra[customKeyEnv(id)]), 'utf8'); }
+        catch (e) { console.error('[pi] could not write models.json:', e); }
+      }
     }
     // 2) Floor auto-state for pi's bundled extension auto-allow (guardrail #5): it
     //    only auto-approves tool calls when this is '1' (i.e. floor auto mode on).
@@ -3537,6 +3604,21 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
         oc.provider = {
           local: { npm: '@ai-sdk/openai-compatible', name: 'Local (self-hosted)', options: { baseURL: baseUrl }, models: { [localModel]: { name: localModel } } }
         };
+      }
+      // Your own OpenAI-compatible providers (AI providers → Local & compatible).
+      const custom = cleanCustomProviders(cfg.customModelProviders);
+      if (custom.length) oc.provider = { ...((oc.provider as Record<string, unknown>) ?? {}), ...opencodeProviders(custom, (id) => !!extra[customKeyEnv(id)]) };
+      // Connections (keyed MCP servers) through main's gateway, as OpenCode
+      // remote servers: only a capability token, never the key. Same list the
+      // agent's prompt names (hive.keyedConnectionsFor).
+      if (mcpGateway.running()) {
+        const ids = hive.keyedConnectionsFor(cfg.mcpDefaults, cfg.agentMcpGrants?.[opts.hive.id], opts.hive.id, cfg.connectionScopes, cfg.agentToolBlocks?.[opts.hive.id]);
+        if (ids.length) {
+          const token = mcpGateway.grant(opts.hive.id, ids, hive.mcpAccessMap(opts.hive.id, ids));
+          oc.mcp = Object.fromEntries(ids.map((id) => [`munder-${id}`, {
+            type: 'remote', url: `${mcpGateway.url()}/mcp/${id}`, enabled: true, headers: { Authorization: `Bearer ${token}` }
+          }]));
+        }
       }
       extra.OPENCODE_CONFIG_CONTENT = JSON.stringify(oc);
     }
@@ -3696,6 +3778,7 @@ ipcMain.handle('dialog:chooseFolder', async (evt) => {
     title: 'Pick a folder',
     ...(defaultPath ? { defaultPath } : {})
   });
+  refocusAfterDialog(win);
   if (res.canceled || res.filePaths.length === 0) return { ok: false as const, error: 'cancelled' };
   return { ok: true as const, path: res.filePaths[0] };
 });
@@ -3735,6 +3818,86 @@ ipcMain.handle('providerKey:set', (_evt, payload: unknown) => {
   if (typeof p.key !== 'string' || !p.key) return { ok: false, error: 'key required' };
   return integrations.setSecret(providerKeyRef(p.backend), p.key);
 });
+// Engines the app drives (Pi, OpenCode): where they sign in, and the models their
+// own CLI lists. Names only — never a token.
+function engineAuthFile(engine: ManagedEngine): string {
+  return engine === 'pi' ? hive.piAuthStatus().file : join(agentsHome(), '.local', 'share', 'opencode', 'auth.json');
+}
+ipcMain.handle('engines:status', (_evt, engine: unknown) => {
+  if (engine !== 'pi' && engine !== 'opencode') return { ok: false };
+  const file = engineAuthFile(engine);
+  let providers: Array<{ id: string; kind: string }> = [];
+  try { providers = authProviders(readFileSync(file, 'utf8')); } catch { /* not signed in */ }
+  // Pi: the models your own ~/.pi/agent/models.json declares (offered in Add Agent).
+  let ownModels: string[] = [];
+  if (engine === 'pi') { try { ownModels = piOwnModels(readFileSync(join(dirname(file), 'models.json'), 'utf8')); } catch { /* none */ } }
+  return { ok: true, home: agentsHome(), file, providers, signIn: SIGN_IN[engine], ownModels };
+});
+ipcMain.handle('engines:models', async (_evt, engine: unknown) => {
+  if (engine !== 'pi' && engine !== 'opencode') return { ok: false, models: [], error: 'unknown engine' };
+  const { cmd, args } = LIST_MODELS[engine];
+  const w = hive.enabled() ? hive.wslRoot() : null;
+  try {
+    let out: string;
+    if (w) {
+      // A WSL floor's engines live in the distro: a login shell finds npm's bin.
+      out = await runInDistroAsync(w.distro, 'sh', ['-lc', [cmd, ...args].join(' ')]);
+    } else {
+      out = await new Promise<string>((resolve, reject) => {
+        // The stored model keys too, so an engine lists what those keys unlock.
+        const env = { ...process.env, PATH: userShellPath(), ...providerKeyEnv('', (b) => integrations.getSecret(providerKeyRef(b))) };
+        execFile(cmd, args, { env, timeout: 30_000, maxBuffer: 8 * 1024 * 1024, windowsHide: true, shell: process.platform === 'win32' }, (err, stdout, stderr) => {
+          if (err && !String(stdout).trim()) reject(new Error((String(stderr).trim() || err.message).split('\n')[0]));
+          else resolve(String(stdout));
+        });
+      });
+    }
+    const models = parseModelList(out);
+    return models.length ? { ok: true, models } : { ok: false, models: [], error: 'the CLI listed no models (sign in or add a key first)' };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, models: [], error: /ENOENT|not found|not recognized/i.test(msg) ? `${cmd} is not installed` : msg };
+  }
+});
+// Your own OpenAI-compatible providers for OpenCode and Pi (local models).
+const customKeyRef = (id: string): string => `apikey:custom:${id}`;
+ipcMain.handle('customProviders:save', (_evt, list: unknown) => {
+  const clean = cleanCustomProviders(list);
+  // A provider that is gone takes its key with it.
+  for (const old of readConfig().customModelProviders ?? []) if (!clean.some((p) => p.id === old.id)) { try { integrations.deleteSecret(customKeyRef(old.id)); } catch { /* none */ } }
+  writeConfig({ customModelProviders: clean });
+  return clean;
+});
+ipcMain.handle('customProviders:setKey', (_evt, id: unknown, key: unknown) => {
+  if (typeof id !== 'string' || !(readConfig().customModelProviders ?? []).some((p) => p.id === id)) return { ok: false, error: 'unknown provider' };
+  if (typeof key !== 'string' || !key.trim()) { try { integrations.deleteSecret(customKeyRef(id)); } catch { /* none */ } return { ok: true }; }
+  return integrations.setSecret(customKeyRef(id), key.trim());
+});
+ipcMain.handle('customProviders:hasKey', (_evt, id: unknown) => typeof id === 'string' && integrations.hasSecret(customKeyRef(id)));
+// The models an OpenAI-compatible endpoint serves (GET <base>/models; Ollama's
+// /api/tags as a fallback). The key, when stored, goes in the request only.
+ipcMain.handle('customProviders:fetchModels', async (_evt, baseUrl: unknown, id: unknown) => {
+  if (typeof baseUrl !== 'string') return { ok: false, models: [], error: 'bad request' };
+  let base: URL;
+  try { base = new URL(baseUrl.trim().replace(/\/+$/, '')); if (base.protocol !== 'http:' && base.protocol !== 'https:') throw new Error('x'); }
+  catch { return { ok: false, models: [], error: 'the base URL must start with http:// or https://' }; }
+  const key = typeof id === 'string' ? integrations.getSecret(customKeyRef(id)) : undefined;
+  const get = async (u: string) => {
+    const r = await fetch(u, { headers: key ? { Authorization: `Bearer ${key}` } : {}, signal: AbortSignal.timeout(8000), redirect: 'manual' });
+    return { status: r.status, body: r.ok ? await r.json().catch(() => null) : null };
+  };
+  try {
+    let r = await get(`${base.href.replace(/\/+$/, '')}/models`);
+    let models = modelsFromListing(r.body);
+    if (!models.length) { r = await get(`${base.origin}/api/tags`).catch(() => r); models = modelsFromListing(r.body); }
+    return models.length ? { ok: true, models } : { ok: false, models: [], error: `no models listed (HTTP ${r.status})` };
+  } catch (e) {
+    const msg = e instanceof Error && e.name === 'TimeoutError' ? 'no answer in 8 s' : e instanceof Error ? e.message : String(e);
+    return { ok: false, models: [], error: `could not reach it: ${msg}` };
+  }
+});
+// Pi's own sign-in (`pi` → /login), as provider names only.
+ipcMain.handle('providers:piStatus', () => hive.piAuthStatus());
 ipcMain.handle('providerKey:has', (_evt, backend: unknown) =>
   typeof backend === 'string' ? integrations.hasSecret(providerKeyRef(backend)) : false);
 ipcMain.handle('providerKey:clear', (_evt, backend: unknown) => {
@@ -3751,20 +3914,25 @@ ipcMain.handle('integrations:test', async (_evt, payload: unknown) => {
   if (!rec) return { ok: false, error: 'unknown integration' };
   const probe = validateBaseUrl(rec.baseUrl);
   if (!probe.ok) return { ok: false, error: probe.error };
+  if (hasPlaceholderHost(rec.baseUrl)) return { ok: false, error: 'Replace "your-domain" in the base URL with your own site first.' };
+  // An explicit path wins; otherwise the service's own cheap authenticated read
+  // (a bare baseUrl such as Jira's /rest/api/3 is not an endpoint: it is a 404).
+  const spec = typeof p.path === 'string' && p.path ? { method: 'GET' as const, path: p.path } : probeSpecFor(rec.baseUrl);
   // Confine the probe path through the SAME gate as the worker forward() path, so an
   // absolute URL / backslash-host / traversal in p.path can't override the origin and
   // exfiltrate the secret to an attacker host. Resolve (and reject) BEFORE the secret
   // is ever materialized, so a bad path never even decrypts it.
-  const target = resolveUpstreamUrl(rec.baseUrl, typeof p.path === 'string' ? p.path : '');
+  const target = resolveUpstreamUrl(rec.baseUrl, spec.path);
   if (!target) return { ok: false, error: 'path escapes the integration baseUrl', code: 'bad_request' };
   const secret = integrations.getSecret(rec.secretRef);
-  const headers = buildAuthHeaders(rec.authType, rec.authHeader, secret);
+  const headers = { ...(('headers' in spec && spec.headers) || {}), ...buildAuthHeaders(rec.authType, rec.authHeader, secret) };
   try {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 15_000);
-    const r = await fetch(target, { method: 'GET', headers, redirect: 'manual', signal: ac.signal });
+    const r = await fetch(target, { method: spec.method, headers, body: 'body' in spec ? spec.body : undefined, redirect: 'manual', signal: ac.signal });
     clearTimeout(timer);
-    return { ok: r.ok, status: r.status };
+    // The service said no: say which request, so a 404/401 can be read, not guessed.
+    return { ok: r.ok, status: r.status, ...(r.ok ? {} : { error: `${spec.method} ${target.pathname}${target.search} `.trim() }) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
@@ -3812,8 +3980,8 @@ ipcMain.handle('config:update', (_evt, patch: Partial<HarnessConfig>) => {
   }
   return next;
 });
-ipcMain.handle('config:setAgentMcpGrant', (_evt, agentId: unknown, servers: unknown) =>
-  setAgentMcpGrant(agentId, servers)
+ipcMain.handle('config:setAgentMcpGrant', (_evt, agentId: unknown, servers: unknown, access: unknown) =>
+  setAgentMcpGrant(agentId, servers, access)
 );
 // Manager → Connections: keyed MCP servers. Values go one way into the encrypted
 // store; nothing here ever returns one (see connections.ts).
@@ -3823,8 +3991,9 @@ hive.setMcpKeyCheck(connectionKeyStored);
 hive.setMemoryMcp(() => memory.mcpServer());
 hive.setCustomMcp((agentId) => mcpServers.forAgent(agentId));
 hive.setMcpInstances(instancesOf);
-hive.setMcpGateway((agentId, serverIds) =>
-  mcpGateway.running() ? { url: mcpGateway.url(), token: mcpGateway.grant(agentId, serverIds) } : null);
+hive.setMcpAccess(connectionAccessFor);
+hive.setMcpGateway((agentId, serverIds, access) =>
+  mcpGateway.running() ? { url: mcpGateway.url(), token: mcpGateway.grant(agentId, serverIds, access) } : null);
 ipcMain.handle('connections:list', () => listConnections());
 ipcMain.handle('connections:add', (_evt, service: unknown, label: unknown) => addConnection(service, label));
 
@@ -3913,6 +4082,15 @@ ipcMain.handle('env:opStatus', () => new Promise((resolve) => {
 // Manager → MCP: your own servers and the ones set up for other tools. Keys
 // go one way into the encrypted store (mcpServers.ts).
 const mcpErr = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) });
+// What each agent really gets, decided here — never by the agent. Grants nothing.
+ipcMain.handle('mcp:overview', () => {
+  if (!hive.enabled()) return [];
+  const cfg = readConfig();
+  return Object.values(hive.registry().agents).filter((a) => a.status !== 'gone' && !a.isAssistant).map((a) => ({
+    agentId: a.id, name: a.name, provider: a.provider ?? 'claude',
+    servers: hive.managedMcpFor(a.id, a.cwd, cfg.mcpDefaults, cfg.agentMcpGrants?.[a.id], cfg.connectionScopes, cfg.agentToolBlocks?.[a.id])
+  }));
+});
 ipcMain.handle('mcp:list', () => ({ mine: mcpServers.listCustom(), found: mcpServers.scanForUi() }));
 ipcMain.handle('mcp:import', (_evt, source: unknown, name: unknown, secretNames: unknown) => {
   if (typeof source !== 'string' || typeof name !== 'string') return mcpErr('bad request');
@@ -3965,6 +4143,43 @@ ipcMain.handle('config:saveRoleBundles', (_evt, bundles: unknown) => {
 });
 ipcMain.handle('connections:setSecret', (_evt, id: unknown, env: unknown, value: unknown) => setConnectionSecret(id, env, value));
 ipcMain.handle('connections:setEnabled', (_evt, id: unknown, on: unknown) => setConnectionEnabled(id, on));
+// Who has a connection, with what access, and if not, why — and what they did with it.
+ipcMain.handle('connections:agents', (_evt, id: unknown) => {
+  if (typeof id !== 'string' || !hive.enabled()) return [];
+  const conn = listConnections().find((c) => c.id === id);
+  if (!conn) return [];
+  const cfg = readConfig();
+  return Object.values(hive.registry().agents).filter((a) => a.status !== 'gone' && !a.isAssistant).map((a) => {
+    const provider = a.provider ?? 'claude';
+    const r = explainConnection(a.id, {
+      service: conn.service, enabled: conn.enabled, ready: conn.ready, scope: conn.scope,
+      grant: cfg.agentMcpGrants?.[a.id], webBlocked: blockedMcpServers(cfg.agentToolBlocks?.[a.id]).has(conn.service),
+      ceiling: cfg.connectionPolicy?.[id], record: cfg.agentMcpAccess?.[a.id], mcpCapable: provider === 'claude' || provider === 'opencode'
+    });
+    return { agentId: a.id, name: a.name, ...r };
+  });
+});
+ipcMain.handle('connections:activity', (_evt, id: unknown) => {
+  if (typeof id !== 'string') return [];
+  const names = new Map(hive.enabled() ? Object.values(hive.registry().agents).map((a) => [a.id, a.name] as const) : []);
+  return mcpCalls.filter((c) => c.serverId === id).slice(-50).reverse().map((c) => ({ ...c, agentName: names.get(c.agentId) ?? c.agentId }));
+});
+// REST APIs: the most any agent may do with one, and which agents get it.
+ipcMain.handle('integrations:setAccess', (_evt, id: unknown, level: unknown) => {
+  if (typeof id !== 'string' || !integrations.getRecord(id) || !isAccess(level)) return { ok: false, error: 'bad request' };
+  writeConfig({ integrationPolicy: { ...(readConfig().integrationPolicy ?? {}), [id]: level } });
+  return { ok: true };
+});
+ipcMain.handle('integrations:setScope', (_evt, id: unknown, agentIds: unknown) => {
+  if (typeof id !== 'string' || !integrations.getRecord(id)) return { ok: false, error: 'bad request' };
+  const scopes = { ...(readConfig().integrationScopes ?? {}) };
+  if (agentIds === null) delete scopes[id];
+  else if (Array.isArray(agentIds) && agentIds.every((a) => typeof a === 'string')) scopes[id] = [...new Set(agentIds as string[])];
+  else return { ok: false, error: 'bad request' };
+  writeConfig({ integrationScopes: scopes });
+  return { ok: true };
+});
+ipcMain.handle('connections:setAccess', (_evt, id: unknown, access: unknown) => setConnectionAccess(id, access));
 ipcMain.handle('connections:setScope', (_evt, id: unknown, agentIds: unknown) => setConnectionScope(id, agentIds));
 ipcMain.handle('connections:test', (_evt, id: unknown) => testConnection(id));
 ipcMain.handle('hive:taskKeys', () => hive.taskKeys());
@@ -4234,6 +4449,117 @@ ipcMain.handle('hive:setAgentHold', (_evt, id: unknown, hold: unknown) => {
 });
 ipcMain.handle('hive:board', () => hive.board());
 ipcMain.handle('hive:tasks', () => hive.tasks());
+/** The REST APIs one agent may use, and how (Connections → REST APIs): enabled,
+ *  its "who" list, and the lower of the API's limit and the agent's role. */
+function apisFor(agentId: string): { ids: string[]; access: Record<string, Access> } {
+  const cfg = readConfig();
+  const ids: string[] = [];
+  const access: Record<string, Access> = {};
+  for (const id of integrations.enabledIds()) {
+    const scope = cfg.integrationScopes?.[id];
+    if (Array.isArray(scope) && !scope.includes(agentId)) continue;
+    const a = effectiveApiAccess(cfg.integrationPolicy?.[id], cfg.agentMcpAccess?.[agentId], id);
+    if (a === 'none') continue;
+    ids.push(id);
+    access[id] = a;
+  }
+  return { ids, access };
+}
+
+/** Why an agent may not use a REST API right now, in the words the agent (and
+ *  the human reading its log) need to fix it. */
+function apiDenyReason(agentId: string, id: string): string | undefined {
+  const rec = integrations.getRecord(id);
+  if (!rec) return `there is no REST API "${id}" in Connections`;
+  if (!rec.enabled) return 'it is switched off in Connections → REST APIs';
+  if (rec.authType !== 'none' && !integrations.hasSecret(rec.secretRef)) return 'its key has not been saved in Connections → REST APIs';
+  const cfg = readConfig();
+  const scope = cfg.integrationScopes?.[id];
+  if (Array.isArray(scope) && !scope.includes(agentId)) return 'it is limited to other agents (Connections → Who may use each REST API)';
+  if (effectiveApiAccess(cfg.integrationPolicy?.[id], cfg.agentMcpAccess?.[agentId], id) === 'none') return 'its limit, or this agent\'s role, gives it no access';
+  return undefined;
+}
+
+// Deliverables ↔ tasks: when an agent writes a file in research/, it is linked
+// to the task the agent has in "doing". Kept in deliverableLinks.json, which only
+// main writes — tasks.json stays the orchestrator's.
+function readDeliverableLinks(): DeliverableLink[] {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root) return [];
+  try {
+    const raw = JSON.parse(readFileSync(join(root, 'deliverableLinks.json'), 'utf8')) as { links?: unknown };
+    return Array.isArray(raw.links) ? raw.links.filter((l): l is DeliverableLink => !!l && typeof l.path === 'string' && typeof l.taskId === 'string') : [];
+  } catch { return []; }
+}
+hookServer.onStep = (agentId, e) => {
+  // Any CLI: the files main worked out for this call (Write, apply_patch, write_to_file…).
+  const written = writtenFiles([e]).map((f) => f.path);
+  if (!written.length) return;
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root) return;
+  const wsl = hive.wslRoot();
+  const research = join(root, DELIVERABLES_DIR);
+  const paths = written.map((p) => (wsl ? fromLinuxPath(p, wsl.distro, () => distroHomeUnc(wsl.distro)) : p)).filter((p) => isInside(p, research));
+  if (!paths.length) return;
+  const taskId = currentTaskOf((hive.tasks() as { tasks?: Array<{ id: string; assignee?: string; status?: string; createdAt?: string }> }).tasks ?? [], agentId);
+  if (!taskId) return;
+  let links = readDeliverableLinks();
+  const before = links;
+  for (const path of paths) if (linkFor(links, path)?.taskId !== taskId) links = addLink(links, { path, taskId, agentId, ts: e.ts ?? Date.now() });
+  if (links === before) return;
+  try { writeFileSync(join(root, 'deliverableLinks.json'), JSON.stringify({ links }, null, 2)); }
+  catch (err) { console.error('[deliverables] could not record a link:', err); }
+};
+
+// Deliverables (shared/deliverables.ts): the office's research/ folder, newest
+// first, and the files each agent wrote this session (from its tool calls).
+// Metadata only; the viewer reads a file through the root-confined fs IPC.
+ipcMain.handle('deliverables:list', async () => {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root) return { root: null, dir: null, distro: null, files: [], written: [], links: [] };
+  // A WSL floor: agents write Linux paths; the app opens them through \\wsl.localhost.
+  const wsl = hive.wslRoot();
+  const toHost = (p: string): string => (wsl ? fromLinuxPath(p, wsl.distro, () => distroHomeUnc(wsl.distro)) : p);
+  const { readdir, stat } = await import('node:fs/promises');
+  const dir = join(root, DELIVERABLES_DIR);
+  const files: Array<{ rel: string; abs: string; size: number; mtime: number }> = [];
+  const walk = async (abs: string, rel: string, depth: number): Promise<void> => {
+    if (depth > 4 || files.length >= 500) return;
+    let entries: import('node:fs').Dirent[] = [];
+    try { entries = await readdir(abs, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.name.startsWith('.') || (depth === 0 && e.name === 'hires')) continue;
+      const a = join(abs, e.name);
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) await walk(a, r, depth + 1);
+      else if (e.isFile()) { try { const s = await stat(a); files.push({ rel: r, abs: a, size: s.size, mtime: s.mtimeMs }); } catch { /* gone */ } }
+    }
+  };
+  await walk(dir, '', 0);
+  files.sort((a, b) => b.mtime - a.mtime);
+  // An agent's own hive folder (memory, inbox) is bookkeeping, not a deliverable.
+  const agentsDir = join(root, 'agents');
+  const norm = (p: string) => p.replace(/\\/g, '/').toLowerCase();
+  const written = Object.values(hive.registry().agents).flatMap((a) =>
+    writtenFiles(hookServer.stepsFor(a.id))
+      .map((f) => ({ ...f, path: toHost(f.path) }))
+      .filter((f) => !norm(f.path).startsWith(norm(agentsDir) + '/'))
+      .map((f) => ({ ...f, agentId: a.id, name: a.name }))
+  ).sort((x, y) => y.ts - x.ts).slice(0, 200);
+  return { root, dir, distro: wsl?.distro ?? null, files, written, links: readDeliverableLinks() };
+});
+// Open a deliverable in its default program. Only document types (see
+// canOpenExternally): the path comes from an agent, and fs:revealPath's rule
+// stands for everything else — reveal, never run.
+ipcMain.handle('deliverables:openExternal', async (_evt, p: unknown) => {
+  if (typeof p !== 'string' || !p.length || p.length > 4096 || p.includes('\0')) return { ok: false, error: 'bad request' };
+  if (!canOpenExternally(p)) return { ok: false, error: 'this kind of file is only shown in its folder' };
+  const st = await statAbs(p);
+  if (!st.exists || !st.isFile) return { ok: false, error: 'not found' };
+  const err = await shell.openPath(st.path);
+  return err ? { ok: false, error: err } : { ok: true };
+});
+ipcMain.handle('hive:steps', (_evt, agentId: unknown) => (typeof agentId === 'string' ? hookServer.stepsFor(agentId) : []));
 ipcMain.handle('hive:log', (_evt, n: unknown) => hive.logTail(typeof n === 'number' ? n : 200));
 ipcMain.handle('hive:memory', (_evt, id: unknown) => (typeof id === 'string' ? hive.memory(id) : ''));
 // The memory graph's source (shared/memoryGraph.ts): every agent's memory.md
@@ -4562,6 +4888,7 @@ ipcMain.handle('kg:addFiles', async (evt) => {
     properties: ['openFile', 'multiSelections'],
     title: 'Add documents to the Knowledge Graph'
   });
+  refocusAfterDialog(win);
   if (res.canceled || res.filePaths.length === 0) return { ok: false as const, error: 'cancelled' };
   const results = res.filePaths.map((srcPath) => {
     try {
@@ -4628,6 +4955,7 @@ ipcMain.handle('tls:pickCaFile', async (evt) => {
     title: 'CA certificate (PEM)',
     filters: [{ name: 'Certificates', extensions: ['pem', 'crt', 'cer'] }, { name: 'All Files', extensions: ['*'] }]
   });
+  refocusAfterDialog(win);
   if (res.canceled || !res.filePaths[0]) return { ok: false as const };
   return { ok: true as const, path: res.filePaths[0] };
 });
@@ -4668,6 +4996,7 @@ ipcMain.handle('dialog:attachFiles', async (evt) => {
       { name: 'All Files', extensions: ['*'] }
     ]
   });
+  refocusAfterDialog(win);
   if (res.canceled || res.filePaths.length === 0) return { ok: false as const, error: 'cancelled' };
   return { ok: true as const, files: res.filePaths.map((p) => ({ path: p, name: basename(p) })) };
 });
@@ -4776,11 +5105,20 @@ function finishTeardown(): void {
   try { ptyManager.killAll(); } catch (e) { console.error('[quit] killAll:', e); }
   app.quit();
 }
+/** Give the page its keyboard back after a native dialog: on Windows the
+ *  webContents can come back unfocused, so text boxes stop taking input. */
+function refocusAfterDialog(win: BrowserWindow | null | undefined): void {
+  if (!win || win.isDestroyed()) return;
+  win.focus();
+  win.webContents.focus();
+}
 // A yes/no question for the renderer, instead of window.confirm(): Chromium's
 // native confirm on Windows leaves the page without keyboard focus afterwards —
 // text boxes look fine but no longer take input until the window is refocused
 // ("the invite box is locked after deleting a team"). This asks through main
 // and hands focus back to the page when the dialog closes.
+// The renderer saw a click on a text box while the page had no keyboard focus.
+ipcMain.handle('app:refocus', (evt) => { refocusAfterDialog(BrowserWindow.fromWebContents(evt.sender)); });
 ipcMain.handle('app:confirm', async (evt, message: unknown, detail: unknown, ok: unknown) => {
   const win = BrowserWindow.fromWebContents(evt.sender);
   const opts = {
@@ -4791,7 +5129,7 @@ ipcMain.handle('app:confirm', async (evt, message: unknown, detail: unknown, ok:
     detail: typeof detail === 'string' ? detail.slice(0, 1000) : undefined
   };
   const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
-  if (win && !win.isDestroyed()) { win.focus(); win.webContents.focus(); }
+  refocusAfterDialog(win);
   return response === 0;
 });
 
@@ -5701,7 +6039,7 @@ async function askToSpawnPending(): Promise<void> {
       detail: `${objective.length > 600 ? objective.slice(0, 600) + '…' : objective}\n\nTo stop being asked, turn on "Orchestrator may start workers" in Settings → Autonomy & Budgets.`
     };
     const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
-    if (win) win.webContents.focus();
+    refocusAfterDialog(win);
     if (!existsSync(filePath)) return;
     if (response === 2) {
       informGod('[worker spawn declined]', `The operator declined to start the worker in ${next}. Do the work another way or ask them.`);
@@ -5885,7 +6223,8 @@ async function processSpawnRequest(filePath: string): Promise<void> {
   // is up; the grant is revoked in teardownPty (and below if the spawn fails).
   const brokerEnv: Record<string, string> = {};
   if (integrationBroker.running()) {
-    const token = integrationBroker.grant(workerId, integrations.enabledIds());
+    const apis = apisFor(workerId);
+    const token = integrationBroker.grant(workerId, apis.ids, apis.access, workerId);
     brokerEnv.MD_BROKER_URL = integrationBroker.url();
     brokerEnv.MD_BROKER_TOKEN = token;
   }
