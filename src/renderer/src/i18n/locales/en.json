@@ -911,7 +911,18 @@
     "runningOpenModels": "Running open models? Step-by-step guides:",
     "runOnOpenModels": "run Scranton Branch on open models",
     "setUpMacMini": "set it up on a Mac Mini",
-    "autoModeCaveat": "⚠ In auto mode these engines run with full filesystem + shell access (no sandbox) — like Claude's bypass mode. Turn auto mode off (General) to make them ask first. Live end-to-end verification with real model calls is pending your keys / a local LLM."
+    "autoModeCaveat": "⚠ In auto mode these engines run with full filesystem + shell access (no sandbox) — like Claude's bypass mode. Turn auto mode off (General) to make them ask first. Live end-to-end verification with real model calls is pending your keys / a local LLM.",
+    "piTitle": "Pi: sign-in",
+    "piHow": "Pi agents can sign in two ways:",
+    "piKeyWay": "An API key in the list above (Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI…): Pi reads it from the environment.",
+    "piLoginWay": "Your subscription (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini): in any terminal run",
+    "piCopy": "Copy",
+    "piCopied": "Copied",
+    "piSignedIn": "Pi is signed in to: {{list}}. The app’s Pi agents use it.",
+    "piNotSignedIn": "Pi is not signed in on this machine yet.",
+    "piSubscription": "subscription",
+    "piCheck": "Check again",
+    "piRestart": "Restart a running Pi agent after signing in. On a WSL office, run pi inside the distribution."
   },
   "mcpDefaults": {
     "title": "Default MCP servers",

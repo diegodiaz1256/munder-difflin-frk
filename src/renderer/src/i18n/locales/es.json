@@ -911,7 +911,18 @@
     "runningOpenModels": "¿Usas modelos abiertos? Guías paso a paso:",
     "runOnOpenModels": "usar Scranton Branch con modelos abiertos",
     "setUpMacMini": "montarlo en un Mac Mini",
-    "autoModeCaveat": "⚠ En modo auto estos motores se ejecutan con acceso completo al sistema de archivos y a la shell (sin sandbox), como el modo bypass de Claude. Desactiva el modo auto (General) para que pregunten antes. La verificación completa con llamadas reales al modelo está pendiente de tus claves o de un LLM local."
+    "autoModeCaveat": "⚠ En modo auto estos motores se ejecutan con acceso completo al sistema de archivos y a la shell (sin sandbox), como el modo bypass de Claude. Desactiva el modo auto (General) para que pregunten antes. La verificación completa con llamadas reales al modelo está pendiente de tus claves o de un LLM local.",
+    "piTitle": "Pi: inicio de sesión",
+    "piHow": "Los agentes Pi pueden autenticarse de dos formas:",
+    "piKeyWay": "Una clave de API en la lista de arriba (Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI…): Pi la lee del entorno.",
+    "piLoginWay": "Tu suscripción (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini): en cualquier terminal ejecuta",
+    "piCopy": "Copiar",
+    "piCopied": "Copiado",
+    "piSignedIn": "Pi tiene sesión iniciada en: {{list}}. Los agentes Pi de la app la usan.",
+    "piNotSignedIn": "Pi aún no tiene sesión iniciada en esta máquina.",
+    "piSubscription": "suscripción",
+    "piCheck": "Comprobar otra vez",
+    "piRestart": "Reinicia un agente Pi en marcha tras iniciar sesión. En una oficina WSL, ejecuta pi dentro de la distribución."
   },
   "mcpDefaults": {
     "title": "Servidores MCP predeterminados",

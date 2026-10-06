@@ -1523,6 +1523,8 @@ const api = {
   integrationsTest: (req: { id: string; path?: string }): Promise<{ ok: boolean; status?: number; error?: string }> =>
     ipcRenderer.invoke('integrations:test', req),
   // Per-CLI-provider BYOK keys — WRITE-ONLY. `providerKeySet` stores a backend key one
+  /** Which providers Pi is signed in to (names and kind only, never a token). */
+  piAuthStatus: (): Promise<{ file: string; providers: Array<{ id: string; kind: string }> }> => ipcRenderer.invoke('providers:piStatus'),
   // way (never echoed); `providerKeyHas` returns only a boolean; no method ever returns
   // the plaintext. Keys are materialized MAIN-ONLY at spawn.
   providerKeySet: (req: { backend: string; key: string }): Promise<{ ok: boolean; error?: string }> =>

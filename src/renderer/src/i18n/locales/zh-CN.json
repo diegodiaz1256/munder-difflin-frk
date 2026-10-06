@@ -911,7 +911,18 @@
     "runningOpenModels": "要跑开源模型？分步指南：",
     "runOnOpenModels": "在开源模型上运行 Scranton Branch",
     "setUpMacMini": "在 Mac Mini 上配置",
-    "autoModeCaveat": "⚠ 在自动模式下，这些引擎以完整的文件系统 + shell 访问权限运行（无沙箱）——就像 Claude 的绕过模式。把自动模式关掉（通用页）即可让它们先询问。与真实模型调用的端到端实测仍在等待你的密钥 / 本地 LLM。"
+    "autoModeCaveat": "⚠ 在自动模式下，这些引擎以完整的文件系统 + shell 访问权限运行（无沙箱）——就像 Claude 的绕过模式。把自动模式关掉（通用页）即可让它们先询问。与真实模型调用的端到端实测仍在等待你的密钥 / 本地 LLM。",
+    "piTitle": "Pi：登录",
+    "piHow": "Pi 智能体有两种登录方式：",
+    "piKeyWay": "在上方列表中填入 API 密钥（Anthropic、OpenAI、Google、OpenRouter、Groq、Mistral、xAI…）：Pi 从环境变量读取。",
+    "piLoginWay": "你的订阅（Claude Pro/Max、ChatGPT、GitHub Copilot、Gemini）：在任意终端运行",
+    "piCopy": "复制",
+    "piCopied": "已复制",
+    "piSignedIn": "Pi 已登录：{{list}}。应用中的 Pi 智能体会使用它。",
+    "piNotSignedIn": "此机器上的 Pi 尚未登录。",
+    "piSubscription": "订阅",
+    "piCheck": "再次检查",
+    "piRestart": "登录后请重启正在运行的 Pi 智能体。在 WSL 办公室中，请在发行版内运行 pi。"
   },
   "mcpDefaults": {
     "title": "默认 MCP 服务器",

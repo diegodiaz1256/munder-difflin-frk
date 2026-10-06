@@ -3763,6 +3763,8 @@ ipcMain.handle('providerKey:set', (_evt, payload: unknown) => {
   if (typeof p.key !== 'string' || !p.key) return { ok: false, error: 'key required' };
   return integrations.setSecret(providerKeyRef(p.backend), p.key);
 });
+// Pi's own sign-in (`pi` → /login), as provider names only.
+ipcMain.handle('providers:piStatus', () => hive.piAuthStatus());
 ipcMain.handle('providerKey:has', (_evt, backend: unknown) =>
   typeof backend === 'string' ? integrations.hasSecret(providerKeyRef(backend)) : false);
 ipcMain.handle('providerKey:clear', (_evt, backend: unknown) => {
