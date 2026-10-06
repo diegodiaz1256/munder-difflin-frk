@@ -141,3 +141,20 @@ test('agents get the browser in their tools and prompt, unless Web is off', asyn
   assert.match(cp, /BROWSER: .*md-browse\.cjs/);
   assert.doesNotMatch(cp, /munder-browser tools/, 'no MCP promised to a CLI that does not get it');
 });
+
+test('web search leaves out sponsored results', () => {
+  // Live from WSL: the first "result" for a Warhammer query was an Amazon ad
+  // (DuckDuckGo's /y.js ad redirect).
+  const result = (href, { ad = false, adClass = false } = {}) => ({
+    matches: (sel) => adClass && sel.includes('result--ad'),
+    querySelector: (sel) => sel === 'a.result__a' ? { href, innerText: 'T ' + href } : sel === '.result__snippet' ? { innerText: 'S' } : sel === '.badge--ad' ? (ad ? {} : null) : null
+  });
+  const document = { querySelectorAll: () => [
+    result('https://duckduckgo.com/y.js?ad_domain=amazon.es'),
+    result('https://ads.example/', { adClass: true }),
+    result('https://shop.example/', { ad: true }),
+    result('https://duckduckgo.com/l/?uddg=https%3A%2F%2Fwarhammer.com%2F')
+  ], body: { innerText: '' } };
+  const out = new Function('document', 'return ' + B.EXTRACT_SEARCH_SCRIPT)(document);
+  assert.deepEqual(out.results.map((r) => r.href), ['https://duckduckgo.com/l/?uddg=https%3A%2F%2Fwarhammer.com%2F']);
+});

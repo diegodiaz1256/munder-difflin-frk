@@ -62,8 +62,10 @@ export const EXTRACT_PAGE_SCRIPT = `(() => {
 export const EXTRACT_SEARCH_SCRIPT = `(() => {
   const out = [];
   for (const r of document.querySelectorAll('.result')) {
+    // Sponsored results: marked as ads, or sent through DuckDuckGo's ad redirect.
+    if (r.matches('.result--ad, .result--ad--small') || r.querySelector('.badge--ad')) continue;
     const a = r.querySelector('a.result__a');
-    if (!a) continue;
+    if (!a || a.href.includes('/y.js?')) continue;
     const snippet = r.querySelector('.result__snippet');
     out.push({ title: (a.innerText || '').trim(), href: a.href, snippet: snippet ? snippet.innerText.trim() : '' });
     if (out.length >= 15) break;
