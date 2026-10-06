@@ -7,7 +7,6 @@
  * clear message. Only downloadWhisper() — the Settings → Voice button — may
  * fetch the files from Hugging Face.
  */
-import WhisperWorker from './whisper.worker?worker';
 
 export type WhisperModel = 'small';
 type Reply = { type: 'loaded' | 'text' | 'error' | 'progress' | 'cache-match' | 'cache-put'; ref?: number; text?: string; error?: string; file?: string; loaded?: number; total?: number };
@@ -17,7 +16,12 @@ let seq = 0;
 const pending = new Map<number, { resolve: (r: Reply) => void }>();
 let onProgress: ((p: { file?: string; loaded: number; total: number }) => void) | null = null;
 
-function get(): Worker {
+// Loaded when dictation first needs it, not with the module: the store pulls
+// this file in everywhere, and Vite's `?worker` import is something only Vite
+// understands (the renderer test harness could not load the store at all).
+async function get(): Promise<Worker> {
+  if (worker) return worker;
+  const { default: WhisperWorker } = await import('./whisper.worker?worker');
   if (worker) return worker;
   worker = new WhisperWorker();
   worker.onmessage = async (ev: MessageEvent) => {
@@ -40,7 +44,7 @@ function get(): Worker {
 
 function call(msg: Record<string, unknown>, transfer: Transferable[] = []): Promise<Reply> {
   const id = ++seq;
-  return new Promise((resolve) => { pending.set(id, { resolve }); get().postMessage({ ...msg, id }, transfer); });
+  return new Promise((resolve) => { pending.set(id, { resolve }); void get().then((w) => w.postMessage({ ...msg, id }, transfer)); });
 }
 
 /** Fetch a model from Hugging Face into the local store. The one online step. */
