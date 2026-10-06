@@ -2325,6 +2325,10 @@
       "customModelPh": "add a model id",
       "customFetch": "Fetch from server",
       "emptyAuth": "\"{{id}}\" has an empty sign-in entry, which hides the key in models.json. Run /logout in the engine and pick {{id}}, then sign in again if you need it."
+    },
+    "boot": {
+      "title": "The office is starting.",
+      "body": "{{name}} is clocking in; this can take a little while on the first start."
     }
   },
   "hivePicker": {

@@ -2325,6 +2325,10 @@
       "customModelPh": "añadir un id de modelo",
       "customFetch": "Pedir al servidor",
       "emptyAuth": "\"{{id}}\" tiene una entrada de acceso vacía, que oculta la clave de models.json. Ejecuta /logout en el motor y elige {{id}}; vuelve a iniciar sesión si la necesitas."
+    },
+    "boot": {
+      "title": "La oficina se está iniciando.",
+      "body": "{{name}} está llegando; la primera vez puede tardar un poco."
     }
   },
   "hivePicker": {

@@ -2325,6 +2325,10 @@
       "customModelPh": "添加模型 ID",
       "customFetch": "从服务器获取",
       "emptyAuth": "\"{{id}}\" 的登录条目为空，会覆盖 models.json 中的密钥。在引擎中运行 /logout 并选择 {{id}}，如需要再重新登录。"
+    },
+    "boot": {
+      "title": "办公室正在启动。",
+      "body": "{{name}} 正在就位；首次启动可能需要一点时间。"
     }
   },
   "hivePicker": {
