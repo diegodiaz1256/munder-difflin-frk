@@ -1,23 +1,26 @@
-# Scranton Branch 0.4.6-fork.27
+# Scranton Branch 0.4.6-fork.28
 
-Pi and OpenCode managed from the app — sign-in, models and your local models — and who may use each REST API, per role.
+Connections and APIs that apply at once, Pi agents that keep their model after a restart, and your own models in New agent.
 
 ## What's new
 
-### Pi and OpenCode
-- **Sign in from the app.** AI providers → Engines shows who Pi and OpenCode are signed in to and opens their own sign-in (Pi `/login`, `opencode auth login`) in a terminal inside the app — your Claude, ChatGPT, Copilot or Gemini subscription, or an API key.
-- **Pi agents sign in as you.** They now use your Pi login (`~/.pi/agent/auth.json`, linked so a refreshed token stays fresh) and your Pi settings; before, a Pi agent started by the app was never signed in.
-- **Pick the default model from a list.** *Load models* asks the engine itself which models it has.
-- **Local and OpenAI-compatible providers.** Add Ollama, LM Studio, vLLM, llama.cpp or any OpenAI-compatible server once (models fetched from the server, optional key stored encrypted); every OpenCode and Pi agent gets them, as `provider/model`.
-
 ### REST APIs (Jira, Linear, Notion…)
-- **Who may use each API, and how.** Connections → *Who may use each REST API*: a limit per API (*Nothing / Read only / Read & write*, read only by default), every agent or chosen ones, and a level per role in Capabilities. The key broker enforces it on every request: read only lets GET and searches through (Jira JQL, Notion queries, GraphQL queries) and refuses anything that would change data.
-- Ephemeral workers no longer get every API: they follow the same rule.
+- **Changes apply at once.** An API you enable, or a role you change, reaches agents that are already running; no restart. Every agent gets the key broker, even when no API was enabled yet.
+- **Refusals say why**: API switched off, key not saved, limited to other agents, or the role gives no access. `md-api` with no arguments lists what the agent may call.
+- Each grant is written to the hive log.
+
+### Pi and OpenCode
+- **The model sticks.** The model an agent was hired with comes back after a restart (Pi also gets it as its default), instead of falling back to openai/gpt-5.5.
+- **Your keys stay home.** Built-in provider keys only go to the provider the agent uses; a custom provider gets none.
+- **Empty sign-in entries** in Pi's `auth.json`, which hide the key in `models.json`, are flagged in AI providers.
+- **New agent offers your models**: custom providers, the list from *Load models* and Pi's own `models.json`.
+- Agents' instructions now cover Connections, `md-api`, `md-run` and deliverables.
 
 ## Earlier releases
 
 | Version | Highlights |
 |---|---|
+| fork.27 | Pi and OpenCode sign-in and models in the app, local models, REST API access per role. |
 | fork.26 | Connections with per-role permissions, Deliverables linked to tasks, readable agent steps, MCP managed in the app. |
 | fork.25 | Memory by project and lists, model and effort per role, Spanish everywhere, 5h/weekly usage in the title bar. |
 | fork.24 | Memory offline with a concept graph, hires as a CV, Remote Control button, WSL orchestrator always starts. |
@@ -37,26 +40,26 @@ Pi and OpenCode managed from the app — sign-in, models and your local models �
 ### macOS
 | | |
 |---|---|
-| Universal (Apple Silicon + Intel) | [`Scranton-Branch-0.4.6-fork.27-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.27-mac-universal.dmg) |
+| Universal (Apple Silicon + Intel) | [`Scranton-Branch-0.4.6-fork.28-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.28-mac-universal.dmg) |
 
 ### Windows
 | | |
 |---|---|
-| Installer (x64), *recommended* | [`Scranton-Branch-0.4.6-fork.27-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.27-win-x64-setup.exe) |
-| Portable (x64, no install) | [`Scranton-Branch-0.4.6-fork.27-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.27-win-x64-portable.exe) |
+| Installer (x64), *recommended* | [`Scranton-Branch-0.4.6-fork.28-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.28-win-x64-setup.exe) |
+| Portable (x64, no install) | [`Scranton-Branch-0.4.6-fork.28-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.28-win-x64-portable.exe) |
 
 ### Linux
 | | |
 |---|---|
-| AppImage (x86_64) | [`Scranton-Branch-0.4.6-fork.27-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.27-linux-x86_64.AppImage) |
-| Server, no GUI (x64) | [`scranton-branch-server-0.4.6-fork.27-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.27-linux-x64.tar.gz) |
-| Server, no GUI (arm64) | [`scranton-branch-server-0.4.6-fork.27-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.27-linux-arm64.tar.gz) |
+| AppImage (x86_64) | [`Scranton-Branch-0.4.6-fork.28-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.28-linux-x86_64.AppImage) |
+| Server, no GUI (x64) | [`scranton-branch-server-0.4.6-fork.28-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.28-linux-x64.tar.gz) |
+| Server, no GUI (arm64) | [`scranton-branch-server-0.4.6-fork.28-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.28-linux-arm64.tar.gz) |
 
 Server: unpack, then run `sudo ./install.sh`. Setup, Docker and secrets are in [SERVER.md](https://github.com/diegodiaz1256/scranton-branch/blob/main/SERVER.md).
 
 Builds are not code-signed yet: macOS asks you to allow the app in System Settings → Privacy & Security, and Windows SmartScreen asks you to confirm ("More info" → "Run anyway").
 
-Source: [`v0.4.6-fork.27`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v0.4.6-fork.27.tar.gz)
+Source: [`v0.4.6-fork.28`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v0.4.6-fork.28.tar.gz)
 
 ## About this fork
 
