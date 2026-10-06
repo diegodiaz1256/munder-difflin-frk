@@ -12,10 +12,13 @@ let items: ActivityItem[] = [];
 const listeners = new Set<() => void>();
 let started = false;
 
+/** Names from the log's spawn entries: an agent archived (and gone from the
+ *  roster) still reads by its name, not its id. */
+const logNames = new Map<string, string>();
 const nameOf = (id: string): string => {
   if (id === 'human') return 'you';
   const st = useStore.getState();
-  return [...st.agents, ...st.archivedAgents].find((a) => a.id === id)?.name ?? id;
+  return [...st.agents, ...st.archivedAgents].find((a) => a.id === id)?.name ?? logNames.get(id) ?? id;
 };
 
 function set(next: ActivityItem[]): void {
@@ -26,6 +29,9 @@ function set(next: ActivityItem[]): void {
 
 async function pollLog(): Promise<void> {
   const log = await window.cth.hiveLog(400).catch(() => []);
+  for (const e of log as Array<Record<string, unknown>>) {
+    if (e.kind === 'spawn' && typeof e.agentId === 'string' && typeof e.name === 'string') logNames.set(e.agentId, e.name);
+  }
   const add = (log as Array<Record<string, unknown>>).map((e) => activityFromLog(e, nameOf)).filter((x): x is ActivityItem => !!x);
   set(mergeActivity(items, add));
 }
