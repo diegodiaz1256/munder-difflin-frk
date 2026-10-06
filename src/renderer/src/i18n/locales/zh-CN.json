@@ -2335,5 +2335,64 @@
     "pickFolder": "选择文件夹…",
     "creating": "创建中…",
     "createInWsl": "在 WSL 中创建"
+  },
+  "mcpCatalog": {
+    "sequential-thinking": {
+      "desc": "结构化的逐步推理草稿。无 I/O，无密钥。"
+    },
+    "time": {
+      "desc": "当前时间与时区换算。"
+    },
+    "fetch": {
+      "desc": "获取 URL 并以 markdown 返回内容（只读 HTTP GET）。"
+    },
+    "context7": {
+      "desc": "查询最新的库/框架文档。"
+    },
+    "filesystem": {
+      "desc": "仅在智能体工作区内读取/编辑文件（限定为启动时的目录）。"
+    },
+    "git": {
+      "desc": "查看工作区仓库的 git status/log/diff（限定为启动时的目录）。"
+    },
+    "github-token": {
+      "desc": "读写 GitHub 的 issue、PR 和仓库。需要个人访问令牌。",
+      "GITHUB_PERSONAL_ACCESS_TOKEN": {
+        "label": "个人访问令牌",
+        "help": "细粒度令牌，可访问智能体工作的仓库（Contents、Issues、Pull requests）。"
+      }
+    },
+    "db": {
+      "desc": "只读查询 Postgres 数据库。需要连接字符串。",
+      "DATABASE_URI": {
+        "label": "连接字符串",
+        "help": "请使用只读数据库用户。需要安装 uv (uvx)。"
+      }
+    },
+    "search-with-key": {
+      "desc": "使用密钥的网页搜索。需要搜索服务商的 API 密钥。",
+      "BRAVE_API_KEY": {
+        "label": "API 密钥",
+        "help": "在 Brave Search API 控制台获取（免费套餐即可）。"
+      }
+    },
+    "notion": {
+      "desc": "搜索、读取和编辑与该集成共享的 Notion 页面。",
+      "NOTION_TOKEN": {
+        "label": "集成密钥",
+        "help": "创建一个内部集成，然后把允许使用的页面共享给它（••• → Connections）。"
+      }
+    },
+    "sentry": {
+      "desc": "在 Sentry 中查询 issue、事件和发布。",
+      "SENTRY_ACCESS_TOKEN": {
+        "label": "用户认证令牌",
+        "help": "权限范围：org:read, project:read, project:write, team:read, team:write, event:write。"
+      },
+      "SENTRY_HOST": {
+        "label": "主机（仅自托管）",
+        "help": "使用 sentry.io 时留空。"
+      }
+    }
   }
 }

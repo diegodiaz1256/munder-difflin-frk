@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HarnessConfig } from '@/store/config';
 import { MCP_CATALOG, type McpTier } from '@shared/mcpCatalog';
+import { mcpDescription } from '@/i18n/catalogText';
 
 export interface McpDefaultsSettingsProps {
   config: HarnessConfig;
@@ -103,7 +104,7 @@ export function McpDefaultsSettings({ config }: McpDefaultsSettingsProps) {
                         }}>{entry.id}</code>
                       </span>
                       <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--cth-ink-500)', wordBreak: 'break-word' }}>
-                        {entry.description}
+                        {mcpDescription(t, entry.id, entry.description)}
                       </span>
                     </div>
                     <button

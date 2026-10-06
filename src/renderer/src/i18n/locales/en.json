@@ -2335,5 +2335,64 @@
     "pickFolder": "pick a folder…",
     "creating": "creating…",
     "createInWsl": "create in WSL"
+  },
+  "mcpCatalog": {
+    "sequential-thinking": {
+      "desc": "Structured step-by-step reasoning scratchpad. No I/O, no secrets."
+    },
+    "time": {
+      "desc": "Current time and timezone conversions."
+    },
+    "fetch": {
+      "desc": "Fetch a URL and return its content as markdown (read-only HTTP GET)."
+    },
+    "context7": {
+      "desc": "Up-to-date library/framework documentation lookups."
+    },
+    "filesystem": {
+      "desc": "Read/edit files within the agent workspace only (scoped to cwd at spawn)."
+    },
+    "git": {
+      "desc": "Inspect git status/log/diff for the workspace repo (scoped to cwd at spawn)."
+    },
+    "github-token": {
+      "desc": "Read/write GitHub issues, PRs, and repos. Requires a personal access token.",
+      "GITHUB_PERSONAL_ACCESS_TOKEN": {
+        "label": "Personal access token",
+        "help": "A fine-grained token with access to the repos the agents work on (Contents, Issues, Pull requests)."
+      }
+    },
+    "db": {
+      "desc": "Query a Postgres database, read-only. Requires a connection string.",
+      "DATABASE_URI": {
+        "label": "Connection string",
+        "help": "Use a read-only database user. Needs uv (uvx) installed."
+      }
+    },
+    "search-with-key": {
+      "desc": "Keyed web search. Requires a search-provider API key.",
+      "BRAVE_API_KEY": {
+        "label": "API key",
+        "help": "From the Brave Search API dashboard (the free plan works)."
+      }
+    },
+    "notion": {
+      "desc": "Search, read and edit the Notion pages shared with the integration.",
+      "NOTION_TOKEN": {
+        "label": "Integration secret",
+        "help": "Create an internal integration, then share the pages it may use with it (••• → Connections)."
+      }
+    },
+    "sentry": {
+      "desc": "Look up issues, events and releases in Sentry.",
+      "SENTRY_ACCESS_TOKEN": {
+        "label": "User auth token",
+        "help": "Scopes: org:read, project:read, project:write, team:read, team:write, event:write."
+      },
+      "SENTRY_HOST": {
+        "label": "Host (self-hosted only)",
+        "help": "Leave empty for sentry.io."
+      }
+    }
   }
 }

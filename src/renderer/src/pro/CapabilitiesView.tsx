@@ -8,6 +8,7 @@ import { MCP_CATALOG, mcpCatalogEntry } from '@shared/mcpCatalog';
 import type { Access } from '@shared/connectionAccess';
 import { BUNDLE_ICONS, allRoleBundles, mcpLabel, type BundleIcon, type RoleBundle } from '@shared/roleBundles';
 import { NATIVE_TOOL_GROUPS } from '@shared/nativeTools';
+import { mcpDescription } from '@/i18n/catalogText';
 import { useProStore } from './proStore';
 import { Avatar } from './data';
 import { effectiveServers } from './AgentView';
@@ -221,7 +222,7 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
                       <button key={e.id}
                         className={`pro-chip${on && usable ? ' pro-chip-on' : ''}${!on ? ' pro-chip-off' : ''}`}
                         style={{ cursor: 'pointer', borderStyle: on && !usable ? 'dashed' : undefined }}
-                        title={on && !usable ? t('pro.caps.notSwitchedOn', { name: e.label }) : e.description}
+                        title={on && !usable ? t('pro.caps.notSwitchedOn', { name: e.label }) : mcpDescription(t, e.id, e.description)}
                         disabled={saving}
                         onClick={() => toggle(a.id, e.id)}>
                         {e.label}{on && isKeyed(e.id) ? ` · ${levelOf(config.agentMcpAccess?.[a.id] as Record<string, Level> | undefined, e.id) === 'readwrite' ? t('pro.caps.accessWriteShort') : t('pro.caps.accessReadShort')}` : ''}
@@ -278,7 +279,7 @@ function BundleEditor({ draft, config, saving, onChange, onCancel, onSave, onCon
         {MCP_CATALOG.map((e) => {
           const on = draft.servers.includes(e.id);
           return (
-            <button key={e.id} aria-pressed={on} title={e.description}
+            <button key={e.id} aria-pressed={on} title={mcpDescription(t, e.id, e.description)}
               className={`pro-chip${on ? ' pro-chip-on' : ' pro-chip-off'}`} style={{ cursor: 'pointer' }}
               onClick={() => flip(e.id)}>{on ? '✓ ' : ''}{e.label}</button>
           );

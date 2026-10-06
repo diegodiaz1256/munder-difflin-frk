@@ -6,6 +6,7 @@ import { IntegrationsRegistry } from '@/components/IntegrationsRegistry';
 import { Avatar, StateBadge } from './data';
 import { Guide, useGuide } from './Guide';
 import type { HarnessConfig } from '@/store/config';
+import { mcpDescription, mcpField } from '@/i18n/catalogText';
 
 type Connection = Awaited<ReturnType<typeof window.cth.connectionsList>>[number];
 type TestResult = { ok: boolean; message: string };
@@ -180,7 +181,7 @@ function ConnectionCard({ c, roster, onChange }: { c: Connection; roster: Agent[
           </button>
         </span>
       </div>
-      {c.primary ? <p className="pro-text">{c.description}</p> : (
+      {c.primary ? <p className="pro-text">{mcpDescription(t, c.service, c.description)}</p> : (
         <div className="pro-row" style={{ gap: 6 }}>
           <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.conn.separate', { label: c.serviceLabel })}</span>
           {!renaming && <button className="pro-btn" style={{ padding: '2px 8px' }} onClick={() => setRenaming(true)}>{t('pro.conn.rename')}</button>}
@@ -191,7 +192,7 @@ function ConnectionCard({ c, roster, onChange }: { c: Connection; roster: Agent[
       {c.fields.map((f) => (
         <div key={f.env} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label className="pro-sub" style={{ fontSize: 12 }} htmlFor={`${c.id}-${f.env}`}>
-            {f.label}{f.optional ? ` (${t('pro.conn.optional')})` : ''}
+            {mcpField(t, c.service, f.env, 'label', f.label)}{f.optional ? ` (${t('pro.conn.optional')})` : ''}
             {f.stored && <span className="pro-chip pro-chip-on" style={{ marginInlineStart: 6 }}>{t('pro.conn.saved')}</span>}
           </label>
           <div className="pro-row">
@@ -203,7 +204,7 @@ function ConnectionCard({ c, roster, onChange }: { c: Connection; roster: Agent[
             <button className="pro-btn" disabled={busy || !(drafts[f.env] ?? '').trim()} onClick={() => void save(f.env)}>{t('common.save')}</button>
             {f.stored && <button className="pro-btn" disabled={busy} onClick={() => void run(() => window.cth.connectionsSetSecret(c.id, f.env, ''))}>{t('pro.conn.remove')}</button>}
           </div>
-          <span className="pro-sub" style={{ fontSize: 11.5 }}>{f.help}</span>
+          <span className="pro-sub" style={{ fontSize: 11.5 }}>{mcpField(t, c.service, f.env, 'help', f.help)}</span>
         </div>
       ))}
 
