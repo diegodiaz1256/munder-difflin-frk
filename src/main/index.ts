@@ -91,8 +91,8 @@ import { TeamNode, type TeamInbound } from './teamNode';
 import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, relayToken, saveTeamState, setRelayToken, teamEnabled, teamPublicStatus } from './team';
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
 import type { PromptConnection } from '../shared/agentConnections';
-import { PROVIDER_BACKENDS, providerKeyEnv } from '../shared/providerBackends';
-import { LIST_MODELS, SIGN_IN, authProviders, cleanCustomProviders, customKeyEnv, modelsFromListing, opencodeProviders, parseModelList, piModelsJson, type ManagedEngine } from '../shared/engineModels';
+import { PROVIDER_BACKENDS, backendForModel, providerKeyEnv } from '../shared/providerBackends';
+import { LIST_MODELS, SIGN_IN, authProviders, piOwnModels, cleanCustomProviders, effectiveModel, keyScope, piSettingsWithModel, customKeyEnv, modelsFromListing, opencodeProviders, parseModelList, piModelsJson, type ManagedEngine } from '../shared/engineModels';
 import { DELIVERABLES_DIR, addLink, canOpenExternally, currentTaskOf, isInside, linkFor, writtenFiles, type DeliverableLink } from '../shared/deliverables';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES, hasPlaceholderHost, probeSpecFor } from '../shared/integrations';
 import { RosterStore } from './roster';
@@ -517,6 +517,11 @@ const envVault = new EnvVault({
 const integrationBroker = new IntegrationBroker({
   getRecord: integrations.getRecord,
   getSecret: integrations.getSecret,
+  // Looked up on every request: an API switched on (or its key saved) after an
+  // agent started is usable at once — capabilities used to be frozen at spawn,
+  // so an agent started a moment too early never got it (issue: Jira 403).
+  live: (agentId) => apisFor(agentId),
+  whyNot: (agentId, id) => apiDenyReason(agentId, id),
   runners: {
     describe: () => envVault.describeRunners(),
     run: async (workerId, runnerId) => {
@@ -3307,18 +3312,19 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           return listConnections().filter((c) => ids.has(c.id)).map((c) => ({ id: c.id, label: c.label, serviceLabel: c.serviceLabel, description: c.description, examples: c.examples, access: connectionAccessFor(opts.hive!.id, c.id) === 'readwrite' ? 'readwrite' as const : 'read' as const }));
         })()
       : [];
-    let brokerIntegrations: Array<{ id: string; label: string }> = [];
+    let brokerIntegrations: Array<{ id: string; label: string }> | undefined;
     const runnersForAgent = envVault.describeRunners();
     if (integrationBroker.running()) {
       const { ids, access } = apisFor(opts.hive.id);
-      if (ids.length || runnersForAgent.length) {
-        // Always this agent's own grant (a worker's early grant included): only the
-        // APIs it may use, each at its level. Re-granting revokes the earlier token.
-        const token = integrationBroker.grant(opts.id, ids, access);
-        opts.env = { ...(opts.env ?? {}), MD_BROKER_URL: integrationBroker.url(), MD_BROKER_TOKEN: token };
-        const labels = new Map(integrations.listRecords().map((r) => [r.id, r.label]));
-        brokerIntegrations = ids.map((id) => ({ id, label: `${labels.get(id) ?? id}${access[id] === 'read' ? ', read-only: GET and searches' : ''}` }));
-      }
+      // Every agent gets the broker, even with no API enabled yet: what it may use
+      // is looked up per request (broker `live`), so an API connected later works
+      // without restarting it. Re-granting revokes a worker's earlier token.
+      const token = integrationBroker.grant(opts.id, ids, access, opts.hive.id);
+      opts.env = { ...(opts.env ?? {}), MD_BROKER_URL: integrationBroker.url(), MD_BROKER_TOKEN: token };
+      const labels = new Map(integrations.listRecords().map((r) => [r.id, r.label]));
+      brokerIntegrations = ids.map((id) => ({ id, label: `${labels.get(id) ?? id}${access[id] === 'read' ? ', read-only: GET and searches' : ''}` }));
+      // For diagnosis: which APIs this agent had when it started (log.jsonl).
+      try { hive.appendLog({ kind: 'broker-grant', agentId: opts.hive.id, apis: ids.map((id) => `${id}:${access[id]}`) }); } catch { /* log is best-effort */ }
     }
     try {
       spawnStep(opts.id, 'preparing the agent in the hive');
@@ -3533,17 +3539,41 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     //    stored keys when the model/prefix is unknown (default model, qwen slugs,
     //    custom). Reduces the blast radius vs handing every CLI all keys.
     const modelIdx = (opts.args ?? []).indexOf('--model');
-    const modelSlug = modelIdx >= 0 ? (opts.args?.[modelIdx + 1] ?? '') : '';
-    const prefix = modelSlug.includes('/') ? modelSlug.split('/')[0].toLowerCase() : '';
-    Object.assign(extra, providerKeyEnv(modelSlug, (backend) => integrations.getSecret(providerKeyRef(backend))));
+    const argModel = modelIdx >= 0 ? (opts.args?.[modelIdx + 1] ?? '') : '';
+    // The model is pinned per agent: a restart without --model (standup
+    // compaction, resume) gets it back instead of the engine's own default.
+    const pinFile = hive.root() ? join(hive.root()!, 'agents', opts.hive.id, 'engine-model.json') : null;
+    let pinned: string | undefined;
+    if (pinFile) {
+      try { const j = JSON.parse(readFileSync(pinFile, 'utf8')) as { model?: unknown }; if (typeof j.model === 'string') pinned = j.model; } catch { /* none yet */ }
+      if (argModel && argModel !== pinned) { try { mkdirSync(dirname(pinFile), { recursive: true }); writeFileSync(pinFile, JSON.stringify({ model: argModel }), 'utf8'); } catch { /* best-effort */ } }
+    }
+    const piDirEarly = provider === 'pi' ? opts.env?.PI_CODING_AGENT_DIR : undefined;
+    let piDefaultProvider: string | undefined;
+    if (piDirEarly) { try { const j = JSON.parse(readFileSync(join(piDirEarly, 'settings.json'), 'utf8')) as { defaultProvider?: unknown }; if (typeof j.defaultProvider === 'string') piDefaultProvider = j.defaultProvider; } catch { /* none */ } }
+    const eff = effectiveModel(argModel, pinned, piDefaultProvider);
+    if (!argModel && eff.model) opts.args = ['--model', eff.model, ...(opts.args ?? [])];
+    const modelSlug = eff.model ?? '';
+    const prefix = eff.provider ?? '';
+    // Keys follow the model: its backend's key only; a provider of your own (or
+    // one the engine defines itself) gets none — it brings its own.
+    const scope = keyScope(eff.provider, (p) => !!backendForModel(`${p}/x`));
+    if (scope !== 'none') Object.assign(extra, providerKeyEnv(scope === 'one' ? `${eff.provider}/x` : '', (backend) => integrations.getSecret(providerKeyRef(backend))));
     // 1b) Keys of your own OpenAI-compatible providers, by env var name (the
     //     configs below point at it; no key is written into a file).
     for (const p of cleanCustomProviders(cfg.customModelProviders)) {
       const key = integrations.getSecret(customKeyRef(p.id));
       if (key) extra[customKeyEnv(p.id)] = key;
     }
-    // Pi: your models.json (already copied into its agent dir) plus those providers.
+    // Pi: your models.json (already copied into its agent dir) plus those providers,
+    // and the agent's model as its default so a resumed session keeps it.
     const piDir = opts.env?.PI_CODING_AGENT_DIR;
+    if (provider === 'pi' && piDir && eff.model) {
+      const file = join(piDir, 'settings.json');
+      let existing: string | null = null;
+      try { existing = readFileSync(file, 'utf8'); } catch { /* none yet */ }
+      try { writeFileSync(file, piSettingsWithModel(existing, eff.model), 'utf8'); } catch (e) { console.error('[pi] could not write settings.json:', e); }
+    }
     if (provider === 'pi' && piDir) {
       const custom = cleanCustomProviders(cfg.customModelProviders);
       if (custom.length) {
@@ -3795,7 +3825,10 @@ ipcMain.handle('engines:status', (_evt, engine: unknown) => {
   const file = engineAuthFile(engine);
   let providers: Array<{ id: string; kind: string }> = [];
   try { providers = authProviders(readFileSync(file, 'utf8')); } catch { /* not signed in */ }
-  return { ok: true, home: agentsHome(), file, providers, signIn: SIGN_IN[engine] };
+  // Pi: the models your own ~/.pi/agent/models.json declares (offered in Add Agent).
+  let ownModels: string[] = [];
+  if (engine === 'pi') { try { ownModels = piOwnModels(readFileSync(join(dirname(file), 'models.json'), 'utf8')); } catch { /* none */ } }
+  return { ok: true, home: agentsHome(), file, providers, signIn: SIGN_IN[engine], ownModels };
 });
 ipcMain.handle('engines:models', async (_evt, engine: unknown) => {
   if (engine !== 'pi' && engine !== 'opencode') return { ok: false, models: [], error: 'unknown engine' };
@@ -4428,6 +4461,20 @@ function apisFor(agentId: string): { ids: string[]; access: Record<string, Acces
     access[id] = a;
   }
   return { ids, access };
+}
+
+/** Why an agent may not use a REST API right now, in the words the agent (and
+ *  the human reading its log) need to fix it. */
+function apiDenyReason(agentId: string, id: string): string | undefined {
+  const rec = integrations.getRecord(id);
+  if (!rec) return `there is no REST API "${id}" in Connections`;
+  if (!rec.enabled) return 'it is switched off in Connections → REST APIs';
+  if (rec.authType !== 'none' && !integrations.hasSecret(rec.secretRef)) return 'its key has not been saved in Connections → REST APIs';
+  const cfg = readConfig();
+  const scope = cfg.integrationScopes?.[id];
+  if (Array.isArray(scope) && !scope.includes(agentId)) return 'it is limited to other agents (Connections → Who may use each REST API)';
+  if (effectiveApiAccess(cfg.integrationPolicy?.[id], cfg.agentMcpAccess?.[agentId], id) === 'none') return 'its limit, or this agent\'s role, gives it no access';
+  return undefined;
 }
 
 // Deliverables ↔ tasks: when an agent writes a file in research/, it is linked
@@ -6151,7 +6198,7 @@ async function processSpawnRequest(filePath: string): Promise<void> {
   const brokerEnv: Record<string, string> = {};
   if (integrationBroker.running()) {
     const apis = apisFor(workerId);
-    const token = integrationBroker.grant(workerId, apis.ids, apis.access);
+    const token = integrationBroker.grant(workerId, apis.ids, apis.access, workerId);
     brokerEnv.MD_BROKER_URL = integrationBroker.url();
     brokerEnv.MD_BROKER_TOKEN = token;
   }

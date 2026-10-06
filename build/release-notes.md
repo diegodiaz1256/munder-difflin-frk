@@ -1,4 +1,4 @@
 - **Pi and OpenCode**: sign in and pick models in the app.
-- **Local models** (Ollama, LM Studio, vLLM…) for both.
+- **Local models** (Ollama, LM Studio, vLLM) for both.
 - Pi agents now **use your Pi login**.
-- **REST APIs** (Jira…): who may use each, read or write, per role.
+- **REST APIs** (Jira): who may use each, read or write, per role.

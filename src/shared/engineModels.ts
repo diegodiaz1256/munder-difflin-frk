@@ -52,12 +52,18 @@ export function parseModelList(output: string): string[] {
 
 /** Providers named in an engine's auth file (Pi ~/.pi/agent/auth.json, OpenCode
  *  ~/.local/share/opencode/auth.json) and how each signed in. Never a secret. */
-export function authProviders(json: string): Array<{ id: string; kind: string }> {
+export function authProviders(json: string): Array<{ id: string; kind: string; empty?: boolean }> {
   try {
     const raw = JSON.parse(json) as Record<string, unknown>;
     return Object.entries(raw)
       .filter(([, v]) => !!v && typeof v === 'object')
-      .map(([id, v]) => ({ id, kind: typeof (v as { type?: unknown }).type === 'string' ? String((v as { type?: unknown }).type) : 'key' }));
+      .map(([id, v]) => {
+        const o = v as Record<string, unknown>;
+        // An entry with no credential in it (an abandoned /login) still wins over
+        // the provider's own key in models.json: worth telling the human.
+        const empty = !Object.entries(o).some(([k, x]) => k !== 'type' && ((typeof x === 'string' && x.trim() !== '') || typeof x === 'number'));
+        return { id, kind: typeof o.type === 'string' ? String(o.type) : 'key', ...(empty ? { empty: true } : {}) };
+      });
   } catch { return []; }
 }
 
@@ -138,4 +144,52 @@ export function modelsFromListing(body: unknown): string[] {
     ...(Array.isArray(b?.models) ? b!.models.map((m) => m?.name ?? m?.model) : [])
   ].filter((x): x is string => typeof x === 'string' && !!x.trim());
   return [...new Set(ids)].slice(0, 500);
+}
+
+// ─── which model a BYOK engine runs, and which keys it may get ──────────────
+// A restart (standup compaction, resume) used to start the engine without its
+// --model, so Pi fell back to its own default (openai/…) and was handed every
+// stored key — the OpenAI one went to api.openai.com for a model that was never
+// OpenAI's. The model is pinned per agent and re-applied; keys follow it.
+
+/** The model this spawn runs: its --model, else the one pinned for the agent,
+ *  else the engine's own default provider (Pi settings.json), else unknown. */
+export function effectiveModel(argsModel: string | undefined, pinned: string | undefined, defaultProvider?: string): { model?: string; provider?: string } {
+  const m = (argsModel || pinned || '').trim();
+  if (m) return { model: m, provider: m.includes('/') ? m.split('/')[0].toLowerCase() : undefined };
+  return defaultProvider ? { provider: defaultProvider.toLowerCase() } : {};
+}
+
+/**
+ * Which stored BYOK keys may go to this engine:
+ *   - a known backend (anthropic, openai…) → that one key;
+ *   - any other provider (yours, local, one defined in the engine's own
+ *     models.json) → none: it brings its own key;
+ *   - nothing known at all → every key (the old behaviour; rare now).
+ */
+export function keyScope(provider: string | undefined, knownBackend: (p: string) => boolean): 'one' | 'none' | 'all' {
+  if (!provider) return 'all';
+  return knownBackend(provider) ? 'one' : 'none';
+}
+
+/** Pi settings.json with this model as its default (so a resumed session keeps it). */
+export function piSettingsWithModel(existing: string | null, model: string): string {
+  let s: Record<string, unknown> = {};
+  if (existing) { try { const j = JSON.parse(existing); if (j && typeof j === 'object') s = j; } catch { /* start clean */ } }
+  const i = model.indexOf('/');
+  if (i > 0) { s.defaultProvider = model.slice(0, i); s.defaultModel = model.slice(i + 1); }
+  else s.defaultModel = model;
+  return JSON.stringify(s, null, 2);
+}
+
+/** Models declared in a Pi models.json (`providers.<name>.models[].id`), as provider/model. */
+export function piOwnModels(json: string): string[] {
+  try {
+    const j = JSON.parse(json) as { providers?: Record<string, { models?: Array<{ id?: unknown }> }> };
+    const out: string[] = [];
+    for (const [prov, p] of Object.entries(j.providers ?? {})) {
+      for (const m of Array.isArray(p?.models) ? p.models : []) if (typeof m?.id === 'string' && m.id.trim()) out.push(`${prov}/${m.id.trim()}`);
+    }
+    return [...new Set(out)].slice(0, 500);
+  } catch { return []; }
 }

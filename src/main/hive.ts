@@ -2008,7 +2008,9 @@ export class HiveManager {
     const listsLine = listsInstruction(inRoot('lists'), existingLists);
     // Deliverables: one place the human can find them (Manager → Deliverables).
     const deliverablesLine = `DELIVERABLES: anything you produce for the human to read or use — a report, analysis, plan, table (CSV), image, export — goes in ${inRoot('research')} (a subfolder per task is fine), with a clear file name; Markdown for documents. Say the path in your reply${meta.isGod ? `, and set the "deliverable" field of its task card in ${inRoot('tasks.json')} to that path (relative to ${root}, e.g. research/<topic>/report.md) — also when an agent reports one to you` : ' and in your done message to god, who records it on the task card'}. Files you write in research/ while your task card is in "doing" are linked to that task by the app, so finish them there. Code changes stay in their repository as usual; do not copy code into research/.`;
-    const integrationsLine = integrations && integrations.length
+    const integrationsLine = integrations && !integrations.length
+      ? `REST APIs (Jira, Linear, Notion… the human connects them in Connections): none are enabled for you right now. One connected later works at once, no restart: run \`"${hiveNode}" "${apiCli}"\` to list the ones you have, then \`"${hiveNode}" "${apiCli}" <api> GET /path\`.`
+      : integrations && integrations.length
       ? `REST APIs you can call (the harness adds the key; you never see it): ${integrations.map((i) => `${i.id} (${i.label})`).join(', ')}. Run \`"${hiveNode}" "${apiCli}" <api> GET /path\`, or \`"${hiveNode}" "${apiCli}" <api> POST /path '<json body>'\` (also PUT, PATCH, DELETE). The path is relative to that API's base URL, e.g. \`"${hiveNode}" "${apiCli}" ${integrations[0].id} GET /\`. It prints the HTTP status and the response body.`
       : '';
     // Automations: the orchestrator changes scheduled missions by request file
@@ -3512,6 +3514,17 @@ There are two shared surfaces, both in the hive root:
 - \`tasks.json\` — the structured task ledger (a kanban: \`todo / doing / blocked / done\`, with title,
   assignee, priority, deps). Keep the task you're working reflected in its status.
 
+## Outside services, secrets and deliverables
+Never ask the human for a key, a token or a password: the app holds them and adds them for you.
+- **Connections** (GitHub, Database, Notion, Sentry…) are MCP tools named \`munder-<id>\`; your
+  system prompt lists the ones you have and whether they are read-only for you.
+- **REST APIs** (Jira, Linear, Stripe, your own…) go through \`md-api\` in \`bin/\`: run it with no
+  arguments to list the ones you may use right now, then \`md-api <api> GET /path\`. An API the
+  human connects later works at once, no restart. A refusal says why (switched off, no key,
+  not for you, read-only).
+- **Secrets** for commands run through **runners** (\`md-run\`): the app runs them and masks the output.
+- **Deliverables** for the human go in \`research/\`; say the path when you report.
+
 ## Asking the human (the ASK ME card)
 When a card can only move with the human — a question to answer, or an action only they can do
 (create an account, approve a spend, hand over credentials, test on their device) — the god sets the
@@ -3614,27 +3627,41 @@ const MD_API_CLI = `#!/usr/bin/env node
 'use strict';
 const [id, methodArg, pathArg, body] = process.argv.slice(2);
 const base = process.env.MD_BROKER_URL, token = process.env.MD_BROKER_TOKEN;
-if (!id || !methodArg) {
-  console.error('usage: md-api <integration> <GET|POST|PUT|PATCH|DELETE> <path> [json-body]');
-  process.exit(2);
-}
 if (!base || !token) {
-  console.error('md-api: no REST integrations are available to this agent (enable one in Connections, then restart the agent).');
+  console.error('md-api: this agent was started without the app key broker (the app was still starting, or it is an old session). Ask the human to restart this agent.');
   process.exit(2);
 }
-const method = methodArg.toUpperCase();
-const path = (pathArg || '/').replace(/^\\/*/, '');
-const url = base.replace(/\\/+$/, '') + '/i/' + encodeURIComponent(id) + '/' + path;
 const headers = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
-if (body !== undefined) headers['Content-Type'] = 'application/json';
-fetch(url, { method, headers, body })
-  .then(async (res) => {
-    console.log('HTTP ' + res.status);
-    const text = await res.text();
-    if (text) console.log(text);
-    process.exit(res.ok ? 0 : 1);
-  })
-  .catch((e) => { console.error('md-api: ' + (e && e.message || e)); process.exit(1); });
+// No arguments: the APIs this agent may use right now, and how.
+if (!id) {
+  fetch(base.replace(/\\/+$/, '') + '/i', { headers })
+    .then(async (res) => {
+      const j = await res.json().catch(() => ({}));
+      const apis = (j && j.apis) || [];
+      if (!apis.length) console.log('No REST APIs are available to you right now (the human connects them in Connections; they work at once).');
+      for (const a of apis) console.log(a.id + '  ' + a.label + (a.access === 'read' ? '  (read-only: GET and searches)' : ''));
+      console.log('usage: md-api <api> <GET|POST|PUT|PATCH|DELETE> <path> [json-body]');
+      process.exit(0);
+    })
+    .catch((e) => { console.error('md-api: ' + (e && e.message || e)); process.exit(1); });
+} else {
+  if (!methodArg) {
+    console.error('usage: md-api <api> <GET|POST|PUT|PATCH|DELETE> <path> [json-body]   (md-api alone lists your APIs)');
+    process.exit(2);
+  }
+  const method = methodArg.toUpperCase();
+  const path = (pathArg || '/').replace(/^\\/*/, '');
+  const url = base.replace(/\\/+$/, '') + '/i/' + encodeURIComponent(id) + '/' + path;
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  fetch(url, { method, headers, body })
+    .then(async (res) => {
+      console.log('HTTP ' + res.status);
+      const text = await res.text();
+      if (text) console.log(text);
+      process.exit(res.ok ? 0 : 1);
+    })
+    .catch((e) => { console.error('md-api: ' + (e && e.message || e)); process.exit(1); });
+}
 `;
 
 const MD_RUN_CLI = `#!/usr/bin/env node

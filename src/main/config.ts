@@ -376,6 +376,8 @@ export interface HarnessConfig {
   /** Your own OpenAI-compatible model providers (Ollama, LM Studio, vLLM…), given
    *  to every OpenCode and Pi agent. Keys are in the encrypted store (apikey:custom:<id>). */
   customModelProviders?: Array<{ id: string; label: string; baseUrl: string; models: string[] }>;
+  /** The model list each engine's CLI last reported (AI providers → Load models), for Add Agent. */
+  engineModels?: Partial<Record<'pi' | 'opencode', string[]>>;
   /** Per-CLI-provider default model slug, used to pre-fill the model picker. */
   providerDefaultModels?: Partial<Record<AgentProvider, string>>;
   /** Certificates for agents' HTTPS (custom endpoints, company gateways):
