@@ -285,3 +285,27 @@ test('generated Pi bridge preserves tool identity and breaker semantics', async 
     assert.match(second.state.reason, /8× identical tool call \(bash\)/);
   });
 });
+
+test('Pi bridge reports its session id and a cost row per response', async (t) => {
+  // Live on a WSL floor (Pi 1.0.4, mock OpenAI-compatible model): the agent ran,
+  // but the registry kept no session (no resume) and no cost was recorded.
+  const { source } = await installedPiBridge(t);
+  const bridge = runBridge(source);
+  bridge.handlers.get('session_start')({ type: 'session_start', reason: 'startup' }, { sessionManager: { getSessionId: () => 'pi-sess-1' } });
+  bridge.handlers.get('tool_call')({ toolName: 'bash', input: { command: 'ls' } });
+  bridge.handlers.get('message_end')({ message: { role: 'user', content: 'hi' } });
+  bridge.handlers.get('message_end')({ message: { role: 'assistant', provider: 'mock', model: 'mock-1', usage: { input: 1000, output: 50, cacheRead: 200, cacheWrite: 10, totalTokens: 1260, cost: { total: 0 } } } });
+  bridge.handlers.get('agent_end')({});
+  await bridge.flush();
+  assert.deepEqual(bridge.frames.map((f) => [f.hook_event_name, f.session_id]), [
+    ['SessionStart', 'pi-sess-1'], ['PreToolUse', 'pi-sess-1'], ['CostSample', 'pi-sess-1'], ['Stop', 'pi-sess-1']
+  ]);
+  const cost = bridge.frames.find((f) => f.hook_event_name === 'CostSample');
+  assert.deepEqual({ model: cost.model, input: cost.input, output: cost.output, cache_read: cost.cache_read, cache_creation: cost.cache_creation, usd: cost.usd },
+    { model: 'mock/mock-1', input: 1000, output: 50, cache_read: 200, cache_creation: 10, usd: 0 }, 'a local model with no price costs 0, not a Sonnet estimate');
+});
+
+test('the hook server records the CLI\'s own cost when a CostSample carries one', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src/main/hooks.ts'), 'utf8');
+  assert.match(src, /usd: typeof p\.usd === 'number' && Number\.isFinite\(p\.usd\) && p\.usd >= 0 \? p\.usd : estimateCostUsd\(/);
+});
