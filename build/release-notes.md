@@ -1,5 +1,5 @@
-- **Spanish** across the app; **memory by project** and lists.
-- **Model and effort per role**; Web off really means no web.
-- Cards say **asks you** when a menu waits.
-- **Windows first run** installs Node and Claude.
-- **5h / weekly usage** in the title bar.
+- **Connections** agents use by default, **read/write per role**.
+- **Deliverables**: read what agents made, linked to its task.
+- **Agent steps**, readable next to the terminal.
+- MCP: agents use **only managed servers**.
+- **AI providers** screen; Jira test fixed.
