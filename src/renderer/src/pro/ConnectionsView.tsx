@@ -212,6 +212,14 @@ function ConnectionCard({ c, roster, onChange }: { c: Connection; roster: Agent[
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--pro-line)', paddingTop: 10 }}>
+        <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.conn.accessTitle')}</span>
+        <div className="pro-tabs" role="radiogroup" aria-label={t('pro.conn.accessTitle')}>
+          {(['none', 'read', 'readwrite'] as const).map((lv) => (
+            <button key={lv} role="radio" aria-selected={c.access === lv} aria-checked={c.access === lv} disabled={busy}
+              onClick={() => { if (c.access !== lv) void run(() => window.cth.connectionsSetAccess(c.id, lv)); }}>{t(`pro.conn.access_${lv}`)}</button>
+          ))}
+        </div>
+        <span className="pro-sub" style={{ fontSize: 11.5 }}>{t('pro.conn.accessHint')}</span>
         <div className="pro-tabs" role="radiogroup" aria-label={t('pro.conn.whoGetsIt')}>
           <button role="radio" aria-selected={!scoped} aria-checked={!scoped} disabled={busy}
             onClick={() => void run(() => window.cth.connectionsSetScope(c.id, null))}>{t('pro.conn.everyAgent')}</button>

@@ -1812,7 +1812,12 @@
         "shellDesc": "Run commands (Bash, PowerShell)",
         "subagents": "Sub-agents",
         "subagentsDesc": "Claude's own helpers inside the session, which the office never sees (Agent, Task)"
-      }
+      },
+      "accessRead": "Read only",
+      "accessWrite": "Read & write",
+      "accessReadShort": "read",
+      "accessWriteShort": "read & write",
+      "accessHelp": "What this role may do with each connection. The connection’s own limit (Connections) still caps it."
     },
     "conn": {
       "step1": "Pick a service and get its key",
@@ -1859,7 +1864,12 @@
       "copy": "Copy",
       "offAssigned": "Off: the agents chosen here will not get it until you turn it on.",
       "turnedOnForAgents": "Turned on for the agents you chose.",
-      "restartNote": "Agents already running pick this up when restarted. Agents are told which connections they have and use them by default."
+      "restartNote": "Agents already running pick this up when restarted. Agents are told which connections they have and use them by default.",
+      "accessTitle": "What agents may do with it",
+      "access_none": "Nothing",
+      "access_read": "Read only",
+      "access_readwrite": "Read & write",
+      "accessHint": "The most any agent can do, whatever its role. A role can lower it, never raise it. New connections are read-only."
     },
     "env": {
       "step1": "Plain variables reach every agent",

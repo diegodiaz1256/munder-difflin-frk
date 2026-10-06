@@ -104,6 +104,8 @@ export interface ConnectionStatusView {
   enabled: boolean;
   ready: boolean;
   scope: string[] | null;
+  /** The most an agent may do with it: none | read | readwrite. */
+  access: 'none' | 'read' | 'readwrite';
   testable: boolean;
 }
 
@@ -755,8 +757,8 @@ const api = {
   /** Set or clear one per-agent token ceiling against main's latest config. */
   /** Grant an agent exactly these MCP catalog servers (undefined clears the
    *  grant). Takes effect on the agent's next restart. */
-  setAgentMcpGrant: (agentId: string, servers?: string[]): Promise<HarnessConfig> =>
-    ipcRenderer.invoke('config:setAgentMcpGrant', agentId, servers),
+  setAgentMcpGrant: (agentId: string, servers?: string[], access?: Record<string, 'none' | 'read' | 'readwrite'>): Promise<HarnessConfig> =>
+    ipcRenderer.invoke('config:setAgentMcpGrant', agentId, servers, access),
   setAgentTokenCap: (agentId: string, tokenCap?: number): Promise<HarnessConfig> =>
     ipcRenderer.invoke('config:setAgentTokenCap', agentId, tokenCap),
   ensureHarnessHome: (path: string): Promise<{ ok: boolean; error?: string }> =>
@@ -1418,7 +1420,7 @@ const api = {
   // Manager → Connections (keyed MCP servers). WRITE-ONLY like the integrations:
   // `connectionsList` reports only whether each field is stored.
   /** Save the user's own role bundles; resolves to what was kept after validation. */
-  saveRoleBundles: (bundles: Array<{ id?: string; label: string; icon: string; servers: string[] }>): Promise<Array<{ id: string; label: string; icon: string; servers: string[]; custom?: boolean }>> =>
+  saveRoleBundles: (bundles: Array<{ id?: string; label: string; icon: string; servers: string[]; access?: Record<string, 'none' | 'read' | 'readwrite'> }>): Promise<Array<{ id: string; label: string; icon: string; servers: string[]; access?: Record<string, 'none' | 'read' | 'readwrite'>; custom?: boolean }>> =>
     ipcRenderer.invoke('config:saveRoleBundles', bundles),
   connectionsList: (): Promise<ConnectionStatusView[]> =>
     ipcRenderer.invoke('connections:list'),
@@ -1464,6 +1466,8 @@ const api = {
     ipcRenderer.invoke('connections:setSecret', id, env, value),
   connectionsSetEnabled: (id: string, on: boolean): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('connections:setEnabled', id, on),
+  connectionsSetAccess: (id: string, access: 'none' | 'read' | 'readwrite'): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('connections:setAccess', id, access),
   connectionsSetScope: (id: string, agentIds: string[] | null): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('connections:setScope', id, agentIds),
   connectionsTest: (id: string): Promise<{ ok: boolean; message: string }> =>

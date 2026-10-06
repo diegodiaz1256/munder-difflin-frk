@@ -83,7 +83,7 @@ import { createWslOffice, describeWslError, distroHomeUnc, fromLinuxPath, listDi
 import { WslBridge } from './wslBridge';
 import { McpServers } from './mcpServers';
 import { EnvVault, fingerprintOf } from './envVault';
-import { addConnection, connectionKeyStored, connectionLaunchEnv, instancesOf, listConnections, removeConnection, renameConnection, serviceOf, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
+import { addConnection, connectionAccessFor, setConnectionAccess, connectionKeyStored, connectionLaunchEnv, instancesOf, listConnections, removeConnection, renameConnection, serviceOf, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
 import { McpGateway } from './mcpGateway';
 import { TeamNode, type TeamInbound } from './teamNode';
 import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, relayToken, saveTeamState, setRelayToken, teamEnabled, teamPublicStatus } from './team';
@@ -437,6 +437,7 @@ const liveWorkers = new Map<string, WorkerRec>();
  *  stays electron-free + unit-testable. Started in bootstrapHiveServices; each worker is
  *  granted a per-worker capability token at spawn (revoked in teardownPty). */
 const mcpGateway = new McpGateway({
+  serviceOf: (id) => serviceOf(id),
   resolveSpec: (serverId) => {
     if (serverId.startsWith('custom--')) {
       const spec = mcpServers.launchSpec(serverId);
@@ -3283,7 +3284,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     const connectionsForAgent: PromptConnection[] = provider === 'claude' || provider === 'opencode'
       ? (() => {
           const ids = new Set(hive.keyedConnectionsFor(connCfg.mcpDefaults, connCfg.agentMcpGrants?.[opts.hive!.id], opts.hive!.id, connCfg.connectionScopes, connCfg.agentToolBlocks?.[opts.hive!.id]));
-          return listConnections().filter((c) => ids.has(c.id)).map((c) => ({ id: c.id, label: c.label, serviceLabel: c.serviceLabel, description: c.description, examples: c.examples }));
+          return listConnections().filter((c) => ids.has(c.id)).map((c) => ({ id: c.id, label: c.label, serviceLabel: c.serviceLabel, description: c.description, examples: c.examples, access: connectionAccessFor(opts.hive!.id, c.id) === 'readwrite' ? 'readwrite' as const : 'read' as const }));
         })()
       : [];
     let brokerIntegrations: Array<{ id: string; label: string }> = [];
@@ -3539,7 +3540,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
       if (mcpGateway.running()) {
         const ids = hive.keyedConnectionsFor(cfg.mcpDefaults, cfg.agentMcpGrants?.[opts.hive.id], opts.hive.id, cfg.connectionScopes, cfg.agentToolBlocks?.[opts.hive.id]);
         if (ids.length) {
-          const token = mcpGateway.grant(opts.hive.id, ids);
+          const token = mcpGateway.grant(opts.hive.id, ids, hive.mcpAccessMap(opts.hive.id, ids));
           oc.mcp = Object.fromEntries(ids.map((id) => [`munder-${id}`, {
             type: 'remote', url: `${mcpGateway.url()}/mcp/${id}`, enabled: true, headers: { Authorization: `Bearer ${token}` }
           }]));
@@ -3819,8 +3820,8 @@ ipcMain.handle('config:update', (_evt, patch: Partial<HarnessConfig>) => {
   }
   return next;
 });
-ipcMain.handle('config:setAgentMcpGrant', (_evt, agentId: unknown, servers: unknown) =>
-  setAgentMcpGrant(agentId, servers)
+ipcMain.handle('config:setAgentMcpGrant', (_evt, agentId: unknown, servers: unknown, access: unknown) =>
+  setAgentMcpGrant(agentId, servers, access)
 );
 // Manager → Connections: keyed MCP servers. Values go one way into the encrypted
 // store; nothing here ever returns one (see connections.ts).
@@ -3830,8 +3831,9 @@ hive.setMcpKeyCheck(connectionKeyStored);
 hive.setMemoryMcp(() => memory.mcpServer());
 hive.setCustomMcp((agentId) => mcpServers.forAgent(agentId));
 hive.setMcpInstances(instancesOf);
-hive.setMcpGateway((agentId, serverIds) =>
-  mcpGateway.running() ? { url: mcpGateway.url(), token: mcpGateway.grant(agentId, serverIds) } : null);
+hive.setMcpAccess(connectionAccessFor);
+hive.setMcpGateway((agentId, serverIds, access) =>
+  mcpGateway.running() ? { url: mcpGateway.url(), token: mcpGateway.grant(agentId, serverIds, access) } : null);
 ipcMain.handle('connections:list', () => listConnections());
 ipcMain.handle('connections:add', (_evt, service: unknown, label: unknown) => addConnection(service, label));
 
@@ -3972,6 +3974,7 @@ ipcMain.handle('config:saveRoleBundles', (_evt, bundles: unknown) => {
 });
 ipcMain.handle('connections:setSecret', (_evt, id: unknown, env: unknown, value: unknown) => setConnectionSecret(id, env, value));
 ipcMain.handle('connections:setEnabled', (_evt, id: unknown, on: unknown) => setConnectionEnabled(id, on));
+ipcMain.handle('connections:setAccess', (_evt, id: unknown, access: unknown) => setConnectionAccess(id, access));
 ipcMain.handle('connections:setScope', (_evt, id: unknown, agentIds: unknown) => setConnectionScope(id, agentIds));
 ipcMain.handle('connections:test', (_evt, id: unknown) => testConnection(id));
 ipcMain.handle('hive:taskKeys', () => hive.taskKeys());

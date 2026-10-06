@@ -40,6 +40,7 @@ import {
 } from '../shared/agentProvider';
 import { MCP_CATALOG } from '../shared/mcpCatalog';
 import { connectionsPromptLine, envPromptLine, type PromptConnection } from '../shared/agentConnections';
+import type { Access } from '../shared/connectionAccess';
 import { selectBroadcastTargets } from '../shared/broadcast';
 import { preferredAgentRole } from '../shared/agentRole';
 import { mergeTaskLedger } from '../shared/taskLedger';
@@ -1215,6 +1216,10 @@ export class HiveManager {
     // Tools taken away in Capabilities (Web, Shell…) go the same way.
     const blockedTools = disallowedTools(opts.toolBlocks, !!meta.isGod);
     if (blockedTools.length) args.push('--disallowedTools', ...blockedTools);
+    // The human already authorised these connections (and the gateway enforces
+    // what each may do): no permission prompt per call, or an agent just waits.
+    const allowedConnections = Object.keys(mcp.servers).filter((n) => mcp.env.MD_MCP_TOKEN && (mcp.servers[n] as { type?: string }).type === 'http');
+    if (allowedConnections.length) args.push('--allowedTools', ...allowedConnections.map((n) => `mcp__${n}`));
     args.push('--append-system-prompt', this.injectedPrompt(meta, dir, root, opts.semanticMemory ?? false, opts.knowledgeGraph ?? false, opts.kgCliPath, opts.integrations, opts.runners, opts.connections, opts.envNames));
 
     // Phase 1 — autonomy: attach lifecycle hooks via --settings (no edits to the
@@ -1597,7 +1602,7 @@ export class HiveManager {
     if (agentId && root) servers['munder-lists'] = { command: this.nodeCommand(), args: [join(root, 'bin', 'md-lists.cjs'), join(root, 'lists')] };
     // No gateway (tests, or it failed to bind) → no keyed servers at all: the
     // fallback is "without GitHub", never "with the key in the agent's env".
-    const gw = keyed.length && agentId ? this.mcpGateway(agentId, keyed) : null;
+    const gw = keyed.length && agentId ? this.mcpGateway(agentId, keyed, this.mcpAccessMap(agentId, keyed)) : null;
     if (gw) {
       for (const id of keyed) {
         // `${MD_MCP_TOKEN}` is expanded by Claude Code from the process env, so
@@ -1637,10 +1642,24 @@ export class HiveManager {
         if (cfg?.[inst]?.enabled !== true) continue;
         const scope = scopes?.[inst];
         if (Array.isArray(scope) && !(agentId && scope.includes(agentId))) continue;
+        // The agent's role (and the connection's own ceiling) can rule it out.
+        if (agentId && this.mcpAccess(agentId, inst) === 'none') continue;
         if ((e.secrets ?? []).every((f) => f.optional || this.mcpKeyStored(inst, f.env))) keyed.push(inst);
       }
     }
     return keyed;
+  }
+
+  /** What one agent may do with one connection (connectionAccess.ts). Injected
+   *  by main; unset means unrestricted (tests, and a hive without Connections). */
+  private mcpAccess: (agentId: string, connectionId: string) => Access = () => 'readwrite';
+  setMcpAccess(get: (agentId: string, connectionId: string) => Access): void {
+    this.mcpAccess = get;
+  }
+
+  /** The access level for each of an agent's keyed connections (for the gateway). */
+  mcpAccessMap(agentId: string, ids: string[]): Record<string, Access> {
+    return Object.fromEntries(ids.map((id) => [id, this.mcpAccess(agentId, id)]));
   }
 
   /** Whether a Connections key is stored (never its value: the hive does not
@@ -1673,8 +1692,8 @@ export class HiveManager {
 
   /** Grants an agent a gateway capability over its keyed servers. Injected by
    *  main; unset means no gateway. */
-  private mcpGateway: (agentId: string, serverIds: string[]) => { url: string; token: string } | null = () => null;
-  setMcpGateway(grant: (agentId: string, serverIds: string[]) => { url: string; token: string } | null): void {
+  private mcpGateway: (agentId: string, serverIds: string[], access?: Record<string, Access>) => { url: string; token: string } | null = () => null;
+  setMcpGateway(grant: (agentId: string, serverIds: string[], access?: Record<string, Access>) => { url: string; token: string } | null): void {
     this.mcpGateway = grant;
   }
 

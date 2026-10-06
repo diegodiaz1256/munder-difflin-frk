@@ -1812,7 +1812,12 @@
         "shellDesc": "运行命令（Bash、PowerShell）",
         "subagents": "子代理",
         "subagentsDesc": "Claude 在会话内的帮手，办公室看不到（Agent、Task）"
-      }
+      },
+      "accessRead": "只读",
+      "accessWrite": "读写",
+      "accessReadShort": "只读",
+      "accessWriteShort": "读写",
+      "accessHelp": "此角色可对每个连接执行的操作。连接自身的上限（连接页）仍然有效。"
     },
     "conn": {
       "step1": "选择服务并获取密钥",
@@ -1859,7 +1864,12 @@
       "copy": "复制",
       "offAssigned": "已关闭：在此选择的智能体在你开启之前不会获得它。",
       "turnedOnForAgents": "已为你选择的智能体开启。",
-      "restartNote": "已在运行的智能体重启后生效。智能体会被告知自己拥有哪些连接，并默认使用它们。"
+      "restartNote": "已在运行的智能体重启后生效。智能体会被告知自己拥有哪些连接，并默认使用它们。",
+      "accessTitle": "智能体可对其执行的操作",
+      "access_none": "无",
+      "access_read": "只读",
+      "access_readwrite": "读写",
+      "accessHint": "无论角色如何，任何智能体能做的最大范围。角色只能降低，不能提高。新连接默认只读。"
     },
     "env": {
       "step1": "普通变量提供给所有代理",

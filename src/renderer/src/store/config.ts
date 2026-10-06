@@ -143,7 +143,8 @@ export interface HarnessConfig {
   factories?: Array<{ id: string; name: string; url: string; addedAt: number }>;
   /** The user's own role bundles (Pro Capabilities), after the built-ins.
    *  Saved through config:saveRoleBundles, which validates them. */
-  customRoleBundles?: Array<{ id: string; label: string; icon: string; servers: string[] }>;
+  customRoleBundles?: Array<{ id: string; label: string; icon: string; servers: string[]; access?: Record<string, 'none' | 'read' | 'readwrite'> }>;
+  agentMcpAccess?: Record<string, Record<string, 'none' | 'read' | 'readwrite'>>;
   autoDeliveryPausedAgents?: string[];
   maxTurns?: number;
   circuitBreaker?: CircuitBreakerConfig;

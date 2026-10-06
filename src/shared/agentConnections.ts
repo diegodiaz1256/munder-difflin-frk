@@ -13,6 +13,8 @@ export interface PromptConnection {
   serviceLabel: string;
   description: string;
   examples: string[];
+  /** What this agent may do with it. Absent → read & write. */
+  access?: 'read' | 'readwrite';
 }
 
 /** The MCP server name an agent sees for a connection. */
@@ -23,7 +25,8 @@ export function connectionsPromptLine(connections: PromptConnection[] | undefine
   const list = connections.map((c) => {
     const same = connections.filter((o) => o.serviceLabel === c.serviceLabel).length > 1;
     const name = same ? `${c.serviceLabel} "${c.label}"` : c.serviceLabel;
-    return `${name} (MCP server \`${connectionServerName(c.id)}\`: ${c.description.replace(/\s+/g, ' ').trim()})`;
+    const mode = c.access === 'read' ? ', READ-ONLY for you: tools that change things are refused' : '';
+    return `${name} (MCP server \`${connectionServerName(c.id)}\`: ${c.description.replace(/\s+/g, ' ').trim()}${mode})`;
   }).join('; ');
   return `CONNECTIONS: the human already connected these outside services for you: ${list}. They are ready — the credentials are held by the harness and you never see them. `
     + 'USE THEM BY DEFAULT: when a task touches one of these services, call its MCP tools straight away instead of asking for a key, scraping the web, or guessing from memory. '
