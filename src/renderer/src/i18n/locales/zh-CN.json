@@ -841,6 +841,7 @@
       "idle": "空闲",
       "readingInbox": "阅读收件箱",
       "startingUp": "启动中",
+      "reconnecting": "重新连接中…",
       "revived": "睡眠后恢复",
       "awaiting": "等待中",
       "waitingOnYou": "等待你",

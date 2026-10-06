@@ -841,6 +841,7 @@
       "idle": "idle",
       "readingInbox": "reading inbox",
       "startingUp": "starting up",
+      "reconnecting": "reconnecting…",
       "revived": "revived after sleep",
       "awaiting": "awaiting",
       "waitingOnYou": "waiting on you",

@@ -841,6 +841,7 @@
       "idle": "خامل",
       "readingInbox": "يقرأ الوارد",
       "startingUp": "يبدأ",
+      "reconnecting": "يعيد الاتصال…",
       "revived": "استيقظ بعد السكون",
       "awaiting": "بالانتظار",
       "waitingOnYou": "بانتظارك",
