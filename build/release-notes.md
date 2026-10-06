@@ -1,4 +1,3 @@
-- **APIs (Jira)**: changes reach running agents at once.
-- Refusals say why; `md-api` lists what an agent may use.
-- **Pi** keeps its model after a restart; keys stay home.
-- **New agent** offers your own Pi and OpenCode models.
+- **Pi** now sends your provider's key (LiteLLM 401 fixed).
+- **Text boxes** no longer freeze after dialogs on Windows.
+- A click on a text box gives the page its keyboard back.
