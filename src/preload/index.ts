@@ -392,6 +392,11 @@ export interface HarnessConfig {
   freeflowEnabled?: boolean;
   groqApiKey?: string;
   freeflowModel?: string;
+  /** Where dictation is transcribed: 'groq' (online, needs a key) or 'local'
+   *  (Whisper on this machine, offline once its model is downloaded). */
+  freeflowEngine?: 'groq' | 'local';
+  /** The local Whisper model (only 'small' for now). */
+  freeflowLocalModel?: 'small';
   /** Realtime Michael voice loop — true ONLY while a session holds the mic
    *  (renderer session sets it at start()/stop()); the main mic permission gate
    *  reads it. Default off. */
@@ -1418,7 +1423,7 @@ const api = {
   /** Persist Free Flow settings (flag / Groq key / model). The Groq key is stored
    *  in main config; entry point B (hold-Option) is renderer-side, no hotkey here. */
   freeflowSetConfig: (patch: {
-    enabled?: boolean; apiKey?: string; model?: string;
+    enabled?: boolean; apiKey?: string; model?: string; engine?: 'groq' | 'local'; localModel?: 'small';
   }): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('freeflow:setConfig', patch),
   /** Transcribe one captured audio clip via Groq (the key stays in main; only the
@@ -1427,6 +1432,12 @@ const api = {
     audio: ArrayBuffer | Uint8Array; mimeType?: string; filename?: string; language?: string;
   }): Promise<{ ok: boolean; text?: string; error?: string }> =>
     ipcRenderer.invoke('freeflow:transcribe', arg),
+  /** Local Whisper: the model files on disk (main/whisperCache.ts). */
+  whisperCacheMatch: (key: string): Promise<Uint8Array | null> => ipcRenderer.invoke('whisper:cacheMatch', key),
+  whisperCachePut: (key: string, bytes: Uint8Array): Promise<boolean> => ipcRenderer.invoke('whisper:cachePut', key, bytes),
+  whisperStatus: (): Promise<{ small: boolean; bytes: number }> => ipcRenderer.invoke('whisper:status'),
+  whisperMarkReady: (model: 'small', ready: boolean): Promise<void> => ipcRenderer.invoke('whisper:markReady', model, ready),
+  whisperRemove: (): Promise<void> => ipcRenderer.invoke('whisper:remove'),
 
   // ─── Integrations registry (Phase 2 — labeled REST endpoints via the secret broker) ──
   // Bridges the §6 IPC surface for the Settings UI. WRITE-ONLY secret contract end to

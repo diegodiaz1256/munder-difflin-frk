@@ -114,6 +114,11 @@ export interface HarnessConfig {
   freeflowEnabled?: boolean;
   groqApiKey?: string;
   freeflowModel?: string;
+  /** Where dictation is transcribed: 'groq' (online, needs a key) or 'local'
+   *  (Whisper on this machine, offline once its model is downloaded). */
+  freeflowEngine?: 'groq' | 'local';
+  /** The local Whisper model (only 'small' for now). */
+  freeflowLocalModel?: 'small';
   /** Realtime voice idle auto-disconnect (ms); default 180000 (3 min), 0 = never.
    *  Tuned in Settings → Realtime Michael; the cost cap stays the runaway guard. */
   realtimeIdleDisconnectMs?: number;

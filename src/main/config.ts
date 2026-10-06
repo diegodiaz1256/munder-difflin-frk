@@ -412,6 +412,11 @@ export interface HarnessConfig {
   groqApiKey?: string;
   /** Groq Whisper model id. Default 'whisper-large-v3-turbo' (fast, multilingual). */
   freeflowModel?: string;
+  /** Where dictation is transcribed: 'groq' (online, needs a key) or 'local'
+   *  (Whisper on this machine, offline once its model is downloaded). */
+  freeflowEngine?: 'groq' | 'local';
+  /** The local Whisper model (only 'small' for now). */
+  freeflowLocalModel?: 'small';
 
   // ─── Realtime Michael (premium speech-to-speech voice orchestrator) ─────────
   /** True ONLY while a Realtime Michael voice session is live: the renderer

@@ -66,6 +66,7 @@ import {
   appendTriggerHistory, clearTriggerHistory, listTriggerHistory, updateTriggerHistory
 } from './triggerHistory';
 import { transcribeWithGroq, DEFAULT_GROQ_MODEL } from './freeflow';
+import { WhisperCache, isWhisperModel } from './whisperCache';
 import { registerRealtimeIpc } from './realtime';
 import { registerRealtimeActionIpc } from './realtimeActions';
 import { initCompletionWatcher } from './realtimeCompletionWatcher';
@@ -5780,15 +5781,26 @@ function upsertLegacyWebhookTrigger(patch: { secret?: string; enabled?: boolean 
 // (CGEventTap) is deferred; hold-Option is the human-chosen v1 activation.
 
 ipcMain.handle('freeflow:setConfig', (_evt, patch: unknown) => {
-  const p = (patch ?? {}) as { enabled?: unknown; apiKey?: unknown; model?: unknown };
+  const p = (patch ?? {}) as { enabled?: unknown; apiKey?: unknown; model?: unknown; engine?: unknown; localModel?: unknown };
   const next: Partial<HarnessConfig> = {};
   if (typeof p.enabled === 'boolean') next.freeflowEnabled = p.enabled;
   // Trim string fields; an emptied key clears back to undefined.
   if (typeof p.apiKey === 'string') next.groqApiKey = p.apiKey.trim() || undefined;
   if (typeof p.model === 'string') next.freeflowModel = p.model.trim() || DEFAULT_GROQ_MODEL;
+  if (p.engine === 'groq' || p.engine === 'local') next.freeflowEngine = p.engine;
+  if (isWhisperModel(p.localModel)) next.freeflowLocalModel = p.localModel;
   writeConfig(next);
   return { ok: true };
 });
+
+// Local Whisper: the renderer's model-file cache, kept under userData/whisper.
+let whisperCacheInst: WhisperCache | null = null;
+const whisperCache = (): WhisperCache => (whisperCacheInst ??= new WhisperCache(join(app.getPath('userData'), 'whisper')));
+ipcMain.handle('whisper:cacheMatch', (_evt, key: unknown) => whisperCache().match(key));
+ipcMain.handle('whisper:cachePut', (_evt, key: unknown, bytes: unknown) => whisperCache().put(key, bytes));
+ipcMain.handle('whisper:status', () => ({ small: whisperCache().isReady('small'), bytes: whisperCache().size() }));
+ipcMain.handle('whisper:remove', () => { whisperCache().removeAll(); });
+ipcMain.handle('whisper:markReady', (_evt, model: unknown, ready: unknown) => { if (isWhisperModel(model)) whisperCache().markReady(model, ready === true); });
 
 /** Transcribe one captured audio clip via Groq. Gated on the flag + a key being
  *  present, so a disabled feature can NEVER reach the network. The Groq key stays
