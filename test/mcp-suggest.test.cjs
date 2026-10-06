@@ -39,3 +39,18 @@ test('what an agent set up in its own folder is found, with its name', () => {
   assert.equal(found.find((f) => f.name === 'gh').suggest.id, 'github-token');
   assert.equal(found.find((f) => f.name === 'gh').env[0].secret, true);
 });
+
+test('a WSL floor: servers in the distro home (where its agents\' Claude Code keeps them) are found too', () => {
+  const H = '\\\\wsl.localhost\\Ubuntu\\home\\me';
+  const files = {
+    [`${H}/.claude.json`.replace(/\\/g, '/')]: JSON.stringify({ mcpServers: { gh: { command: 'npx', args: ['@modelcontextprotocol/server-github'] } } }),
+    [`${H}/.codex/config.toml`.replace(/\\/g, '/')]: '[mcp_servers.x]\ncommand = "node"\n'
+  };
+  const s = new McpServers({
+    readFile: (p) => files[p.replace(/\\/g, '/')] ?? null, home: '/h', appData: () => '/a',
+    readCustom: () => [], writeCustom: () => {}, getSecret: () => undefined, setSecret: () => ({ ok: true }), deleteSecret: () => {},
+    extraHomes: () => [{ label: 'WSL Ubuntu', home: H }]
+  });
+  const found = s.scanForUi().map((f) => [f.source, f.name]);
+  assert.deepEqual(found.sort(), [['Claude Code (WSL Ubuntu)', 'gh'], ['Codex (WSL Ubuntu)', 'x']]);
+});

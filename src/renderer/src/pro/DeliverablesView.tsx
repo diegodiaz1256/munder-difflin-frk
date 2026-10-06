@@ -28,14 +28,15 @@ export function DeliverablesView({ tasks, roster }: { tasks: KeyedTask[]; roster
     let alive = true;
     const load = () => { void window.cth.deliverablesList().then((d) => { if (alive) setData(d); }).catch(() => {}); };
     load();
-    const id = setInterval(load, 5000);
+    // Not faster: on a WSL floor every listing crosses \\wsl.localhost.
+    const id = setInterval(load, 10_000);
     return () => { alive = false; clearInterval(id); };
   }, []);
 
   const items = useMemo<Item[]>(() => {
     if (!data?.root) return [];
     const who = (id?: string) => roster.find((a) => a.id === id)?.name ?? id ?? '';
-    const fromTasks = tasks.flatMap((task) => deliverablePaths(task.deliverable, data.root!).map((abs) => ({
+    const fromTasks = tasks.flatMap((task) => deliverablePaths(task.deliverable, data.root!, data.distro).map((abs) => ({
       abs, group: 'tasks' as const, title: splitPath(abs).name,
       sub: [task.key, task.title, task.assignee && who(task.assignee)].filter(Boolean).join(' · ')
     })));

@@ -39,6 +39,20 @@ export function splitPath(abs: string): { dir: string; name: string } {
   return i < 0 ? { dir: '.', name: abs } : { dir: abs.slice(0, i) || abs.slice(0, 1), name: abs.slice(i + 1) };
 }
 
+/**
+ * A path as the app (on Windows) can open it, from one an agent inside a WSL
+ * distro wrote: /mnt/c/x → C:\\x, any other Linux path → \\\\wsl.localhost\\<distro>\\…
+ * Unchanged off a WSL floor (distro null) and for paths that are not Linux ones.
+ * Mirrors main/wsl.ts fromLinuxPath (without ~, which only main can resolve).
+ */
+export function hostPath(p: string, distro: string | null): string {
+  if (!distro || !p.startsWith('/')) return p;
+  const mnt = /^\/mnt\/([a-z])(?:\/(.*))?$/i.exec(p);
+  if (mnt) return `${mnt[1].toUpperCase()}:\\${(mnt[2] ?? '').replace(/\//g, '\\')}`;
+  const clean = p.replace(/\/+$/, '') || '/';
+  return `\\\\wsl.localhost\\${distro}${clean === '/' ? '\\' : clean.replace(/\//g, '\\')}`;
+}
+
 const isAbs = (p: string): boolean => p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p) || p.startsWith('\\\\');
 
 /**
@@ -46,7 +60,7 @@ const isAbs = (p: string): boolean => p.startsWith('/') || /^[A-Za-z]:[\\/]/.tes
  * relative to the hive root (`research/report.md`), separated by commas, spaces
  * or new lines. Anything without a file extension is not a path.
  */
-export function deliverablePaths(text: string | undefined, hiveRoot: string): string[] {
+export function deliverablePaths(text: string | undefined, hiveRoot: string, distro: string | null = null): string[] {
   if (!text) return [];
   const sep = hiveRoot.includes('\\') && !hiveRoot.includes('/') ? '\\' : '/';
   const out: string[] = [];
@@ -59,7 +73,8 @@ export function deliverablePaths(text: string | undefined, hiveRoot: string): st
   for (const raw of pieces) {
     const p = raw.trim().replace(/^[`'"(<]+|[`'")>.]+$/g, '');
     if (!p || /^https?:\/\//i.test(p) || !/\.[A-Za-z0-9]{1,6}$/.test(p)) continue;
-    const abs = isAbs(p) ? p : `${hiveRoot.replace(/[\\/]+$/, '')}${sep}${p.replace(/^\.?[\\/]/, '')}`;
+    // An absolute Linux path from an agent in WSL is opened through the distro.
+    const abs = isAbs(p) ? hostPath(p, distro) : `${hiveRoot.replace(/[\\/]+$/, '')}${sep}${p.replace(/^\.?[\\/]/, '')}`;
     if (!out.includes(abs)) out.push(abs);
   }
   return out;

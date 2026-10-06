@@ -474,6 +474,12 @@ const mcpServers = new McpServers({
   setSecret: (ref, v) => integrations.setSecret(ref, v),
   deleteSecret: (ref) => integrations.deleteSecret(ref),
   // Where the agents run (their folder, a Codex agent's own CODEX_HOME), so what they set up for themselves is seen.
+  // A WSL floor's agents keep their own Claude Code / Codex / Cursor settings in the distro's home.
+  extraHomes: () => {
+    const w = hive.enabled() ? hive.wslRoot() : null;
+    const h = w ? distroHomeUnc(w.distro) : null;
+    return w && h ? [{ label: `WSL ${w.distro}`, home: h }] : [];
+  },
   agentPlaces: () => {
     const root = hive.root();
     const reg = hive.enabled() ? hive.registry() : null;
@@ -4298,7 +4304,10 @@ ipcMain.handle('hive:tasks', () => hive.tasks());
 // Metadata only; the viewer reads a file through the root-confined fs IPC.
 ipcMain.handle('deliverables:list', async () => {
   const root = hive.enabled() ? hive.root() : null;
-  if (!root) return { root: null, dir: null, files: [], written: [] };
+  if (!root) return { root: null, dir: null, distro: null, files: [], written: [] };
+  // A WSL floor: agents write Linux paths; the app opens them through \\wsl.localhost.
+  const wsl = hive.wslRoot();
+  const toHost = (p: string): string => (wsl ? fromLinuxPath(p, wsl.distro, () => distroHomeUnc(wsl.distro)) : p);
   const { readdir, stat } = await import('node:fs/promises');
   const dir = join(root, DELIVERABLES_DIR);
   const files: Array<{ rel: string; abs: string; size: number; mtime: number }> = [];
@@ -4321,10 +4330,11 @@ ipcMain.handle('deliverables:list', async () => {
   const norm = (p: string) => p.replace(/\\/g, '/').toLowerCase();
   const written = Object.values(hive.registry().agents).flatMap((a) =>
     writtenFiles(hookServer.stepsFor(a.id))
+      .map((f) => ({ ...f, path: toHost(f.path) }))
       .filter((f) => !norm(f.path).startsWith(norm(agentsDir) + '/'))
       .map((f) => ({ ...f, agentId: a.id, name: a.name }))
   ).sort((x, y) => y.ts - x.ts).slice(0, 200);
-  return { root, dir, files, written };
+  return { root, dir, distro: wsl?.distro ?? null, files, written };
 });
 ipcMain.handle('hive:steps', (_evt, agentId: unknown) => (typeof agentId === 'string' ? hookServer.stepsFor(agentId) : []));
 ipcMain.handle('hive:log', (_evt, n: unknown) => hive.logTail(typeof n === 'number' ? n : 200));

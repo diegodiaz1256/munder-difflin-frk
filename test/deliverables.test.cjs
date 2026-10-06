@@ -47,3 +47,24 @@ test('splitPath handles both separators', () => {
   assert.deepEqual(splitPath('/h/research/a.md'), { dir: '/h/research', name: 'a.md' });
   assert.deepEqual(splitPath('C:\\h\\a.md'), { dir: 'C:\\h', name: 'a.md' });
 });
+
+// ─── a WSL floor: agents write Linux paths, the app opens them from Windows ──
+
+const { hostPath } = loadTs('src/shared/deliverables.ts');
+const { fromLinuxPath } = loadTs('src/main/wsl.ts');
+
+test('WSL: Linux paths become \\\\wsl.localhost or drive paths; others stay', () => {
+  assert.equal(hostPath('/home/me/office/hive/research/a.md', 'Ubuntu'), '\\\\wsl.localhost\\Ubuntu\\home\\me\\office\\hive\\research\\a.md');
+  assert.equal(hostPath('/mnt/c/Users/me/out.csv', 'Ubuntu'), 'C:\\Users\\me\\out.csv');
+  assert.equal(hostPath('/home/me/a.md', null), '/home/me/a.md');
+  assert.equal(hostPath('C:\\x\\a.md', 'Ubuntu'), 'C:\\x\\a.md');
+  // Same answer as main's own converter.
+  for (const p of ['/home/me/a b/c.md', '/mnt/d/x.md', '/']) assert.equal(hostPath(p, 'Ubuntu'), fromLinuxPath(p, 'Ubuntu'));
+});
+
+test('WSL: a task naming an absolute Linux path opens through the distro; relative stays under the UNC hive', () => {
+  const root = '\\\\wsl.localhost\\Ubuntu\\home\\me\\office\\hive';
+  assert.deepEqual(deliverablePaths('/home/me/office/hive/research/r.md', root, 'Ubuntu'), ['\\\\wsl.localhost\\Ubuntu\\home\\me\\office\\hive\\research\\r.md']);
+  assert.deepEqual(deliverablePaths('research/r.md', root, 'Ubuntu'), [`${root}\\research/r.md`]);
+  assert.deepEqual(splitPath(`${root}\\research/r.md`), { dir: `${root}\\research`, name: 'r.md' });
+});

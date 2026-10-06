@@ -59,6 +59,8 @@ export interface McpServersDeps {
   deleteSecret: (ref: string) => void;
   /** Where agents run, so what they set up for themselves is found too. Unset → none. */
   agentPlaces?: () => Array<{ name: string; cwd: string; codexHome?: string }>;
+  /** Other home folders whose tool settings agents read (a WSL distro's home). */
+  extraHomes?: () => Array<{ label: string; home: string }>;
 }
 
 const SECRET_NAME = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASS|AUTH|CREDENTIAL|PAT|PRIVATE)/i;
@@ -178,6 +180,22 @@ export class McpServers {
     const codex = join(home, '.codex', 'config.toml');
     const ct = this.deps.readFile(codex);
     if (ct) out.push(...parseCodexToml(ct, codex));
+    // The same tools' settings in another home (a WSL floor's distro).
+    for (const { label, home: h } of this.deps.extraHomes?.() ?? []) {
+      const cj2 = join(h, '.claude.json');
+      const c2 = this.json(cj2) as { mcpServers?: unknown; projects?: Record<string, { mcpServers?: unknown }> } | null;
+      if (c2) {
+        out.push(...fromMcpServers(c2.mcpServers, `Claude Code (${label})`, cj2));
+        for (const [proj, p] of Object.entries(c2.projects ?? {})) out.push(...fromMcpServers(p?.mcpServers, `Claude Code (${label}: ${proj.split(/[\\/]/).filter(Boolean).pop() ?? proj})`, cj2));
+      }
+      for (const [rel, src] of [[['.cursor', 'mcp.json'], 'Cursor'], [['.gemini', 'settings.json'], 'Gemini CLI / Antigravity']] as Array<[string[], string]>) {
+        const f = join(h, ...rel);
+        out.push(...fromMcpServers((this.json(f) as { mcpServers?: unknown } | null)?.mcpServers, `${src} (${label})`, f));
+      }
+      const cx = join(h, '.codex', 'config.toml');
+      const cxt = this.deps.readFile(cx);
+      if (cxt) out.push(...parseCodexToml(cxt, cx).map((f) => ({ ...f, source: `Codex (${label})` })));
+    }
     return [...out, ...this.scanAgents()];
   }
 
