@@ -116,7 +116,7 @@ import {
   type AgentProvider
 } from '../shared/agentProvider';
 import { buildMissingCliScript, chooseInstallRung } from './cliInstall';
-import { detectNodeVersion, nodeIsUsable, resolveNodeInstaller } from './nodeInstall';
+import { detectNodeVersion, nodeAtLeast, nodeIsUsable, resolveNodeInstaller } from './nodeInstall';
 import { toolCatalog, type ToolStatus } from '../shared/toolCatalog';
 import { listLocalSkills, loadCatalog, installSkill, uninstallSkill, type LocalSkill } from './skills';
 import { loadHero } from './hero';
@@ -3228,6 +3228,28 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
       }
       syncKeepAwake();
       return res;
+    }
+    // ── Engine CLI present, but this Node is too old for it ─────────────────────
+    // Pi 1.x on Node 20 dies at startup with a SyntaxError and the worker is
+    // archived with nothing but a stack trace. Same remedy as a missing Node:
+    // install the current one visibly in this terminal, then relaunch in place.
+    const minNode = providerPreset(provider).minNode;
+    if (bin && minNode && !opts.noAutoInstall && !onWsl) {
+      const have = detectNodeVersion(ptyManager.commandPath('node'));
+      if (have && !nodeAtLeast(have, minNode)) {
+        const nodeInstaller = await resolveNodeInstaller();
+        const rung = chooseInstallRung(installInfoForProvider(provider), false, nodeInstaller);
+        const res = ptyManager.spawn(
+          {
+            id: opts.id, cwd: opts.cwd, command: bin, cols: opts.cols, rows: opts.rows,
+            shellScript: buildMissingCliScript(bin, provider, false, process.platform, nodeInstaller, { have, need: minNode })
+          },
+          owner
+        );
+        if (res.ok && rung.command) pendingInstallRelaunch.set(opts.id, { opts, owner, bin, rung: rung.kind });
+        syncKeepAwake();
+        return res;
+      }
     }
   }
   // Git isolation: when requested and the cwd is a real repo, give this agent

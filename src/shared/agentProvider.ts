@@ -148,6 +148,10 @@ export interface AgentProviderPreset {
    *  when undefined, the user is shown a manual instruction only and nothing is
    *  auto-run. MUST be a trusted, hardcoded constant — never user/manifest input. */
   installCommand?: string;
+  /** The oldest Node.js its CLI runs on (`22.19.0`), for npm-installed CLIs that
+   *  need more than the app's floor. Below it the CLI crashes before printing
+   *  anything useful, so the spawn upgrades Node first (index.ts). */
+  minNode?: string;
   /** A SELF-CONTAINED installer that needs no Node/npm at all, per platform.
    *
    *  `installCommand` is `npm install -g …` for every provider, which silently
@@ -496,6 +500,9 @@ export const AGENT_PROVIDER_PRESETS: AgentProviderPreset[] = [
     resumeFlag: '--session',
     // --ignore-scripts: don't run the package's postinstall on the user's machine.
     installCommand: 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent',
+    // Pi 1.x imports node:module's enableCompileCache: on Node 20 it dies with a
+    // SyntaxError at startup (package.json engines: >=22.19.0).
+    minNode: '22.19.0',
     docsUrl: 'https://pi.dev/docs/latest'
   },
   {
