@@ -128,7 +128,7 @@ export function askingAgents(tasks: HiveTask[]): Set<string> {
 }
 
 /** agentState's labels → their i18n keys (`pro.state.*`). */
-const STATE_KEY: Record<string, string> = { 'Needs you': 'needsYou', Working: 'working', Thinking: 'thinking', Breaker: 'breaker', Done: 'done', Idle: 'idle' };
+const STATE_KEY: Record<string, string> = { 'Needs you': 'needsYou', Working: 'working', Thinking: 'thinking', Breaker: 'breaker', Done: 'done', Idle: 'idle', Stopped: 'stopped' };
 
 export function StateBadge({ label, tone }: { label: string; tone: Tone }) {
   const { t } = useTranslation();

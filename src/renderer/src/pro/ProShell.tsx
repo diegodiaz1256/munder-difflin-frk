@@ -24,10 +24,12 @@ import { McpView } from './McpView';
 import { ProvidersView } from './ProvidersView';
 import { DeliverablesView } from './DeliverablesView';
 import { BootBanner } from './BootBanner';
+import { NowView } from './NowView';
 import './pro.css';
 
 /** Sections in the sidebar; their names are `pro.nav.<id>`. */
 const TOP: { id: ProSection; icon: ProIconName }[] = [
+  { id: 'now', icon: 'now' },
   { id: 'tasks', icon: 'tasks' },
   { id: 'inbox', icon: 'inbox' },
   { id: 'deliverables', icon: 'deliverables' },
@@ -75,6 +77,7 @@ export function ProShell({ config }: { config: HarnessConfig }) {
 
   let page: JSX.Element;
   switch (section) {
+    case 'now': page = <NowView />; break;
     case 'tasks': page = <TasksView tasks={tasks} roster={roster} />; break;
     case 'inbox': page = <InboxView tasks={tasks} />; break;
     case 'deliverables': page = <DeliverablesView tasks={tasks} roster={roster} />; break;
