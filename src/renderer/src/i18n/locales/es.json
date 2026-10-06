@@ -2046,7 +2046,8 @@
       "useConnectionTip": "Recomendado: las mismas herramientas de {{name}}, con la clave guardada por la app, límites de lectura/escritura por rol y botón de prueba.",
       "alreadyBuiltIn": "Ya incluido: {{name}}",
       "office_memory": "Memoria de la oficina",
-      "office_lists": "Tus listas"
+      "office_lists": "Tus listas",
+      "office_browser": "Navegador de la oficina"
     },
     "team": {
       "step1": "Tu oficina recibe una identidad",

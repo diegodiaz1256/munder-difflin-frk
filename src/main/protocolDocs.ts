@@ -93,6 +93,10 @@ The harness fills in \`id\`, \`from\`, \`hops\`, and timestamps.
 - **Runners** run commands that need secrets: \`bin/md-run.cjs\` with no arguments lists the ones that
   exist now (also ones added after you started), \`md-run <runner>\` runs one. The app executes it
   and masks every secret in the output.
+- **The office browser** reads a page with the app's own Chromium when a plain fetch gets nothing
+  (403, "enable JavaScript", an empty shell): \`bin/md-browse.cjs <url>\` (\`--links\` for its links),
+  \`md-browse --search "<query>"\`; Claude Code agents also have it as the \`munder-browser\` tools. It is
+  off when Web is switched off for you. It does not solve captchas or bot challenges: report those.
 - **Deliverables** for the human go in \`research/\` (a subfolder per task is fine); say the path
   when you report.`
   },

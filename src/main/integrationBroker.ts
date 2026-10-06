@@ -80,6 +80,13 @@ export interface IntegrationBrokerDeps {
     describe: (workerId: string) => Array<{ id: string; name: string; description?: string; secrets: string[] }>;
     run: (workerId: string, runnerId: string) => Promise<{ ok: boolean; exitCode?: number | null; output?: string; error?: string }>;
   };
+  /** The office browser (browser.ts): read a page or search the web with the
+   *  app's Chromium. `blocked` says why this agent may not (Web switched off). */
+  browser?: {
+    blocked: (agentId: string | undefined) => string | null;
+    browse: (url: string, opts: { links: boolean; maxChars: number }) => Promise<string>;
+    search: (query: string) => Promise<string>;
+  };
 }
 
 /** True for IPv4 loopback (127.0.0.0/8) and IPv6 ::1 (incl. v4-mapped). Mirrors slack.ts. */
@@ -226,6 +233,26 @@ export class IntegrationBroker {
         return;
       }
       return IntegrationBroker.sendError(res, 405, 'method_not_allowed', 'GET /run or POST /run/<id>');
+    }
+
+    // 3a'') POST /browse {url, links?, max_chars?} and POST /search {query}: the
+    //      office browser (md-browse). Plain text back.
+    const browse = /^\/(browse|search)\/?$/.exec(rawUrl);
+    if (browse && this.deps.browser) {
+      if ((req.method ?? '').toUpperCase() !== 'POST') return IntegrationBroker.sendError(res, 405, 'method_not_allowed', `POST /${browse[1]}`);
+      const browser = this.deps.browser;
+      const why = browser.blocked(cap.agentId);
+      if (why) return IntegrationBroker.sendError(res, 403, 'forbidden', why);
+      void readBodyCapped(req).then(async (buf) => {
+        let a: Record<string, unknown> = {};
+        try { a = JSON.parse(buf.toString('utf8') || '{}'); } catch { /* empty */ }
+        const text = browse[1] === 'search'
+          ? await browser.search(String(a.query ?? ''))
+          : await browser.browse(String(a.url ?? ''), { links: a.links === true, maxChars: typeof a.max_chars === 'number' ? a.max_chars : 0 });
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end(text);
+      }).catch((e) => IntegrationBroker.sendError(res, 422, 'browse_failed', e instanceof Error ? e.message : String(e)));
+      return;
     }
 
     // 3a') GET /i: the APIs this agent may use right now (md-api with no arguments).

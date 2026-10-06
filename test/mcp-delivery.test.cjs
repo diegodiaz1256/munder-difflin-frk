@@ -108,7 +108,7 @@ test('spawn: mcp.json behind --mcp-config, nothing in settings.json, neither key
   }
 });
 
-test('spawn with nothing enabled drops the stale servers (only the office lists stay)', async (t) => {
+test('spawn with nothing enabled drops the stale servers (only the office lists and browser stay)', async (t) => {
   const { hive, home } = floor(t);
   const meta = { id: 'jim', name: 'Jim', provider: 'claude', cwd: home };
   const first = await hive.ensureAgent(meta, { mcpDefaults: { 'github-token': { enabled: true } } });
@@ -116,9 +116,10 @@ test('spawn with nothing enabled drops the stale servers (only the office lists 
   assert.ok(fs.existsSync(mcpPath));
   const none = Object.fromEntries(['sequential-thinking', 'time', 'fetch', 'context7', 'filesystem', 'git'].map((id) => [id, { enabled: false }]));
   const second = await hive.ensureAgent(meta, { mcpDefaults: none });
-  // munder-lists is the office's own server (the human's lists), always there.
+  // munder-lists and munder-browser are the office's own servers, always there
+  // (the browser unless Web is switched off).
   const servers = Object.keys(JSON.parse(fs.readFileSync(second.args[second.args.indexOf('--mcp-config') + 1], 'utf8')).mcpServers);
-  assert.deepEqual(servers, ['munder-lists']);
+  assert.deepEqual(servers.sort(), ['munder-browser', 'munder-lists']);
 });
 
 test('several connections of one service: each its own server, switch, agents and key', (t) => {

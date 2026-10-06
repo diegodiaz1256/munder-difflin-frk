@@ -2046,7 +2046,8 @@
       "useConnectionTip": "推荐：相同的 {{name}} 工具，由应用保管密钥，按角色限制读写，并带有测试按钮。",
       "alreadyBuiltIn": "已内置：{{name}}",
       "office_memory": "办公室记忆",
-      "office_lists": "你的清单"
+      "office_lists": "你的清单",
+      "office_browser": "办公室浏览器"
     },
     "team": {
       "step1": "你的办公室获得身份",

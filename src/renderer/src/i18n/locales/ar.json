@@ -2046,7 +2046,8 @@
       "useConnectionTip": "موصى به: أدوات {{name}} نفسها مع حفظ التطبيق للمفتاح وحدود قراءة/كتابة لكل دور وزر اختبار.",
       "alreadyBuiltIn": "مضمَّن بالفعل: {{name}}",
       "office_memory": "ذاكرة المكتب",
-      "office_lists": "قوائمك"
+      "office_lists": "قوائمك",
+      "office_browser": "متصفح المكتب"
     },
     "team": {
       "step1": "يحصل مكتبك على هوية",

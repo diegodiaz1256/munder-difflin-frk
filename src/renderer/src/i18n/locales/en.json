@@ -2046,7 +2046,8 @@
       "useConnectionTip": "Recommended: the same {{name}} tools, with the key kept by the app, read/write limits per role and a Test button.",
       "alreadyBuiltIn": "Already built in: {{name}}",
       "office_memory": "Office memory",
-      "office_lists": "Your lists"
+      "office_lists": "Your lists",
+      "office_browser": "Office browser"
     },
     "team": {
       "step1": "Your office gets an identity",
