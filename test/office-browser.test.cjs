@@ -122,7 +122,7 @@ test('md-browse as a command and as an MCP server', async (t) => {
   assert.equal(byId[3].content[0].text, 'OK /browse');
 });
 
-test('agents get the browser in their tools and prompt, unless Web is off', async (t) => {
+test('agents get the browser in their tools, unless Web is off', async (t) => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-browse-hive-'));
   t.after(() => fs.rmSync(home, { recursive: true, force: true }));
   const hive = new HiveManager(() => home);
@@ -132,8 +132,8 @@ test('agents get the browser in their tools and prompt, unless Web is off', asyn
   const prompt = (inj) => inj.args[inj.args.indexOf('--append-system-prompt') + 1];
   assert.ok(servers(on).includes('munder-browser'));
   assert.ok(!servers(off).includes('munder-browser'));
-  assert.match(prompt(on), /BROWSER: .*munder-browser tools browse_page and web_search/);
-  assert.match(prompt(on), /does not solve captchas or bot challenges/);
+  // Claude agents hear about it when a WebFetch fails (hook), not up front.
+  assert.doesNotMatch(prompt(on), /BROWSER:/);
   assert.doesNotMatch(prompt(off), /BROWSER:/);
   assert.ok(fs.existsSync(path.join(home, 'hive', 'bin', 'md-browse.cjs')));
   const codex = await hive.ensureAgent({ id: 'oscar', name: 'Oscar', provider: 'codex', cwd: home }, {});
@@ -157,4 +157,22 @@ test('web search leaves out sponsored results', () => {
   ], body: { innerText: '' } };
   const out = new Function('document', 'return ' + B.EXTRACT_SEARCH_SCRIPT)(document);
   assert.deepEqual(out.results.map((r) => r.href), ['https://duckduckgo.com/l/?uddg=https%3A%2F%2Fwarhammer.com%2F']);
+});
+
+test('a failed WebFetch is answered with the office browser, not the prompt', async (t) => {
+  assert.equal(B.webFetchFailed('PostToolUseFailure', 'Request failed with status code 403', undefined), true);
+  assert.equal(B.webFetchFailed('PostToolUseFailure', 'The user doesn\'t want to proceed with this tool use', undefined), false);
+  assert.equal(B.webFetchFailed('PostToolUse', undefined, 'The page shows "Just a moment..." and asks to enable JavaScript.'), true);
+  assert.equal(B.webFetchFailed('PostToolUse', undefined, 'ok'), true, 'next to empty');
+  assert.equal(B.webFetchFailed('PostToolUse', undefined, 'The article explains how Electron renders pages with Chromium and lists the release dates of every major version since 2016.'), false);
+  // Claude agents: no browser line in the prompt; the hook registers failures.
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-browse-hint-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const hive = new HiveManager(() => home);
+  const inj = await hive.ensureAgent({ id: 'jim', name: 'Jim', provider: 'claude', cwd: home }, {});
+  assert.doesNotMatch(inj.args[inj.args.indexOf('--append-system-prompt') + 1], /BROWSER:/);
+  const settings = JSON.parse(fs.readFileSync(inj.args[inj.args.indexOf('--settings') + 1], 'utf8'));
+  assert.equal(settings.hooks.PostToolUseFailure[0].matcher, 'WebFetch');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src/main/hooks.ts'), 'utf8');
+  assert.match(src, /p\.tool_name === 'WebFetch' && webFetchFailed\(event, p\.error, p\.tool_response\) \? WEB_FETCH_HINT : null/);
 });

@@ -17,7 +17,11 @@ import {
 const LOAD_TIMEOUT_MS = 30_000;
 const SETTLE_MS = 1200;
 const SLOW_SETTLE_MS = 2500;
-const MAX_PARALLEL = 3;
+// A laptop's worth: each page of a heavy site (TikTok, X, Reddit) took about
+// 250 MB while open; five at once took the app from 0.5 to 1.5 GB.
+const MAX_PARALLEL = 2;
+/** Requests that cost memory and CPU but add no text. */
+const SKIPPED = new Set(['image', 'media', 'font', 'object']);
 
 let browserSession: Session | null = null;
 let userAgent = '';
@@ -32,6 +36,7 @@ function setup(): Session {
   s.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
   s.setPermissionCheckHandler(() => false);
   s.on('will-download', (e) => e.preventDefault());
+  s.webRequest.onBeforeRequest((details, cb) => cb({ cancel: SKIPPED.has(details.resourceType) }));
   browserSession = s;
   return s;
 }
@@ -61,6 +66,9 @@ async function withPage<T>(url: string, read: (win: BrowserWindow, status: numbe
     await sleep(SETTLE_MS);
     return await read(win, status);
   } finally {
+    // Closing the window alone left its renderer process (and the page's
+    // memory, ~250 MB on a heavy site) alive for ~25 s; end it now.
+    try { if (!win.isDestroyed()) win.webContents.forcefullyCrashRenderer(); } catch { /* already gone */ }
     if (!win.isDestroyed()) win.destroy();
   }
 }

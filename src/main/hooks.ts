@@ -23,6 +23,7 @@ import { validateHookEvent, type HookEvent } from '../shared/hookEvents';
 import { STEP_EVENTS, summarizeToolInput, redact, writtenPathsOf } from '../shared/agentSteps';
 import { isAbsolute, join as joinPath } from 'node:path';
 import { parseRateLimits, type RateLimits } from '../shared/rateLimits';
+import { WEB_FETCH_HINT, webFetchFailed } from '../shared/browsePage';
 
 /** Maximum JSON payload bytes in one newline-delimited hook frame. */
 const MAX_HOOK_FRAME_BYTES = 256 * 1024;
@@ -40,6 +41,9 @@ interface HookPayload {
   tool_name?: string;
   tool_input?: unknown;
   stop_hook_active?: boolean;
+  /** PostToolUse: what the tool returned. PostToolUseFailure: its error. */
+  tool_response?: unknown;
+  error?: unknown;
   prompt?: string;
   source?: string;
   notification_type?: string;
@@ -595,12 +599,16 @@ export class HookServer {
       }
     }
 
-    if (steer || roster || goal) {
+    // A WebFetch that got no page: tell the agent about the office browser now,
+    // at the moment it needs it, instead of in its prompt.
+    const webHint = p.tool_name === 'WebFetch' && webFetchFailed(event, p.error, p.tool_response) ? WEB_FETCH_HINT : null;
+
+    if (steer || roster || goal || webHint) {
       this.emit(agentId, event, p);
       return {
         hookSpecificOutput: {
           hookEventName: event,
-          additionalContext: [roster, goal, steer].filter(Boolean).join('\n\n')
+          additionalContext: [webHint, roster, goal, steer].filter(Boolean).join('\n\n')
         }
       };
     }
