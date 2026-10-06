@@ -3684,10 +3684,14 @@ var net = require('node:net');
 var SOCK = process.env.HIVE_SOCK;
 var AGENT = process.env.AGENT_ID || null;
 var AUTO = process.env.HIVE_AUTO_APPROVE === '1';
+// Pi's session id, from session_start: on every payload, so the office can
+// resume this session (--session <id>) and key its cost rows.
+var SID = null;
 function post(payload) {
   try {
     if (!SOCK) return;
     payload.agent_id = payload.agent_id || AGENT;
+    if (SID && !payload.session_id) payload.session_id = SID;
     var c = net.createConnection((String(SOCK).startsWith('tcp://') ? { host: '127.0.0.1', port: Number(String(SOCK).slice(String(SOCK).lastIndexOf(':') + 1)) } : SOCK), function () { try { c.end(JSON.stringify(payload) + '\\n'); } catch (e) {} });
     c.on('error', function () {});
   } catch (e) {}
@@ -3722,6 +3726,24 @@ function register(pi) {
     });
     pi.on('tool_result', function (ev) { post(piToolPayload('PostToolUse', ev)); });
     pi.on('agent_end', function () { post({ hook_event_name: 'Stop' }); });
+    pi.on('session_start', function (ev, ctx) {
+      try { SID = ctx && ctx.sessionManager && typeof ctx.sessionManager.getSessionId === 'function' ? ctx.sessionManager.getSessionId() : SID; } catch (e) {}
+      if (SID) post({ hook_event_name: 'SessionStart', source: ev && ev.reason });
+    });
+    // One cost row per model response, in the shape the hook server already
+    // records for the proxy bridge (CostSample).
+    pi.on('message_end', function (ev) {
+      var m = ev && ev.message;
+      var u = m && m.role === 'assistant' ? m.usage : null;
+      if (!u || !SID) return;
+      post({
+        hook_event_name: 'CostSample',
+        model: m.provider && m.model ? m.provider + '/' + m.model : (m.model || ''),
+        input: u.input || 0, output: u.output || 0, cache_read: u.cacheRead || 0, cache_creation: u.cacheWrite || 0,
+        // Pi prices its own responses (0 for a local model with no price set).
+        usd: u.cost && typeof u.cost.total === 'number' ? u.cost.total : undefined
+      });
+    });
     return true;
   } catch (e) { return false; }
 }
