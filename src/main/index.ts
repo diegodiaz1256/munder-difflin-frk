@@ -2746,6 +2746,7 @@ ipcMain.handle('hire:openFile', async () => {
     filters: [{ name: 'Hire manifest', extensions: ['json'] }],
     properties: ['openFile', 'multiSelections']
   });
+  refocusAfterDialog(mainWindow);
   if (res.canceled || res.filePaths.length === 0) {
     return { ok: false, manifests: [], errors: [], error: 'cancelled' };
   }
@@ -3776,6 +3777,7 @@ ipcMain.handle('dialog:chooseFolder', async (evt) => {
     title: 'Pick a folder',
     ...(defaultPath ? { defaultPath } : {})
   });
+  refocusAfterDialog(win);
   if (res.canceled || res.filePaths.length === 0) return { ok: false as const, error: 'cancelled' };
   return { ok: true as const, path: res.filePaths[0] };
 });
@@ -4885,6 +4887,7 @@ ipcMain.handle('kg:addFiles', async (evt) => {
     properties: ['openFile', 'multiSelections'],
     title: 'Add documents to the Knowledge Graph'
   });
+  refocusAfterDialog(win);
   if (res.canceled || res.filePaths.length === 0) return { ok: false as const, error: 'cancelled' };
   const results = res.filePaths.map((srcPath) => {
     try {
@@ -4951,6 +4954,7 @@ ipcMain.handle('tls:pickCaFile', async (evt) => {
     title: 'CA certificate (PEM)',
     filters: [{ name: 'Certificates', extensions: ['pem', 'crt', 'cer'] }, { name: 'All Files', extensions: ['*'] }]
   });
+  refocusAfterDialog(win);
   if (res.canceled || !res.filePaths[0]) return { ok: false as const };
   return { ok: true as const, path: res.filePaths[0] };
 });
@@ -4991,6 +4995,7 @@ ipcMain.handle('dialog:attachFiles', async (evt) => {
       { name: 'All Files', extensions: ['*'] }
     ]
   });
+  refocusAfterDialog(win);
   if (res.canceled || res.filePaths.length === 0) return { ok: false as const, error: 'cancelled' };
   return { ok: true as const, files: res.filePaths.map((p) => ({ path: p, name: basename(p) })) };
 });
