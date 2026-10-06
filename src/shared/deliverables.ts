@@ -107,20 +107,26 @@ export function parseDelimited(text: string, delimiter: string, maxRows = 200): 
   return rows;
 }
 
-const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
-
-/** The files an agent wrote or edited, newest first, one entry per file, from
- *  its tool-call events (the `detail` of a write is the file path). */
-export function writtenFiles(events: Array<{ event: string; tool?: string; detail?: string; ts?: number; blocked?: boolean }>): Array<{ path: string; ts: number; created: boolean }> {
+/** The files agents wrote or edited, newest first, one entry per file, from
+ *  their tool-call events: `files` (any CLI, set by main) or, for an event
+ *  without it, a Claude Write/Edit's `detail` (the file path). */
+export function writtenFiles(events: Array<{ event: string; tool?: string; detail?: string; files?: string[]; ts?: number; blocked?: boolean }>): Array<{ path: string; ts: number; created: boolean }> {
   const byPath = new Map<string, { path: string; ts: number; created: boolean }>();
   for (const e of events) {
-    if (e.event !== 'PreToolUse' || e.blocked || !e.tool || !WRITE_TOOLS.has(e.tool) || !e.detail) continue;
-    if (!isAbs(e.detail)) continue;
-    const prev = byPath.get(e.detail);
-    byPath.set(e.detail, { path: e.detail, ts: e.ts ?? 0, created: (prev?.created ?? false) || e.tool === 'Write' });
+    if ((e.event !== 'PreToolUse' && e.event !== 'PostToolUse') || e.blocked || !e.tool) continue;
+    // A Claude Write/Edit's detail is its path; older events carry no `files`.
+    const paths = e.files?.length ? e.files : (e.event === 'PreToolUse' && CLAUDE_WRITES.has(e.tool) && e.detail ? [e.detail] : []);
+    const created = /^(write|write_file|write_to_file|create_file|create)$/i.test(e.tool);
+    for (const path of paths) {
+      if (!isAbs(path)) continue;
+      const prev = byPath.get(path);
+      byPath.set(path, { path, ts: e.ts ?? 0, created: (prev?.created ?? false) || created });
+    }
   }
   return [...byPath.values()].sort((a, b) => b.ts - a.ts);
 }
+
+const CLAUDE_WRITES = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
 
 /**
  * Kinds of file the human may open in their own app (default program) from

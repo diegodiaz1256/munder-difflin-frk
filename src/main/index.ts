@@ -4311,17 +4311,22 @@ function readDeliverableLinks(): DeliverableLink[] {
   } catch { return []; }
 }
 hookServer.onStep = (agentId, e) => {
-  if (e.event !== 'PreToolUse' || e.blocked || !e.detail || !e.tool || !['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(e.tool)) return;
+  // Any CLI: the files main worked out for this call (Write, apply_patch, write_to_file…).
+  const written = writtenFiles([e]).map((f) => f.path);
+  if (!written.length) return;
   const root = hive.enabled() ? hive.root() : null;
   if (!root) return;
   const wsl = hive.wslRoot();
-  const path = wsl ? fromLinuxPath(e.detail, wsl.distro, () => distroHomeUnc(wsl.distro)) : e.detail;
-  if (!isInside(path, join(root, DELIVERABLES_DIR))) return;
+  const research = join(root, DELIVERABLES_DIR);
+  const paths = written.map((p) => (wsl ? fromLinuxPath(p, wsl.distro, () => distroHomeUnc(wsl.distro)) : p)).filter((p) => isInside(p, research));
+  if (!paths.length) return;
   const taskId = currentTaskOf((hive.tasks() as { tasks?: Array<{ id: string; assignee?: string; status?: string; createdAt?: string }> }).tasks ?? [], agentId);
   if (!taskId) return;
-  const links = readDeliverableLinks();
-  if (linkFor(links, path)?.taskId === taskId) return;
-  try { writeFileSync(join(root, 'deliverableLinks.json'), JSON.stringify({ links: addLink(links, { path, taskId, agentId, ts: e.ts ?? Date.now() }) }, null, 2)); }
+  let links = readDeliverableLinks();
+  const before = links;
+  for (const path of paths) if (linkFor(links, path)?.taskId !== taskId) links = addLink(links, { path, taskId, agentId, ts: e.ts ?? Date.now() });
+  if (links === before) return;
+  try { writeFileSync(join(root, 'deliverableLinks.json'), JSON.stringify({ links }, null, 2)); }
   catch (err) { console.error('[deliverables] could not record a link:', err); }
 };
 

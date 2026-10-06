@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { foldStep, foldSteps, type AgentStep, type StepGroup } from '@shared/agentSteps';
+import { canonicalTool, foldStep, foldSteps, type AgentStep, type StepGroup } from '@shared/agentSteps';
 
 /**
  * An agent's steps as a readable timeline: what it ran, read, edited, searched
@@ -89,7 +89,7 @@ function StepRow({ s, expanded, onToggle }: { s: AgentStep; expanded: boolean; o
   const dot = s.status === 'failed' || s.status === 'blocked' ? 'var(--cth-coral)' : s.status === 'running' ? 'var(--cth-lemon)' : 'var(--cth-mint)';
   const long = (s.detail?.length ?? 0) > 140;
   // The shared module words steps in English; the ones we know are translated here.
-  const label = s.kind === 'prompt' ? t('pro.steps.prompt') : s.kind === 'stop' ? t('pro.steps.stop') : s.kind === 'tool' ? t(`pro.steps.tool_${s.tool}`, { defaultValue: s.label }) : s.label;
+  const label = s.kind === 'prompt' ? t('pro.steps.prompt') : s.kind === 'stop' ? t('pro.steps.stop') : s.kind === 'tool' ? t(`pro.steps.tool_${canonicalTool(s.tool ?? '')}`, { defaultValue: s.label }) : s.label;
   return (
     <div style={{ display: 'flex', gap: 10, padding: '9px 14px', borderBottom: '1px solid var(--pro-line)', alignItems: 'flex-start', background: prompt ? 'var(--cth-lemon-light)' : undefined }}>
       <span className="pro-sub pro-mono" style={{ fontSize: 11, width: 86, flexShrink: 0, paddingTop: 2, whiteSpace: 'nowrap' }}>{fmtTime(s.ts)}</span>

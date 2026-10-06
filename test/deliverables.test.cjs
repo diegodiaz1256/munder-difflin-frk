@@ -102,3 +102,12 @@ test('only files inside research/ are linked; links keep one entry per file, new
   assert.equal(linkFor(links, '/r/a.md').taskId, 't2');
   assert.equal(addLink(Array.from({ length: 5 }, (_, i) => ({ path: `/r/${i}`, taskId: 't', agentId: 'a', ts: i })), { path: '/r/x', taskId: 't', agentId: 'a', ts: 9 }, 3).length, 3);
 });
+
+test('written files from any CLI: `files` on Pre or Post events', () => {
+  const w = writtenFiles([
+    { event: 'PreToolUse', tool: 'apply_patch', files: ['/w/jim/research/a.md', '/w/jim/src/x.ts'], ts: 2 },
+    { event: 'PostToolUse', tool: 'write', files: ['/w/oc/research/b.md'], ts: 3 },
+    { event: 'PreToolUse', tool: 'write_to_file', files: ['/w/agy/c.md'], ts: 1, blocked: true }
+  ]);
+  assert.deepEqual(w.map((f) => [f.path, f.created]), [['/w/oc/research/b.md', true], ['/w/jim/research/a.md', false], ['/w/jim/src/x.ts', false]]);
+});

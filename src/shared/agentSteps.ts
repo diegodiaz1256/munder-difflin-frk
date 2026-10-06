@@ -61,6 +61,24 @@ const BUILTIN: Record<string, { label: string; group: StepGroup }> = {
   TodoWrite: { label: 'Updated its plan', group: 'other' }
 };
 
+/** Other CLIs' tools, by lowercase name → the same words as Claude's. */
+const ALIASES: Record<string, string> = {
+  write: 'Write', write_file: 'Write', write_to_file: 'Write', create_file: 'Write', create: 'Write',
+  edit: 'Edit', edit_file: 'Edit', replace: 'Edit', str_replace: 'Edit', replace_file_content: 'Edit', multi_replace_file_content: 'MultiEdit',
+  apply_patch: 'Edit', patch: 'Edit', str_replace_editor: 'Edit', str_replace_based_edit_tool: 'Edit',
+  read: 'Read', read_file: 'Read', view_file: 'Read', read_many_files: 'Read',
+  bash: 'Bash', shell: 'Bash', exec_command: 'Bash', run_command: 'Bash', run_shell_command: 'Bash', local_shell: 'Bash',
+  grep: 'Grep', grep_search: 'Grep', search_file_content: 'Grep', codebase_search: 'Grep',
+  glob: 'Glob', find_by_name: 'Glob', list: 'LS', ls: 'LS', list_dir: 'LS', list_directory: 'LS',
+  webfetch: 'WebFetch', web_fetch: 'WebFetch', read_url_content: 'WebFetch', websearch: 'WebSearch', web_search: 'WebSearch', google_web_search: 'WebSearch',
+  task: 'Task', todowrite: 'TodoWrite', update_plan: 'TodoWrite'
+};
+
+/** The Claude tool name another CLI's tool means, or the name as it is. */
+export function canonicalTool(tool: string): string {
+  return BUILTIN[tool] ? tool : ALIASES[tool.toLowerCase()] ?? tool;
+}
+
 /** `mcp__munder-github-token--work__create_issue` → server + tool. */
 export function parseMcpTool(tool: string): { server: string; name: string } | null {
   const m = /^mcp__(.+?)__(.+)$/.exec(tool);
@@ -77,7 +95,58 @@ export function serverLabel(id: string): string {
 export function describeTool(tool: string): { label: string; group: StepGroup } {
   const mcp = parseMcpTool(tool);
   if (mcp) return { label: `${serverLabel(mcp.server)} · ${mcp.name.replace(/[_-]+/g, ' ')}`, group: 'connections' };
-  return BUILTIN[tool] ?? { label: tool, group: 'other' };
+  return BUILTIN[canonicalTool(tool)] ?? { label: tool, group: 'other' };
+}
+
+// ─── which files a call writes, for any CLI ─────────────────────────────────
+// Each CLI names its file tools its own way: Claude Write/Edit, Codex and
+// OpenCode apply_patch/patch (paths inside the patch text), Antigravity
+// write_to_file/replace_file_content (TargetFile), Gemini CLI write_file/replace,
+// OpenCode and Pi write/edit (filePath / path).
+
+/** Tools that write a file, by name (lowercase, any CLI). */
+const WRITE_TOOL_NAMES = new Set([
+  'write', 'edit', 'multiedit', 'notebookedit', 'create',
+  'write_file', 'edit_file', 'create_file', 'replace', 'str_replace', 'insert',
+  'write_to_file', 'replace_file_content', 'multi_replace_file_content',
+  'str_replace_editor', 'str_replace_based_edit_tool',
+  'apply_patch', 'patch'
+]);
+/** Where those tools put the path. */
+const PATH_KEYS = ['file_path', 'filePath', 'path', 'TargetFile', 'targetFile', 'target_file', 'AbsolutePath', 'absolutePath', 'absolute_path', 'notebook_path', 'filename', 'file'];
+/** Patch text (Codex apply_patch, OpenCode patch): the files it adds, changes or moves to. */
+const PATCH_FILE = /^\*\*\* (?:Add File|Update File|Move to): (.+?)\s*$/gm;
+
+function patchPaths(value: unknown, out: Set<string>, depth = 0): void {
+  if (depth > 3 || value == null) return;
+  if (typeof value === 'string') {
+    if (!value.includes('*** ')) return;
+    for (const m of value.matchAll(PATCH_FILE)) out.add(m[1].trim());
+    return;
+  }
+  if (Array.isArray(value)) { for (const v of value) patchPaths(v, out, depth + 1); return; }
+  if (typeof value === 'object') for (const v of Object.values(value as Record<string, unknown>)) patchPaths(v, out, depth + 1);
+}
+
+/**
+ * The files one tool call writes (as the CLI gave them: absolute, or relative to
+ * its folder). Empty for reads, shell commands without a patch, and a connection's
+ * tools (an MCP `create_issue` is not a file).
+ */
+export function writtenPathsOf(tool: string | undefined, input: unknown): string[] {
+  if (!tool || parseMcpTool(tool) || !input || typeof input !== 'object') return [];
+  const name = tool.toLowerCase();
+  const out = new Set<string>();
+  // A patch anywhere in the input (also a shell command running apply_patch).
+  patchPaths(input, out);
+  if (WRITE_TOOL_NAMES.has(name)) {
+    const i = input as Record<string, unknown>;
+    // str_replace_editor's "view" only reads.
+    if (!(typeof i.command === 'string' && i.command === 'view')) {
+      for (const k of PATH_KEYS) if (typeof i[k] === 'string' && i[k]) { out.add((i[k] as string).trim()); break; }
+    }
+  }
+  return [...out].filter((p) => p.length > 0 && p.length < 1024 && !p.includes('\n'));
 }
 
 // ─── what it was asked to do ────────────────────────────────────────────────
@@ -103,8 +172,11 @@ export function summarizeToolInput(tool: string | undefined, input: unknown): st
   if (!tool || !input || typeof input !== 'object') return '';
   const i = input as Record<string, unknown>;
   let out = '';
-  switch (tool) {
-    case 'Bash': out = str(i.command); break;
+  // A file written by any CLI's tool: say which file(s), not the content.
+  const written = BUILTIN[tool] ? [] : writtenPathsOf(tool, input);
+  if (written.length) return clip(redact(written.join(', ')));
+  switch (canonicalTool(tool)) {
+    case 'Bash': out = str(i.command) || (Array.isArray(i.command) ? (i.command as unknown[]).filter((x) => typeof x === 'string').join(' ') : '') || str(i.cmd) || str(i.CommandLine); break;
     case 'Read': case 'Write': case 'Edit': case 'MultiEdit': case 'NotebookEdit': out = str(i.file_path) || str(i.notebook_path); break;
     case 'Glob': out = [str(i.pattern), str(i.path)].filter(Boolean).join('  in  '); break;
     case 'Grep': out = [str(i.pattern), str(i.path)].filter(Boolean).join('  in  '); break;

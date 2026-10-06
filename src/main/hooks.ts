@@ -20,7 +20,8 @@ import type { ControlRegistry } from './control';
 import type { CircuitBreaker } from './breaker';
 import { estimateCostUsd } from './pricing';
 import { validateHookEvent, type HookEvent } from '../shared/hookEvents';
-import { STEP_EVENTS, summarizeToolInput, redact } from '../shared/agentSteps';
+import { STEP_EVENTS, summarizeToolInput, redact, writtenPathsOf } from '../shared/agentSteps';
+import { isAbsolute, join as joinPath } from 'node:path';
 import { parseRateLimits, type RateLimits } from '../shared/rateLimits';
 
 /** Maximum JSON payload bytes in one newline-delimited hook frame. */
@@ -650,12 +651,26 @@ export class HookServer {
     this.stepLog.delete(agentId);
   }
 
+  private writtenFiles(agentId: string | undefined, p: HookPayload): string[] {
+    const paths = writtenPathsOf(p.tool_name, p.tool_input);
+    if (!paths.length) return [];
+    let cwd = p.cwd;
+    if (!cwd && agentId) { try { cwd = this.hive.registry().agents[agentId]?.cwd; } catch { /* no registry */ } }
+    // A Linux path from an agent inside WSL is absolute too (main maps it later).
+    const abs = (f: string) => (f.startsWith('/') || isAbsolute(f) ? f : cwd ? joinPath(cwd, f) : null);
+    return paths.map(abs).filter((f): f is string => !!f).slice(0, 50);
+  }
+
   private emit(agentId: string | undefined, event: string, p: HookPayload, blocked = false): void {
     // For the steps timeline: what the tool was asked to do (redacted, short), or
     // the words of a prompt. Kept in memory only, never written to disk.
     const detail = event === 'UserPromptSubmit'
       ? (p.prompt ? redact(p.prompt).slice(0, 400) : undefined)
       : STEP_EVENTS.has(event) ? summarizeToolInput(p.tool_name, p.tool_input) || undefined : undefined;
+    // Which files a write writes, for any CLI, made absolute against the folder
+    // the agent works in (Codex and OpenCode patches name them relatively).
+    // Post too: some CLIs only report a tool once it ran (Codex builds, the qwen proxy, grok).
+    const files = (event === 'PreToolUse' || event === 'PostToolUse') && !blocked ? this.writtenFiles(agentId, p) : [];
     const payload: HookEvent = {
       agentId,
       event,
@@ -665,6 +680,7 @@ export class HookServer {
       message: p.message,
       blocked,
       ...(detail ? { detail } : {}),
+      ...(files.length ? { files } : {}),
       ts: Date.now()
     };
     if (!validateHookEvent(payload)) {

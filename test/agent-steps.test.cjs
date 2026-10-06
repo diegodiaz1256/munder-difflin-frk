@@ -62,3 +62,44 @@ test('keeps only the latest steps', () => {
   const evs = Array.from({ length: 500 }, (_, i) => ({ event: 'PostToolUse', tool: 'Read', ts: i }));
   assert.equal(foldSteps(evs).length, 400);
 });
+
+// ─── written files, for every CLI ───────────────────────────────────────────
+
+const { writtenPathsOf, canonicalTool } = loadTs('src/shared/agentSteps.ts');
+
+test('Claude Code, Antigravity, Gemini CLI, OpenCode and Pi: the path of a write', () => {
+  assert.deepEqual(writtenPathsOf('Write', { file_path: '/r/a.md', content: 'x' }), ['/r/a.md']);
+  assert.deepEqual(writtenPathsOf('write_to_file', { TargetFile: '/r/b.md', CodeContent: 'x' }), ['/r/b.md']);           // Antigravity
+  assert.deepEqual(writtenPathsOf('replace_file_content', { TargetFile: '/r/b.md' }), ['/r/b.md']);
+  assert.deepEqual(writtenPathsOf('write_file', { file_path: '/r/c.md', content: 'x' }), ['/r/c.md']);                  // Gemini CLI
+  assert.deepEqual(writtenPathsOf('write', { filePath: '/r/d.md', content: 'x' }), ['/r/d.md']);                        // OpenCode
+  assert.deepEqual(writtenPathsOf('edit', { path: 'notes/e.md', oldText: 'a', newText: 'b' }), ['notes/e.md']);         // Pi
+});
+
+test('Codex and OpenCode patches: every file the patch adds, updates or moves to', () => {
+  const patch = '*** Begin Patch\n*** Add File: research/q3/report.md\n+# Q3\n*** Update File: src/a.ts\n@@\n-x\n+y\n*** Move to: src/b.ts\n*** End Patch';
+  assert.deepEqual(writtenPathsOf('apply_patch', { input: patch }), ['research/q3/report.md', 'src/a.ts', 'src/b.ts']);
+  assert.deepEqual(writtenPathsOf('apply_patch', { command: ['apply_patch', patch] }), ['research/q3/report.md', 'src/a.ts', 'src/b.ts']);
+  assert.deepEqual(writtenPathsOf('patch', { patchText: patch }), ['research/q3/report.md', 'src/a.ts', 'src/b.ts']);
+  // A shell command that runs apply_patch counts too.
+  assert.deepEqual(writtenPathsOf('Bash', { command: `apply_patch <<'EOF'\n${patch}\nEOF` }), ['research/q3/report.md', 'src/a.ts', 'src/b.ts']);
+});
+
+test('reads, plain commands and connections write nothing', () => {
+  assert.deepEqual(writtenPathsOf('Read', { file_path: '/r/a.md' }), []);
+  assert.deepEqual(writtenPathsOf('read_file', { path: '/r/a.md' }), []);
+  assert.deepEqual(writtenPathsOf('Bash', { command: 'ls -la' }), []);
+  assert.deepEqual(writtenPathsOf('mcp__munder-github-token__create_issue', { path: 'x.md' }), []);
+  assert.deepEqual(writtenPathsOf('str_replace_editor', { command: 'view', path: '/r/a.md' }), []);
+});
+
+test('other CLIs\' tools read like Claude\'s in the steps', () => {
+  assert.equal(canonicalTool('write_to_file'), 'Write');
+  assert.equal(canonicalTool('apply_patch'), 'Edit');
+  assert.equal(canonicalTool('run_shell_command'), 'Bash');
+  assert.equal(describeTool('write_file').label, 'Wrote a file');
+  assert.equal(describeTool('edit').group, 'files');
+  assert.equal(summarizeToolInput('apply_patch', { input: '*** Begin Patch\n*** Add File: r/a.md\n+x\n*** End Patch' }), 'r/a.md');
+  assert.equal(summarizeToolInput('write', { filePath: '/r/d.md', content: 'secret stuff' }), '/r/d.md');
+  assert.equal(summarizeToolInput('exec_command', { command: ['bash', '-lc', 'npm test'] }), 'bash -lc npm test');
+});
