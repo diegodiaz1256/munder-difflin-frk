@@ -20,6 +20,8 @@
 import { useSyncExternalStore } from 'react';
 import { useStore } from '@/store/store';
 import { transcribeLocal } from './localWhisper';
+import { whisperLanguage } from './whisperLanguage';
+import i18n from '@/i18n';
 
 export type FreeflowStatus = 'idle' | 'recording' | 'transcribing';
 
@@ -159,7 +161,7 @@ async function finish(agentId: string): Promise<void> {
     // Local Whisper (offline) or Groq, as set in Settings → Voice.
     const cfg = await window.cth.getConfig().catch(() => null);
     const res = cfg?.freeflowEngine === 'local'
-      ? await transcribeLocal(blob, cfg.freeflowLocalModel ?? 'small')
+      ? await transcribeLocal(blob, cfg.freeflowLocalModel ?? 'small', whisperLanguage(i18n.language))
       : await window.cth.freeflowTranscribe({
         audio: await blob.arrayBuffer(),
         mimeType: type.split(';')[0],
