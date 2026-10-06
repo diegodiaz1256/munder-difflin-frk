@@ -372,6 +372,18 @@ export function parseNpmCmdShim(shimPath: string, content: string): NpmShimTarge
   return { interpreter, scriptPath };
 }
 
+/** True for a Windows npm shim (`x.cmd`, or the extensionless `x` beside it)
+ *  whose target is not on disk. False when the shim is fine or not understood. */
+export function shimPointsNowhere(resolved: string, exists: (p: string) => boolean = existsSync, read: (p: string) => string = (p) => readFileSync(p, 'utf8')): boolean {
+  try {
+    const lower = resolved.toLowerCase();
+    const shim = lower.endsWith('.cmd') || lower.endsWith('.bat') ? resolved : (exists(`${resolved}.cmd`) ? `${resolved}.cmd` : null);
+    if (!shim) return false;
+    const target = parseNpmCmdShim(shim, read(shim));
+    return !!target && !exists(target.scriptPath);
+  } catch { return false; }
+}
+
 export class PtyManager {
   private sessions = new Map<string, PtySession>();
   /** The size each id's terminal was last fitted to; kept across its processes (ptySize.ts). */
@@ -451,7 +463,12 @@ export class PtyManager {
    *  "process exited (code 1)". Reuses the exact same `which`/`where` +
    *  candidate-dir logic as spawn(), so detection and spawning never disagree. */
   isCommandAvailable(command: string): boolean {
-    return this.resolveCommand(command).found;
+    const r = this.resolveCommand(command);
+    // A Windows shim that outlived its package (a half-removed or half-written
+    // global install) is not an installed CLI: spawning it fell back to cmd.exe,
+    // which answered "the command line is too long" and the agent died, instead
+    // of the installer putting the CLI back.
+    return r.found && !(process.platform === 'win32' && shimPointsNowhere(r.path));
   }
 
   /** The absolute path a bare command resolves to for THIS user, or null when it
