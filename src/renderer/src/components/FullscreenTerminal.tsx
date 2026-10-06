@@ -941,7 +941,7 @@ function Header({ agent, onEdit }: { agent: Agent; onEdit: () => void }) {
    *  button would read as "restart Michael" while looking like "close". */
   const onKill = async () => {
     if (!agent.ptyId) return;
-    if (!confirm(t('agentDetail.killConfirm', { name: agent.name }))) return;
+    if (!(await window.cth.confirm(t('agentDetail.killConfirm', { name: agent.name })))) return;
     await window.cth.killPty(agent.ptyId);
     disposeTerminal(agent.ptyId);
     // archiveAgent re-homes focus mode to the next agent, and only leaves it when

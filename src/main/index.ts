@@ -508,7 +508,7 @@ const envVault = new EnvVault({
       detail: `${runner.command}\n\nIn: ${cwd}\nWith secrets: ${runner.secrets.join(', ') || 'none'}${changed ? '\n\nFiles in this worktree changed since you last allowed it: the command runs code the agent may have edited.' : ''}\n\nThe agent only gets the output, with every secret masked.`
     };
     const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
-    if (win && !win.isDestroyed()) win.webContents.focus();
+    refocusAfterDialog(win);
     return response === 0 ? 'once' : response === 1 ? 'always' : 'deny';
   },
   log: (m) => console.log('[env]', m)
@@ -2894,7 +2894,7 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
           message: `Close this floor? ${owned} running terminal${owned === 1 ? '' : 's'} on it will be stopped.`,
           detail: 'Other floors keep running.'
         });
-        if (choice === 1) e.preventDefault();
+        if (choice === 1) { e.preventDefault(); refocusAfterDialog(win); }
       }
       return;
     }
@@ -5099,11 +5099,20 @@ function finishTeardown(): void {
   try { ptyManager.killAll(); } catch (e) { console.error('[quit] killAll:', e); }
   app.quit();
 }
+/** Give the page its keyboard back after a native dialog: on Windows the
+ *  webContents can come back unfocused, so text boxes stop taking input. */
+function refocusAfterDialog(win: BrowserWindow | null | undefined): void {
+  if (!win || win.isDestroyed()) return;
+  win.focus();
+  win.webContents.focus();
+}
 // A yes/no question for the renderer, instead of window.confirm(): Chromium's
 // native confirm on Windows leaves the page without keyboard focus afterwards —
 // text boxes look fine but no longer take input until the window is refocused
 // ("the invite box is locked after deleting a team"). This asks through main
 // and hands focus back to the page when the dialog closes.
+// The renderer saw a click on a text box while the page had no keyboard focus.
+ipcMain.handle('app:refocus', (evt) => { refocusAfterDialog(BrowserWindow.fromWebContents(evt.sender)); });
 ipcMain.handle('app:confirm', async (evt, message: unknown, detail: unknown, ok: unknown) => {
   const win = BrowserWindow.fromWebContents(evt.sender);
   const opts = {
@@ -5114,7 +5123,7 @@ ipcMain.handle('app:confirm', async (evt, message: unknown, detail: unknown, ok:
     detail: typeof detail === 'string' ? detail.slice(0, 1000) : undefined
   };
   const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
-  if (win && !win.isDestroyed()) { win.focus(); win.webContents.focus(); }
+  refocusAfterDialog(win);
   return response === 0;
 });
 
@@ -6013,7 +6022,7 @@ async function askToSpawnPending(): Promise<void> {
       detail: `${objective.length > 600 ? objective.slice(0, 600) + '…' : objective}\n\nTo stop being asked, turn on "Orchestrator may start workers" in Settings → Autonomy & Budgets.`
     };
     const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
-    if (win) win.webContents.focus();
+    refocusAfterDialog(win);
     if (!existsSync(filePath)) return;
     if (response === 2) {
       informGod('[worker spawn declined]', `The operator declined to start the worker in ${next}. Do the work another way or ask them.`);

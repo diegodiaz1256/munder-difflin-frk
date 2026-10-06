@@ -117,7 +117,7 @@ export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
 
   const onKill = async () => {
     if (!agent.ptyId) return;
-    if (!confirm(t('agentDetail.killConfirm', { name: agent.name }))) return;
+    if (!(await window.cth.confirm(t('agentDetail.killConfirm', { name: agent.name })))) return;
     await window.cth.killPty(agent.ptyId);
     disposeTerminal(agent.ptyId);
     archiveAgent(agent.id);

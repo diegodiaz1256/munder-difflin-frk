@@ -977,6 +977,8 @@ const api = {
   /** Write the current clipboard image to a temp PNG and return its path (paste-to-attach). */
   /** Ask yes/no without window.confirm() (which leaves inputs unfocusable on
    *  Windows). Resolves true for the confirm button. */
+  /** Focus this window's page again (text boxes stopped taking input). */
+  refocusWindow: (): Promise<void> => ipcRenderer.invoke('app:refocus'),
   confirm: (message: string, opts?: { detail?: string; ok?: string }): Promise<boolean> =>
     ipcRenderer.invoke('app:confirm', message, opts?.detail, opts?.ok),
   saveClipboardImage: (): Promise<
