@@ -3534,6 +3534,7 @@ fetch(url, { method: id ? 'POST' : 'GET', headers })
   .then(async (res) => {
     const body = await res.json().catch(() => ({}));
     if (!id) {
+      if (!(body.runners || []).length) console.log('No runners are set up for you yet (the human adds them in Environment; they work at once). usage: md-run <runner>');
       for (const r of body.runners || []) console.log(r.id + (r.description ? '  — ' + r.description : '') + (r.secrets && r.secrets.length ? '  [uses ' + r.secrets.join(', ') + ']' : ''));
       process.exit(0);
     }

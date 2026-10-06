@@ -90,3 +90,18 @@ test('PROTOCOL.md is a short index; each topic is its own file', async (t) => {
   assert.ok(prompt.includes(path.join(root, 'protocol', 'messages.md')));
   assert.match(prompt, /open only the one you need/);
 });
+
+test('md-run with no runners says so instead of printing nothing', async (t) => {
+  // Live: a Pi agent ran it, got exit 0 and an empty line, and could not tell
+  // "none yet" from a failure.
+  const http = require('node:http');
+  const { execFile } = require('node:child_process');
+  const { root } = await spawn(t, { id: 'jim', name: 'Jim', provider: 'claude' });
+  const server = http.createServer((req, res) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ runners: [] })); });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => server.close());
+  const out = await new Promise((resolve, reject) => execFile(process.execPath, [path.join(root, 'bin', 'md-run.cjs')], {
+    env: { ...process.env, MD_BROKER_URL: `http://127.0.0.1:${server.address().port}`, MD_BROKER_TOKEN: 't' }
+  }, (err, stdout) => (err ? reject(err) : resolve(stdout))));
+  assert.match(out, /No runners are set up for you yet/);
+});
