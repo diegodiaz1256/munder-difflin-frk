@@ -92,7 +92,7 @@ import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, rel
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
 import type { PromptConnection } from '../shared/agentConnections';
 import { PROVIDER_BACKENDS, providerKeyEnv } from '../shared/providerBackends';
-import { DELIVERABLES_DIR, writtenFiles } from '../shared/deliverables';
+import { DELIVERABLES_DIR, canOpenExternally, writtenFiles } from '../shared/deliverables';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES, hasPlaceholderHost, probeSpecFor } from '../shared/integrations';
 import { RosterStore } from './roster';
 import { buildWorkerLaunch, workerRequestProblem } from './workerLaunch';
@@ -4335,6 +4335,17 @@ ipcMain.handle('deliverables:list', async () => {
       .map((f) => ({ ...f, agentId: a.id, name: a.name }))
   ).sort((x, y) => y.ts - x.ts).slice(0, 200);
   return { root, dir, distro: wsl?.distro ?? null, files, written };
+});
+// Open a deliverable in its default program. Only document types (see
+// canOpenExternally): the path comes from an agent, and fs:revealPath's rule
+// stands for everything else — reveal, never run.
+ipcMain.handle('deliverables:openExternal', async (_evt, p: unknown) => {
+  if (typeof p !== 'string' || !p.length || p.length > 4096 || p.includes('\0')) return { ok: false, error: 'bad request' };
+  if (!canOpenExternally(p)) return { ok: false, error: 'this kind of file is only shown in its folder' };
+  const st = await statAbs(p);
+  if (!st.exists || !st.isFile) return { ok: false, error: 'not found' };
+  const err = await shell.openPath(st.path);
+  return err ? { ok: false, error: err } : { ok: true };
 });
 ipcMain.handle('hive:steps', (_evt, agentId: unknown) => (typeof agentId === 'string' ? hookServer.stepsFor(agentId) : []));
 ipcMain.handle('hive:log', (_evt, n: unknown) => hive.logTail(typeof n === 'number' ? n : 200));

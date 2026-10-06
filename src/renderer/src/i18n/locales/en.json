@@ -2239,7 +2239,14 @@
       "loading": "Loading…",
       "emptyFile": "The file is empty.",
       "firstRows": "Showing the first 200 rows.",
-      "htmlSource": "HTML is shown as source, not run."
+      "htmlSource": "HTML is shown as source, not run.",
+      "view": "View",
+      "rendered": "Formatted",
+      "source": "Source",
+      "openOutside": "Open in its app",
+      "openOutsideTip": "Opens the file in your default program for this kind of file.",
+      "openOutsideNo": "For safety this kind of file is only shown in its folder: it could run something.",
+      "openFailed": "Could not open it."
     }
   },
   "hivePicker": {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MarkdownPreview } from '@/markdown/MarkdownPreview';
-import { deliverablePaths, parseDelimited, previewKind, splitPath, extOf } from '@shared/deliverables';
+import { canOpenExternally, deliverablePaths, parseDelimited, previewKind, splitPath, extOf } from '@shared/deliverables';
 import type { Agent } from '@/store/store';
 import type { KeyedTask } from './data';
 
@@ -111,6 +111,10 @@ function Preview({ abs }: { abs: string }) {
   const kind = previewKind(name);
   const [loaded, setLoaded] = useState<Loaded>({ state: 'loading' });
   const [copied, setCopied] = useState(false);
+  // Markdown and tables: as rendered, or the file as it is.
+  const [source, setSource] = useState(false);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const external = canOpenExternally(name);
 
   useEffect(() => {
     let alive = true;
@@ -139,13 +143,25 @@ function Preview({ abs }: { abs: string }) {
         <strong style={{ fontSize: 14, overflowWrap: 'anywhere' }}>{name}</strong>
         <span className="pro-sub pro-mono" style={{ fontSize: 11, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={abs}>{abs}</span>
         <button className="pro-btn" onClick={() => { void navigator.clipboard.writeText(abs).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }); }}>{copied ? t('pro.conn.copied') : t('pro.dlv.copyPath')}</button>
+        {(kind === 'markdown' || kind === 'csv' || kind === 'json') && loaded.state === 'text' && (
+          <div className="pro-switch" role="group" aria-label={t('pro.dlv.view')}>
+            <button aria-pressed={!source} onClick={() => setSource(false)}>{t('pro.dlv.rendered')}</button>
+            <button aria-pressed={source} onClick={() => setSource(true)}>{t('pro.dlv.source')}</button>
+          </div>
+        )}
         <button className="pro-btn" onClick={() => void window.cth.revealPath(abs)}>{t('pro.dlv.showInFolder')}</button>
+        <button className="pro-btn pro-btn-primary" disabled={!external}
+          title={external ? t('pro.dlv.openOutsideTip') : t('pro.dlv.openOutsideNo')}
+          onClick={() => { setOpenError(null); void window.cth.deliverablesOpenExternal(abs).then((r) => { if (!r.ok) setOpenError(r.error ?? t('pro.dlv.openFailed')); }); }}>
+          {t('pro.dlv.openOutside')}
+        </button>
+        {openError && <span className="pro-text" style={{ color: 'var(--cth-coral)', fontSize: 12, flexBasis: '100%' }}>{openError}</span>}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '4px 18px 18px' }}>
         {loaded.state === 'loading' && <p className="pro-sub">{t('pro.dlv.loading')}</p>}
         {loaded.state === 'none' && <p className="pro-sub">{loaded.reason}</p>}
         {loaded.state === 'image' && <img src={loaded.url} alt={name} style={{ maxWidth: '100%', imageRendering: 'auto' }} />}
-        {loaded.state === 'text' && <TextPreview kind={kind} text={loaded.text} dir={dir} name={name} />}
+        {loaded.state === 'text' && <TextPreview kind={source ? 'text' : kind} text={loaded.text} dir={dir} name={name} />}
       </div>
     </section>
   );

@@ -2239,7 +2239,14 @@
       "loading": "加载中…",
       "emptyFile": "文件为空。",
       "firstRows": "仅显示前 200 行。",
-      "htmlSource": "HTML 以源码显示，不会运行。"
+      "htmlSource": "HTML 以源码显示，不会运行。",
+      "view": "视图",
+      "rendered": "格式化",
+      "source": "源码",
+      "openOutside": "用其应用打开",
+      "openOutsideTip": "用你为此类文件设置的默认程序打开。",
+      "openOutsideNo": "出于安全，此类文件只在文件夹中显示：它可能会运行某些内容。",
+      "openFailed": "无法打开。"
     }
   },
   "hivePicker": {

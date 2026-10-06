@@ -999,6 +999,8 @@ const api = {
   /** Deliverables: the office's research/ folder (newest first) and what each agent wrote this session. */
   deliverablesList: (): Promise<{ root: string | null; dir: string | null; distro: string | null; files: Array<{ rel: string; abs: string; size: number; mtime: number }>; written: Array<{ path: string; ts: number; created: boolean; agentId: string; name: string }> }> =>
     ipcRenderer.invoke('deliverables:list'),
+  /** Open a deliverable in its default program (document types only). */
+  deliverablesOpenExternal: (path: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('deliverables:openExternal', path),
   hiveSteps: (agentId: string): Promise<HookEvent[]> => ipcRenderer.invoke('hive:steps', agentId),
   onHiveHookEvent: (
     cb: (e: HookEvent) => void

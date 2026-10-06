@@ -2239,7 +2239,14 @@
       "loading": "Cargando…",
       "emptyFile": "El archivo está vacío.",
       "firstRows": "Se muestran las primeras 200 filas.",
-      "htmlSource": "El HTML se muestra como código, no se ejecuta."
+      "htmlSource": "El HTML se muestra como código, no se ejecuta.",
+      "view": "Vista",
+      "rendered": "Formateado",
+      "source": "Código",
+      "openOutside": "Abrir en su app",
+      "openOutsideTip": "Abre el archivo con tu programa predeterminado para este tipo de archivo.",
+      "openOutsideNo": "Por seguridad este tipo de archivo solo se muestra en su carpeta: podría ejecutar algo.",
+      "openFailed": "No se pudo abrir."
     }
   },
   "hivePicker": {

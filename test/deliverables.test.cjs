@@ -68,3 +68,9 @@ test('WSL: a task naming an absolute Linux path opens through the distro; relati
   assert.deepEqual(deliverablePaths('research/r.md', root, 'Ubuntu'), [`${root}\\research/r.md`]);
   assert.deepEqual(splitPath(`${root}\\research/r.md`), { dir: `${root}\\research`, name: 'r.md' });
 });
+
+test('only documents open in their own app; anything that could run is only revealed', () => {
+  const { canOpenExternally } = loadTs('src/shared/deliverables.ts');
+  for (const ok of ['r.md', 'R.PDF', 't.csv', 'a.docx', 'b.xlsx', 'p.png', 'x.json', 'page.html']) assert.equal(canOpenExternally(ok), true, ok);
+  for (const no of ['setup.exe', 'run.bat', 'x.cmd', 'a.ps1', 'b.sh', 'c.desktop', 'd.app', 'e.dmg', 'f.lnk', 'g.docm', 'h.xlsm', 'i.js', 'j.vbs', 'k.jar', 'Makefile', 'l.msi', 'm.scr']) assert.equal(canOpenExternally(no), false, no);
+});

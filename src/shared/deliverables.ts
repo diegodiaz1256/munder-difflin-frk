@@ -121,3 +121,20 @@ export function writtenFiles(events: Array<{ event: string; tool?: string; detai
   }
   return [...byPath.values()].sort((a, b) => b.ts - a.ts);
 }
+
+/**
+ * Kinds of file the human may open in their own app (default program) from
+ * Deliverables. An allowlist of documents, never executables, scripts,
+ * installers, shortcuts or macro-enabled Office files: the path comes from an
+ * agent, and opening one of those would be running it.
+ */
+const OPEN_EXTERNALLY = new Set([
+  'md', 'markdown', 'txt', 'log', 'csv', 'tsv', 'json', 'yaml', 'yml', 'xml', 'toml',
+  'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg',
+  'docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp', 'rtf',
+  'html', 'htm', 'mp4', 'mov', 'webm', 'mp3', 'wav'
+]);
+
+export function canOpenExternally(name: string): boolean {
+  return OPEN_EXTERNALLY.has(extOf(name));
+}
