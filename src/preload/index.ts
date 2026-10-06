@@ -428,6 +428,7 @@ export interface HarnessConfig {
   providerBaseUrls?: Partial<Record<AgentProvider, string>>;
   /** Per-CLI-provider default model slug, used to pre-fill the model picker. */
   providerDefaultModels?: Partial<Record<AgentProvider, string>>;
+  customModelProviders?: Array<{ id: string; label: string; baseUrl: string; models: string[] }>;
   /** Certificates for agents' HTTPS (custom endpoints, company gateways):
    *  verify on/off, an extra CA file, and trusting the Windows / WSL stores.
    *  See src/main/caBundle.ts. */
@@ -1529,6 +1530,11 @@ const api = {
   integrationsTest: (req: { id: string; path?: string }): Promise<{ ok: boolean; status?: number; error?: string }> =>
     ipcRenderer.invoke('integrations:test', req),
   // Per-CLI-provider BYOK keys — WRITE-ONLY. `providerKeySet` stores a backend key one
+  /** Your own OpenAI-compatible providers for OpenCode and Pi: save the list, a key (write-only), fetch models. */
+  customProvidersSave: (list: Array<{ id: string; label: string; baseUrl: string; models: string[] }>): Promise<Array<{ id: string; label: string; baseUrl: string; models: string[] }>> => ipcRenderer.invoke('customProviders:save', list),
+  customProvidersSetKey: (id: string, key: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('customProviders:setKey', id, key),
+  customProvidersHasKey: (id: string): Promise<boolean> => ipcRenderer.invoke('customProviders:hasKey', id),
+  customProvidersFetchModels: (baseUrl: string, id?: string): Promise<{ ok: boolean; models: string[]; error?: string }> => ipcRenderer.invoke('customProviders:fetchModels', baseUrl, id),
   /** An engine the app drives (pi / opencode): who it is signed in to (names only) and how to sign in. */
   engineStatus: (engine: 'pi' | 'opencode'): Promise<{ ok: boolean; home?: string; file?: string; providers?: Array<{ id: string; kind: string }>; signIn?: { cmd: string; args: string[] } }> =>
     ipcRenderer.invoke('engines:status', engine),

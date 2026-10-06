@@ -60,3 +60,82 @@ export function authProviders(json: string): Array<{ id: string; kind: string }>
       .map(([id, v]) => ({ id, kind: typeof (v as { type?: unknown }).type === 'string' ? String((v as { type?: unknown }).type) : 'key' }));
   } catch { return []; }
 }
+
+// ─── your own OpenAI-compatible providers (Ollama, LM Studio, vLLM…) ────────
+// Declared once in AI providers, given to every OpenCode and Pi agent. The key
+// (optional: local servers usually take none) is never written into a file: it
+// reaches the agent as an environment variable both configs point at.
+
+export interface CustomModelProvider {
+  /** Slug; the prefix of its model ids (`ollama/llama3.1:8b`). */
+  id: string;
+  label: string;
+  /** OpenAI-compatible base, e.g. http://localhost:11434/v1 */
+  baseUrl: string;
+  models: string[];
+}
+
+/** The env var that carries a provider's key into an agent. */
+export const customKeyEnv = (id: string): string => `MD_MODEL_KEY_${id.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
+
+const SLUG = /^[a-z0-9][a-z0-9-]{0,30}$/;
+/** Ids an engine already uses for its own providers: a custom one may not shadow them. */
+const RESERVED = new Set(['anthropic', 'openai', 'google', 'gemini', 'openrouter', 'groq', 'mistral', 'deepseek', 'xai', 'together', 'local']);
+
+/** Validate the user's list: a free slug, a label, an http(s) base, model ids. Bad entries are dropped. */
+export function cleanCustomProviders(raw: unknown): CustomModelProvider[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CustomModelProvider[] = [];
+  for (const item of raw.slice(0, 30)) {
+    if (!item || typeof item !== 'object') continue;
+    const r = item as Record<string, unknown>;
+    const id = typeof r.id === 'string' ? r.id.trim().toLowerCase() : '';
+    if (!SLUG.test(id) || RESERVED.has(id) || out.some((p) => p.id === id)) continue;
+    const baseUrl = typeof r.baseUrl === 'string' ? r.baseUrl.trim().replace(/\/+$/, '') : '';
+    try { const u = new URL(baseUrl); if (u.protocol !== 'http:' && u.protocol !== 'https:') continue; if (u.username || u.password) continue; } catch { continue; }
+    const label = typeof r.label === 'string' && r.label.trim() ? r.label.trim().slice(0, 40) : id;
+    const models = Array.isArray(r.models)
+      ? [...new Set(r.models.filter((m): m is string => typeof m === 'string').map((m) => m.trim()).filter((m) => m && m.length <= 200 && !/\s/.test(m)))].slice(0, 200)
+      : [];
+    out.push({ id, label, baseUrl, models });
+  }
+  return out;
+}
+
+/** OpenCode: `provider` entries for OPENCODE_CONFIG_CONTENT. */
+export function opencodeProviders(list: CustomModelProvider[], withKey: (id: string) => boolean): Record<string, unknown> {
+  return Object.fromEntries(list.map((p) => [p.id, {
+    npm: '@ai-sdk/openai-compatible',
+    name: p.label,
+    options: { baseURL: p.baseUrl, ...(withKey(p.id) ? { apiKey: `{env:${customKeyEnv(p.id)}}` } : {}) },
+    models: Object.fromEntries(p.models.map((m) => [m, { name: m }]))
+  }]));
+}
+
+/** Pi: your models.json (if any) with these providers added. Pi reads an
+ *  `apiKey` that names an environment variable from that variable. */
+export function piModelsJson(existing: string | null, list: CustomModelProvider[], withKey: (id: string) => boolean): string {
+  let base: { providers?: Record<string, unknown> } & Record<string, unknown> = {};
+  if (existing) { try { const j = JSON.parse(existing); if (j && typeof j === 'object') base = j; } catch { /* keep ours only */ } }
+  const providers = { ...(base.providers && typeof base.providers === 'object' ? base.providers : {}) };
+  for (const p of list) {
+    providers[p.id] = {
+      baseUrl: p.baseUrl,
+      api: 'openai-completions',
+      // Local servers ignore the key, but the field must be set.
+      apiKey: withKey(p.id) ? customKeyEnv(p.id) : 'none',
+      models: p.models.map((m) => ({ id: m, name: m }))
+    };
+  }
+  return JSON.stringify({ ...base, providers }, null, 2);
+}
+
+/** Model ids from an OpenAI-compatible `GET /models` body ({ data: [{ id }] }; Ollama's /api/tags shape too). */
+export function modelsFromListing(body: unknown): string[] {
+  const b = body as { data?: Array<{ id?: unknown }>; models?: Array<{ name?: unknown; model?: unknown }> } | null;
+  const ids = [
+    ...(Array.isArray(b?.data) ? b!.data.map((m) => m?.id) : []),
+    ...(Array.isArray(b?.models) ? b!.models.map((m) => m?.name ?? m?.model) : [])
+  ].filter((x): x is string => typeof x === 'string' && !!x.trim());
+  return [...new Set(ids)].slice(0, 500);
+}

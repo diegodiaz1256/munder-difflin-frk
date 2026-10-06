@@ -25,3 +25,43 @@ test('auth file: provider names and kind, never the token', () => {
   assert.doesNotMatch(JSON.stringify(p), /sk-x|"R"|"A"/);
   assert.deepEqual(authProviders('not json'), []);
 });
+
+// ─── your own OpenAI-compatible providers ───────────────────────────────────
+
+const { cleanCustomProviders, opencodeProviders, piModelsJson, modelsFromListing, customKeyEnv } = loadTs('src/shared/engineModels.ts');
+
+test('custom providers: valid slug, http(s) base, models; bad entries and shadowed ids dropped', () => {
+  const list = cleanCustomProviders([
+    { id: 'ollama', label: 'Ollama', baseUrl: 'http://localhost:11434/v1/', models: ['llama3.1:8b', 'llama3.1:8b', 'bad id', ''] },
+    { id: 'openai', label: 'x', baseUrl: 'http://a/v1', models: [] },          // would shadow a built-in provider
+    { id: 'x', label: 'x', baseUrl: 'file:///etc', models: [] },
+    { id: 'y', label: 'y', baseUrl: 'http://user:pw@host/v1', models: [] },
+    { id: 'ollama', label: 'dup', baseUrl: 'http://b/v1', models: [] }
+  ]);
+  assert.deepEqual(list, [{ id: 'ollama', label: 'Ollama', baseUrl: 'http://localhost:11434/v1', models: ['llama3.1:8b'] }]);
+});
+
+const lm = [{ id: 'lmstudio', label: 'LM Studio', baseUrl: 'http://localhost:1234/v1', models: ['qwen2.5-coder'] }, { id: 'gw', label: 'Gateway', baseUrl: 'https://gw.example/v1', models: ['m1'] }];
+
+test('OpenCode: openai-compatible providers, the key by env reference only', () => {
+  const p = opencodeProviders(lm, (id) => id === 'gw');
+  assert.deepEqual(p.lmstudio, { npm: '@ai-sdk/openai-compatible', name: 'LM Studio', options: { baseURL: 'http://localhost:1234/v1' }, models: { 'qwen2.5-coder': { name: 'qwen2.5-coder' } } });
+  assert.equal(p.gw.options.apiKey, `{env:${customKeyEnv('gw')}}`);
+  assert.equal(customKeyEnv('my-gw'), 'MD_MODEL_KEY_MY_GW');
+});
+
+test('Pi: your models.json kept, our providers added, the key by env var name', () => {
+  const mine = JSON.stringify({ providers: { mine: { baseUrl: 'http://x', models: [] } }, other: 1 });
+  const out = JSON.parse(piModelsJson(mine, lm, (id) => id === 'gw'));
+  assert.ok(out.providers.mine);
+  assert.equal(out.other, 1);
+  assert.deepEqual(out.providers.lmstudio, { baseUrl: 'http://localhost:1234/v1', api: 'openai-completions', apiKey: 'none', models: [{ id: 'qwen2.5-coder', name: 'qwen2.5-coder' }] });
+  assert.equal(out.providers.gw.apiKey, customKeyEnv('gw'));
+  assert.doesNotThrow(() => JSON.parse(piModelsJson('not json', lm, () => false)));
+});
+
+test('model listings: OpenAI /models and Ollama /api/tags', () => {
+  assert.deepEqual(modelsFromListing({ data: [{ id: 'a' }, { id: 'b' }, { id: 'a' }] }), ['a', 'b']);
+  assert.deepEqual(modelsFromListing({ models: [{ name: 'llama3.1:8b' }, { model: 'qwen' }] }), ['llama3.1:8b', 'qwen']);
+  assert.deepEqual(modelsFromListing(null), []);
+});

@@ -92,7 +92,7 @@ import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, rel
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
 import type { PromptConnection } from '../shared/agentConnections';
 import { PROVIDER_BACKENDS, providerKeyEnv } from '../shared/providerBackends';
-import { LIST_MODELS, SIGN_IN, authProviders, parseModelList, type ManagedEngine } from '../shared/engineModels';
+import { LIST_MODELS, SIGN_IN, authProviders, cleanCustomProviders, customKeyEnv, modelsFromListing, opencodeProviders, parseModelList, piModelsJson, type ManagedEngine } from '../shared/engineModels';
 import { DELIVERABLES_DIR, addLink, canOpenExternally, currentTaskOf, isInside, linkFor, writtenFiles, type DeliverableLink } from '../shared/deliverables';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES, hasPlaceholderHost, probeSpecFor } from '../shared/integrations';
 import { RosterStore } from './roster';
@@ -3536,6 +3536,24 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     const modelSlug = modelIdx >= 0 ? (opts.args?.[modelIdx + 1] ?? '') : '';
     const prefix = modelSlug.includes('/') ? modelSlug.split('/')[0].toLowerCase() : '';
     Object.assign(extra, providerKeyEnv(modelSlug, (backend) => integrations.getSecret(providerKeyRef(backend))));
+    // 1b) Keys of your own OpenAI-compatible providers, by env var name (the
+    //     configs below point at it; no key is written into a file).
+    for (const p of cleanCustomProviders(cfg.customModelProviders)) {
+      const key = integrations.getSecret(customKeyRef(p.id));
+      if (key) extra[customKeyEnv(p.id)] = key;
+    }
+    // Pi: your models.json (already copied into its agent dir) plus those providers.
+    const piDir = opts.env?.PI_CODING_AGENT_DIR;
+    if (provider === 'pi' && piDir) {
+      const custom = cleanCustomProviders(cfg.customModelProviders);
+      if (custom.length) {
+        const file = join(piDir, 'models.json');
+        let existing: string | null = null;
+        try { existing = readFileSync(file, 'utf8'); } catch { /* none yet */ }
+        try { writeFileSync(file, piModelsJson(existing, custom, (id) => !!extra[customKeyEnv(id)]), 'utf8'); }
+        catch (e) { console.error('[pi] could not write models.json:', e); }
+      }
+    }
     // 2) Floor auto-state for pi's bundled extension auto-allow (guardrail #5): it
     //    only auto-approves tool calls when this is '1' (i.e. floor auto mode on).
     extra.HIVE_AUTO_APPROVE = cfg.autoMode ? '1' : '0';
@@ -3555,6 +3573,9 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           local: { npm: '@ai-sdk/openai-compatible', name: 'Local (self-hosted)', options: { baseURL: baseUrl }, models: { [localModel]: { name: localModel } } }
         };
       }
+      // Your own OpenAI-compatible providers (AI providers → Local & compatible).
+      const custom = cleanCustomProviders(cfg.customModelProviders);
+      if (custom.length) oc.provider = { ...((oc.provider as Record<string, unknown>) ?? {}), ...opencodeProviders(custom, (id) => !!extra[customKeyEnv(id)]) };
       // Connections (keyed MCP servers) through main's gateway, as OpenCode
       // remote servers: only a capability token, never the key. Same list the
       // agent's prompt names (hive.keyedConnectionsFor).
@@ -3800,6 +3821,43 @@ ipcMain.handle('engines:models', async (_evt, engine: unknown) => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, models: [], error: /ENOENT|not found|not recognized/i.test(msg) ? `${cmd} is not installed` : msg };
+  }
+});
+// Your own OpenAI-compatible providers for OpenCode and Pi (local models).
+const customKeyRef = (id: string): string => `apikey:custom:${id}`;
+ipcMain.handle('customProviders:save', (_evt, list: unknown) => {
+  const clean = cleanCustomProviders(list);
+  // A provider that is gone takes its key with it.
+  for (const old of readConfig().customModelProviders ?? []) if (!clean.some((p) => p.id === old.id)) { try { integrations.deleteSecret(customKeyRef(old.id)); } catch { /* none */ } }
+  writeConfig({ customModelProviders: clean });
+  return clean;
+});
+ipcMain.handle('customProviders:setKey', (_evt, id: unknown, key: unknown) => {
+  if (typeof id !== 'string' || !(readConfig().customModelProviders ?? []).some((p) => p.id === id)) return { ok: false, error: 'unknown provider' };
+  if (typeof key !== 'string' || !key.trim()) { try { integrations.deleteSecret(customKeyRef(id)); } catch { /* none */ } return { ok: true }; }
+  return integrations.setSecret(customKeyRef(id), key.trim());
+});
+ipcMain.handle('customProviders:hasKey', (_evt, id: unknown) => typeof id === 'string' && integrations.hasSecret(customKeyRef(id)));
+// The models an OpenAI-compatible endpoint serves (GET <base>/models; Ollama's
+// /api/tags as a fallback). The key, when stored, goes in the request only.
+ipcMain.handle('customProviders:fetchModels', async (_evt, baseUrl: unknown, id: unknown) => {
+  if (typeof baseUrl !== 'string') return { ok: false, models: [], error: 'bad request' };
+  let base: URL;
+  try { base = new URL(baseUrl.trim().replace(/\/+$/, '')); if (base.protocol !== 'http:' && base.protocol !== 'https:') throw new Error('x'); }
+  catch { return { ok: false, models: [], error: 'the base URL must start with http:// or https://' }; }
+  const key = typeof id === 'string' ? integrations.getSecret(customKeyRef(id)) : undefined;
+  const get = async (u: string) => {
+    const r = await fetch(u, { headers: key ? { Authorization: `Bearer ${key}` } : {}, signal: AbortSignal.timeout(8000), redirect: 'manual' });
+    return { status: r.status, body: r.ok ? await r.json().catch(() => null) : null };
+  };
+  try {
+    let r = await get(`${base.href.replace(/\/+$/, '')}/models`);
+    let models = modelsFromListing(r.body);
+    if (!models.length) { r = await get(`${base.origin}/api/tags`).catch(() => r); models = modelsFromListing(r.body); }
+    return models.length ? { ok: true, models } : { ok: false, models: [], error: `no models listed (HTTP ${r.status})` };
+  } catch (e) {
+    const msg = e instanceof Error && e.name === 'TimeoutError' ? 'no answer in 8 s' : e instanceof Error ? e.message : String(e);
+    return { ok: false, models: [], error: `could not reach it: ${msg}` };
   }
 });
 // Pi's own sign-in (`pi` → /login), as provider names only.

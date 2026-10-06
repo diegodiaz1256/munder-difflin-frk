@@ -2289,7 +2289,23 @@
       "done": "تم",
       "couldNotStart": "تعذّر تشغيل {{cmd}}: هل هو مثبّت؟",
       "piSteps": "اكتب /login واضغط Enter واختر مزودك (Claude Pro/Max أو ChatGPT أو GitHub Copilot أو Gemini…). اتبع الرابط الظاهر. ثم اضغط تم.",
-      "opencodeSteps": "اختر مزودك بالأسهم وEnter ثم اتبع الخطوات (فتح رابط أو لصق مفتاح). ثم اضغط تم."
+      "opencodeSteps": "اختر مزودك بالأسهم وEnter ثم اتبع الخطوات (فتح رابط أو لصق مفتاح). ثم اضغط تم.",
+      "customTitle": "مزودون محليون ومتوافقون مع OpenAI",
+      "customBody": "نماذج محلية (Ollama وLM Studio وvLLM وllama.cpp) أو أي خادم متوافق مع OpenAI. يحصل عليها كل وكلاء OpenCode وPi؛ اختر النموذج بصيغة المزود/النموذج.",
+      "customAdd": "إضافة:",
+      "customOther": "خادم آخر",
+      "customSaved": "تم الحفظ. أعد تشغيل وكيل OpenCode أو Pi العامل لاستخدامه.",
+      "customDropped": "تم الحفظ، دون الإدخالات التي لا تملك اسمًا صالحًا أو عنوان http(s).",
+      "customHint": "في مكتب WSL يشير localhost إلى التوزيعة نفسها: الخادم العامل على Windows يحتاج الشبكة المرآتية أو عنوان مضيف Windows.",
+      "customName": "الاسم",
+      "customIdTip": "تبدأ معرّفات النماذج بهذا، مثل ollama/llama3.1:8b",
+      "customKeyStored": "المفتاح محفوظ — الصق مفتاحًا جديدًا لاستبداله",
+      "customKeyPh": "مفتاح API (اختياري؛ الخوادم المحلية لا تحتاجه عادة)",
+      "customKeyAfterSave": "احفظ أولًا لإضافة مفتاح.",
+      "customModels": "النماذج:",
+      "customRemoveModel": "انقر للإزالة",
+      "customModelPh": "أضف معرّف نموذج",
+      "customFetch": "اطلب من الخادم"
     }
   },
   "hivePicker": {

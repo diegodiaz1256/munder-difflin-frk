@@ -2289,7 +2289,23 @@
       "done": "Done",
       "couldNotStart": "Could not start {{cmd}}: is it installed?",
       "piSteps": "Type /login, press Enter and choose your provider (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini…). Follow the link it shows. Then press Done.",
-      "opencodeSteps": "Pick your provider with the arrow keys and Enter, then follow the steps (a link to open, or paste a key). Then press Done."
+      "opencodeSteps": "Pick your provider with the arrow keys and Enter, then follow the steps (a link to open, or paste a key). Then press Done.",
+      "customTitle": "Local & OpenAI-compatible providers",
+      "customBody": "Local models (Ollama, LM Studio, vLLM, llama.cpp) or any OpenAI-compatible server. Every OpenCode and Pi agent gets them; pick a model as provider/model.",
+      "customAdd": "Add:",
+      "customOther": "Other server",
+      "customSaved": "Saved. Restart a running OpenCode or Pi agent to use it.",
+      "customDropped": "Saved, without the entries that had no valid name or http(s) URL.",
+      "customHint": "On a WSL office, localhost is the distribution itself: a server running on Windows needs mirrored networking or the Windows host’s address.",
+      "customName": "Name",
+      "customIdTip": "Model ids start with this, e.g. ollama/llama3.1:8b",
+      "customKeyStored": "key stored — paste a new one to replace it",
+      "customKeyPh": "API key (optional; local servers usually need none)",
+      "customKeyAfterSave": "Save first to add a key.",
+      "customModels": "Models:",
+      "customRemoveModel": "Click to remove",
+      "customModelPh": "add a model id",
+      "customFetch": "Fetch from server"
     }
   },
   "hivePicker": {

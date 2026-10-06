@@ -373,6 +373,9 @@ export interface HarnessConfig {
    *  upstream). API KEYS are NOT stored here — they live write-only in the secret
    *  broker (integrations.ts), read MAIN-ONLY at spawn. */
   providerBaseUrls?: Partial<Record<AgentProvider, string>>;
+  /** Your own OpenAI-compatible model providers (Ollama, LM Studio, vLLM…), given
+   *  to every OpenCode and Pi agent. Keys are in the encrypted store (apikey:custom:<id>). */
+  customModelProviders?: Array<{ id: string; label: string; baseUrl: string; models: string[] }>;
   /** Per-CLI-provider default model slug, used to pre-fill the model picker. */
   providerDefaultModels?: Partial<Record<AgentProvider, string>>;
   /** Certificates for agents' HTTPS (custom endpoints, company gateways):

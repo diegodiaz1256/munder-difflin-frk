@@ -2289,7 +2289,23 @@
       "done": "完成",
       "couldNotStart": "无法启动 {{cmd}}：是否已安装？",
       "piSteps": "输入 /login，按回车并选择你的提供商（Claude Pro/Max、ChatGPT、GitHub Copilot、Gemini…）。按提示打开链接。然后点击完成。",
-      "opencodeSteps": "用方向键和回车选择提供商，然后按步骤操作（打开链接或粘贴密钥）。然后点击完成。"
+      "opencodeSteps": "用方向键和回车选择提供商，然后按步骤操作（打开链接或粘贴密钥）。然后点击完成。",
+      "customTitle": "本地与 OpenAI 兼容的提供商",
+      "customBody": "本地模型（Ollama、LM Studio、vLLM、llama.cpp）或任何 OpenAI 兼容服务器。所有 OpenCode 和 Pi 智能体都会获得；按 提供商/模型 选择模型。",
+      "customAdd": "添加：",
+      "customOther": "其他服务器",
+      "customSaved": "已保存。重启运行中的 OpenCode 或 Pi 智能体以使用。",
+      "customDropped": "已保存，已去除没有有效名称或 http(s) 地址的条目。",
+      "customHint": "在 WSL 办公室中，localhost 指发行版本身：在 Windows 上运行的服务器需要镜像网络或 Windows 主机地址。",
+      "customName": "名称",
+      "customIdTip": "模型 ID 以此开头，例如 ollama/llama3.1:8b",
+      "customKeyStored": "密钥已保存 — 粘贴新的以替换",
+      "customKeyPh": "API 密钥（可选；本地服务器通常不需要）",
+      "customKeyAfterSave": "先保存再添加密钥。",
+      "customModels": "模型：",
+      "customRemoveModel": "点击移除",
+      "customModelPh": "添加模型 ID",
+      "customFetch": "从服务器获取"
     }
   },
   "hivePicker": {

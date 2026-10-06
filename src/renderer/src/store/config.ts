@@ -163,6 +163,7 @@ export interface HarnessConfig {
   providerBaseUrls?: Partial<Record<AgentProvider, string>>;
   /** Per-CLI-provider default model slug, used to pre-fill the model picker. */
   providerDefaultModels?: Partial<Record<AgentProvider, string>>;
+  customModelProviders?: Array<{ id: string; label: string; baseUrl: string; models: string[] }>;
   /** Certificates for agents' HTTPS (custom endpoints, company gateways):
    *  verify on/off, an extra CA file, and trusting the Windows / WSL stores.
    *  See src/main/caBundle.ts. */
