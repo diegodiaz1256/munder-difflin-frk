@@ -1597,7 +1597,9 @@
       "temps": "Temps",
       "providers": "AI providers",
       "deliverables": "Deliverables",
-      "now": "Now"
+      "now": "Now",
+      "group_office": "Office",
+      "group_setup": "Setup"
     },
     "state": {
       "needsYou": "Needs you",

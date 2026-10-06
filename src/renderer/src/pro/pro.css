@@ -170,3 +170,6 @@ button.pro-card:hover { border-color: var(--pro-line-strong); }
 }
 @keyframes pro-envelope { from { left: var(--x1); top: var(--y1); } to { left: var(--x2); top: var(--y2); } }
 @media (prefers-reduced-motion: reduce) { .pro-route-live, .pro-envelope { animation: none; } }
+
+/* A folding group header in the sidebar (ProShell NAV_GROUPS). */
+.pro-nav.pro-nav-group { color: var(--cth-ink-500); font-size: 12px; margin-top: 6px; }
