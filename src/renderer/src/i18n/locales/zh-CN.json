@@ -1343,7 +1343,7 @@
     "availability": "可用性",
     "enabled": "已启用",
     "disabled": "已禁用",
-    "availableToAll": "✓ 所有工人可用",
+    "availableToAll": "✓ 已启用 — 谁可以使用以及如何使用，见“谁可以使用各个 REST API”",
     "notAvailableYet": "工人尚不可用",
     "addSecretToEnable": "添加密钥并启用即可使其可用。",
     "readyOnceSaved": "保存后即就绪。",
@@ -1836,7 +1836,8 @@
       "accessWrite": "读写",
       "accessReadShort": "只读",
       "accessWriteShort": "读写",
-      "accessHelp": "此角色可对每个连接执行的操作。连接自身的上限（连接页）仍然有效。"
+      "accessHelp": "此角色可对每个连接执行的操作。连接自身的上限（连接页）仍然有效。",
+      "apiHelp": "此角色对每个 REST API 可执行的操作（连接 → REST API）。未设置即为只读。"
     },
     "conn": {
       "step1": "选择服务并获取密钥",
@@ -1901,7 +1902,10 @@
       "why_roleLacks": "否：其角色不包含它",
       "why_webBlocked": "否：网页权限已被移除",
       "why_ceilingNone": "否：上限为“无”",
-      "why_providerNoMcp": "否：其 CLI 不从应用获取 MCP"
+      "why_providerNoMcp": "否：其 CLI 不从应用获取 MCP",
+      "apiAccessTitle": "谁可以使用各个 REST API",
+      "apiAccessBody": "任何智能体对每个 API 能做的最大范围，以及哪些智能体可以使用。角色只能降低，不能提高。应用会检查每个请求。",
+      "apiReadMeans": "只读：GET 请求和搜索（Jira JQL、Notion 搜索、GraphQL 查询）。任何会修改数据的请求都会被拒绝。"
     },
     "env": {
       "step1": "普通变量提供给所有代理",
@@ -2261,6 +2265,31 @@
       "openFailed": "无法打开。",
       "showAll": "显示全部",
       "noneForTask": "此任务暂无内容。"
+    },
+    "engines": {
+      "title": "引擎",
+      "keysTitle": "API 密钥、端点和证书",
+      "signedIn": "已登录",
+      "notSignedIn": "未登录",
+      "signInTitle": "登录",
+      "signedInTo": "已登录：{{list}}。应用中的智能体会使用它。",
+      "notSignedInBody": "此机器上尚未用订阅登录。请登录，或在下方添加 API 密钥。",
+      "subscription": "订阅",
+      "signIn": "登录…",
+      "check": "再次检查",
+      "orKey": "或在下方使用 API 密钥",
+      "modelTitle": "默认模型",
+      "loadModels": "加载模型",
+      "loading": "加载中…",
+      "modelsFound": "有 {{count}} 个模型可用：在输入框中选择。",
+      "noModels": "没有列出模型。",
+      "saved": "已保存。此引擎的新智能体将使用它启动。",
+      "modelHint": "添加此引擎的智能体且未选模型时使用。重启运行中的智能体以更改。",
+      "signInTo": "登录 {{name}}",
+      "done": "完成",
+      "couldNotStart": "无法启动 {{cmd}}：是否已安装？",
+      "piSteps": "输入 /login，按回车并选择你的提供商（Claude Pro/Max、ChatGPT、GitHub Copilot、Gemini…）。按提示打开链接。然后点击完成。",
+      "opencodeSteps": "用方向键和回车选择提供商，然后按步骤操作（打开链接或粘贴密钥）。然后点击完成。"
     }
   },
   "hivePicker": {

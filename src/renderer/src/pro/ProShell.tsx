@@ -81,7 +81,7 @@ export function ProShell({ config }: { config: HarnessConfig }) {
     case 'memory': page = <MemoryView tasks={tasks} roster={roster} />; break;
     case 'capabilities': page = <CapabilitiesView roster={roster} config={config} />; break;
     case 'temps': page = <TempsView roster={roster} />; break;
-    case 'connections': page = <ConnectionsView roster={roster} />; break;
+    case 'connections': page = <ConnectionsView roster={roster} config={config} />; break;
     case 'team': page = <TeamView />; break;
     case 'factories': page = <FactoriesView />; break;
     case 'environment': page = <EnvironmentView roster={roster} />; break;

@@ -5,6 +5,7 @@ import type { Agent } from '@/store/store';
 import { IntegrationsRegistry } from '@/components/IntegrationsRegistry';
 import { Avatar, StateBadge } from './data';
 import { Guide, useGuide } from './Guide';
+import type { HarnessConfig } from '@/store/config';
 
 type Connection = Awaited<ReturnType<typeof window.cth.connectionsList>>[number];
 type TestResult = { ok: boolean; message: string };
@@ -22,7 +23,7 @@ const STEPS = (t: TFunction): Array<[string, string]> =>
  * mcpGateway.ts). A guide walks through it. Below, the REST APIs that agents
  * reach through the key broker.
  */
-export function ConnectionsView({ roster }: { roster: Agent[] }) {
+export function ConnectionsView({ roster, config }: { roster: Agent[]; config: HarnessConfig }) {
   const { t } = useTranslation();
   const [list, setList] = useState<Connection[]>([]);
   const [guide, toggleGuide] = useGuide('cth.connectionsGuide');
@@ -57,6 +58,7 @@ export function ConnectionsView({ roster }: { roster: Agent[] }) {
       </p>
       {/* A plain card that grows with its content: the page scrolls, not the card. */}
       <div className="pro-card" style={{ flexShrink: 0 }}><IntegrationsRegistry /></div>
+      <ApiAccess roster={roster} config={config} />
     </div>
   );
 }
@@ -316,5 +318,74 @@ function WhoAndActivity({ id, version }: { id: string; version: string }) {
         ))}
       </div>
     </details>
+  );
+}
+
+type Level = 'none' | 'read' | 'readwrite';
+
+/** Who may use each REST API (Jira, Linear, Notion…) and how: a limit no role
+ *  can exceed (read-only = GET and searches), and every agent or chosen ones.
+ *  The key broker enforces both on every request. */
+function ApiAccess({ roster, config }: { roster: Agent[]; config: HarnessConfig }) {
+  const { t } = useTranslation();
+  const [apis, setApis] = useState<Array<{ id: string; label: string; enabled: boolean }>>([]);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const load = () => { void window.cth.integrationsList().then((r) => { if (alive) setApis(r.map((x) => ({ id: x.id, label: x.label, enabled: x.enabled }))); }).catch(() => {}); };
+    load();
+    const id = setInterval(load, 5000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+  if (!apis.length) return null;
+  const act = async (fn: () => Promise<unknown>) => { setBusy(true); try { await fn(); } finally { setBusy(false); } };
+  return (
+    <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <h3 style={{ margin: '6px 0 0', fontSize: 14 }}>{t('pro.conn.apiAccessTitle')}</h3>
+      <p className="pro-text" style={{ marginTop: -6 }}>{t('pro.conn.apiAccessBody')}</p>
+      <div className="pro-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))' }}>
+        {apis.map((a) => {
+          const level: Level = config.integrationPolicy?.[a.id] ?? 'read';
+          const scope = config.integrationScopes?.[a.id];
+          const scoped = Array.isArray(scope);
+          return (
+            <article key={a.id} className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 8, opacity: a.enabled ? 1 : 0.65 }}>
+              <div className="pro-row">
+                <p className="pro-title">{a.label}</p>
+                <span className="pro-chip pro-mono" style={{ fontSize: 11 }}>{a.id}</span>
+                {!a.enabled && <StateBadge label={t('pro.conn.off')} tone="grey" />}
+              </div>
+              <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.conn.accessTitle')}</span>
+              <div className="pro-tabs" role="radiogroup" aria-label={t('pro.conn.accessTitle')}>
+                {(['none', 'read', 'readwrite'] as const).map((lv) => (
+                  <button key={lv} role="radio" aria-selected={level === lv} aria-checked={level === lv} disabled={busy}
+                    onClick={() => { if (level !== lv) void act(() => window.cth.integrationsSetAccess(a.id, lv)); }}>{t(`pro.conn.access_${lv}`)}</button>
+                ))}
+              </div>
+              {level === 'read' && <span className="pro-sub" style={{ fontSize: 11.5 }}>{t('pro.conn.apiReadMeans')}</span>}
+              <div className="pro-tabs" role="radiogroup" aria-label={t('pro.conn.whoGetsIt')}>
+                <button role="radio" aria-selected={!scoped} aria-checked={!scoped} disabled={busy} onClick={() => void act(() => window.cth.integrationsSetScope(a.id, null))}>{t('pro.conn.everyAgent')}</button>
+                <button role="radio" aria-selected={scoped} aria-checked={scoped} disabled={busy} onClick={() => { if (!scoped) void act(() => window.cth.integrationsSetScope(a.id, [])); }}>{t('pro.conn.chooseAgents')}</button>
+              </div>
+              {scoped && (
+                <div className="pro-row" style={{ flexWrap: 'wrap', gap: 6 }}>
+                  {roster.map((ag) => {
+                    const on = scope!.includes(ag.id);
+                    return (
+                      <button key={ag.id} className={`pro-chip ${on ? 'pro-chip-on' : 'pro-chip-off'}`} style={{ cursor: 'pointer', fontFamily: 'var(--cth-font-ui)' }}
+                        aria-pressed={on} disabled={busy}
+                        onClick={() => void act(() => window.cth.integrationsSetScope(a.id, on ? scope!.filter((x) => x !== ag.id) : [...scope!, ag.id]))}>
+                        <Avatar agent={ag} /> {ag.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+      <span className="pro-sub" style={{ fontSize: 11.5 }}>{t('pro.conn.restartNote')}</span>
+    </section>
   );
 }

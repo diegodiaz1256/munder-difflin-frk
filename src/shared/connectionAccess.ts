@@ -122,3 +122,33 @@ export function explainConnection(agentId: string, f: ConnectionFacts): { access
   if (access === 'none') return none((f.ceiling ?? DEFAULT_CEILING) === 'none' ? 'ceilingNone' : 'roleLacks');
   return { access };
 }
+
+// ─── REST APIs (Connections → REST APIs: Jira, Linear, Notion…) ──────────────
+// The same two levels as connections: a ceiling per API (absent = read-only)
+// and the agent's role, keyed `api:<integration id>` in its access record. A
+// role that does not mention an API leaves it read-only (roles predate APIs
+// having access levels, so nothing an agent had is taken away).
+
+export const apiKey = (integrationId: string): string => `api:${integrationId}`;
+
+export function effectiveApiAccess(ceiling: Access | undefined, record: Record<string, Access> | undefined, integrationId: string): Access {
+  return minAccess(ceiling ?? DEFAULT_CEILING, record?.[apiKey(integrationId)] ?? ROLELESS_ACCESS);
+}
+
+/** Paths whose POST only reads: Jira JQL search, Notion search / database query,
+ *  GraphQL endpoints (a query; a mutation is checked in the body). */
+const READ_POST_PATH = /(^|\/)(search|query|graphql)(\/|$)|\/search\/jql$|\/jql\/match$/i;
+
+/** Does this request only read? Read-only access lets nothing else through. */
+export function isReadRequest(method: string, path: string, body?: string): boolean {
+  const m = method.toUpperCase();
+  if (m === 'GET' || m === 'HEAD' || m === 'OPTIONS') return true;
+  if (m !== 'POST' || !READ_POST_PATH.test(path.split('?')[0])) return false;
+  // GraphQL: a mutation writes, wherever it is.
+  if (/graphql/i.test(path) || /"query"\s*:/.test(body ?? '')) {
+    let q = '';
+    try { const j = JSON.parse(body ?? '{}') as { query?: unknown }; q = typeof j.query === 'string' ? j.query : ''; } catch { q = body ?? ''; }
+    return !/^\s*(mutation|subscription)\b/i.test(q.replace(/#[^\n]*\n/g, ''));
+  }
+  return true;
+}

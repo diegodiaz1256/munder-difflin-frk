@@ -156,8 +156,6 @@ export function AiEnginesSettings({ config }: { config: HarnessConfig }) {
         ))}
       </div>
 
-      <PiSignIn />
-
       {/* Per-CLI local endpoint + default model */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={headStyle}>{t('aiEngines.localEndpoint')}</div>
@@ -193,42 +191,6 @@ export function AiEnginesSettings({ config }: { config: HarnessConfig }) {
       }}>
         {t('aiEngines.autoModeCaveat')}
       </div>
-    </div>
-  );
-}
-
-/** Pi signs in two ways: an API key above (it reads the standard variables) or
- *  your subscription through Pi's own /login, which the app's Pi agents reuse
- *  (their auth.json is linked to yours). Shows who Pi is signed in to — names
- *  only, never a token. */
-function PiSignIn() {
-  const { t } = useTranslation();
-  const [status, setStatus] = useState<{ file: string; providers: Array<{ id: string; kind: string }> } | null>(null);
-  const [copied, setCopied] = useState(false);
-  const refresh = () => { void window.cth.piAuthStatus?.().then(setStatus).catch(() => setStatus(null)); };
-  useEffect(refresh, []);
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ ...headStyle, display: 'flex', alignItems: 'center', gap: 6 }}><ProviderLogo provider="pi" size={12} /> {t('aiEngines.piTitle')}</div>
-      <div style={{ fontSize: 12, color: 'var(--cth-ink-700)', lineHeight: '18px' }}>{t('aiEngines.piHow')}</div>
-      <ol style={{ margin: 0, paddingInlineStart: 18, fontSize: 12, color: 'var(--cth-ink-900)', lineHeight: '19px' }}>
-        <li>{t('aiEngines.piKeyWay')}</li>
-        <li>
-          {t('aiEngines.piLoginWay')}{' '}
-          <code style={{ fontFamily: 'var(--cth-font-mono)', background: 'var(--cth-paper-100)', padding: '0 4px' }}>pi</code>{' → '}
-          <code style={{ fontFamily: 'var(--cth-font-mono)', background: 'var(--cth-paper-100)', padding: '0 4px' }}>/login</code>{' '}
-          <PixelButton variant="secondary" size="sm" onClick={() => { void navigator.clipboard.writeText('pi').then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }); }}>{copied ? t('aiEngines.piCopied') : t('aiEngines.piCopy')}</PixelButton>
-        </li>
-      </ol>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--cth-ink-900)' }}>
-        <span>
-          {status && status.providers.length
-            ? t('aiEngines.piSignedIn', { list: status.providers.map((p) => `${p.id}${p.kind === 'oauth' ? ` (${t('aiEngines.piSubscription')})` : ''}`).join(', ') })
-            : t('aiEngines.piNotSignedIn')}
-        </span>
-        <PixelButton variant="secondary" size="sm" onClick={refresh}>{t('aiEngines.piCheck')}</PixelButton>
-      </div>
-      <div style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>{t('aiEngines.piRestart')}</div>
     </div>
   );
 }

@@ -240,6 +240,11 @@ export interface HarnessConfig {
   /** The most any agent may do with a connection (shared/connectionAccess.ts):
    *  connection id → none | read | readwrite. Absent → read-only. */
   connectionPolicy?: Record<string, Access>;
+  /** The most any agent may do with a REST API (Connections → REST APIs), by
+   *  integration id. Absent → read-only. */
+  integrationPolicy?: Record<string, Access>;
+  /** REST APIs limited to some agents (integration id → agent ids). Absent → every agent. */
+  integrationScopes?: Record<string, string[]>;
   /** What each agent's role grants per service: agent id → service id → level.
    *  Written with the grant. No entry → read-only on the connections it had. */
   agentMcpAccess?: Record<string, Record<string, Access>>;
@@ -820,7 +825,11 @@ export function setAgentMcpGrant(agentId: unknown, servers: unknown, access?: un
     agentMcpGrants[agentId] = list;
     // What the role allows, per service; a service it names without a level is read-only.
     const given = cleanAccessMap(access);
-    agentMcpAccess[agentId] = Object.fromEntries(list.map((s) => [s, isAccess(given[s]) ? given[s] : 'read'])) as Record<string, Access>;
+    agentMcpAccess[agentId] = {
+      ...Object.fromEntries(list.map((s) => [s, isAccess(given[s]) ? given[s] : 'read'])),
+      // The role's REST API levels ride along (api:<id>).
+      ...Object.fromEntries(Object.entries(given).filter(([k]) => k.startsWith('api:')))
+    } as Record<string, Access>;
   }
   return persistConfig({ ...current, agentMcpGrants, agentMcpAccess });
 }

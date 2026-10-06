@@ -1343,7 +1343,7 @@
     "availability": "Availability",
     "enabled": "enabled",
     "disabled": "disabled",
-    "availableToAll": "✓ Available to all workers",
+    "availableToAll": "✓ Enabled — who may use it and how is set under “Who may use each REST API”",
     "notAvailableYet": "Not available to workers yet",
     "addSecretToEnable": "Add a secret and enable to make it available.",
     "readyOnceSaved": "Ready once saved.",
@@ -1836,7 +1836,8 @@
       "accessWrite": "Read & write",
       "accessReadShort": "read",
       "accessWriteShort": "read & write",
-      "accessHelp": "What this role may do with each connection. The connection’s own limit (Connections) still caps it."
+      "accessHelp": "What this role may do with each connection. The connection’s own limit (Connections) still caps it.",
+      "apiHelp": "What this role may do with each REST API (Connections → REST APIs). Not set means read-only."
     },
     "conn": {
       "step1": "Pick a service and get its key",
@@ -1901,7 +1902,10 @@
       "why_roleLacks": "no: its role does not include it",
       "why_webBlocked": "no: Web taken away",
       "why_ceilingNone": "no: limit is “nothing”",
-      "why_providerNoMcp": "no: its CLI does not take MCP from the app"
+      "why_providerNoMcp": "no: its CLI does not take MCP from the app",
+      "apiAccessTitle": "Who may use each REST API",
+      "apiAccessBody": "The most any agent can do with each API, and which agents get it. A role can lower it, never raise it. The app checks every request.",
+      "apiReadMeans": "Read-only: GET requests and searches (Jira JQL, Notion search, GraphQL queries). Anything that would change data is refused."
     },
     "env": {
       "step1": "Plain variables reach every agent",
@@ -2261,6 +2265,31 @@
       "openFailed": "Could not open it.",
       "showAll": "Show all",
       "noneForTask": "Nothing for this task yet."
+    },
+    "engines": {
+      "title": "Engines",
+      "keysTitle": "API keys, endpoints and certificates",
+      "signedIn": "Signed in",
+      "notSignedIn": "Not signed in",
+      "signInTitle": "Sign-in",
+      "signedInTo": "Signed in to: {{list}}. The app’s agents use it.",
+      "notSignedInBody": "Not signed in with a subscription on this machine. Sign in, or add an API key below.",
+      "subscription": "subscription",
+      "signIn": "Sign in…",
+      "check": "Check again",
+      "orKey": "or use an API key below",
+      "modelTitle": "Default model",
+      "loadModels": "Load models",
+      "loading": "Loading…",
+      "modelsFound": "{{count}} models available: pick one in the field.",
+      "noModels": "No models listed.",
+      "saved": "Saved. New agents of this engine start with it.",
+      "modelHint": "Used when you add an agent of this engine without choosing a model. Restart a running agent to change it.",
+      "signInTo": "Sign in to {{name}}",
+      "done": "Done",
+      "couldNotStart": "Could not start {{cmd}}: is it installed?",
+      "piSteps": "Type /login, press Enter and choose your provider (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini…). Follow the link it shows. Then press Done.",
+      "opencodeSteps": "Pick your provider with the arrow keys and Enter, then follow the steps (a link to open, or paste a key). Then press Done."
     }
   },
   "hivePicker": {

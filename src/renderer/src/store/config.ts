@@ -131,6 +131,8 @@ export interface HarnessConfig {
    *  only these agent ids (on their next spawn). Absent → every agent. */
   connectionScopes?: Record<string, string[]>;
   mcpOnlyManaged?: boolean;
+  integrationPolicy?: Record<string, 'none' | 'read' | 'readwrite'>;
+  integrationScopes?: Record<string, string[]>;
   /** Extra Connections beyond each service's first (two GitHub accounts…):
    *  id `<service>--<slug>`, the service's catalog id, and a name. */
   connectionInstances?: Array<{ id: string; service: string; label: string }>;

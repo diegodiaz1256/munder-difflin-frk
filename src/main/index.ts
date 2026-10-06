@@ -79,19 +79,20 @@ import * as integrations from './integrations';
 import { applyMissionRequest, type MissionLike } from '../shared/missionRequests';
 import { cleanCustomBundles } from '../shared/roleBundles';
 import { Factories } from './factories';
-import { createWslOffice, describeWslError, distroHomeUnc, fromLinuxPath, listDistros, toWslUnc, mirroredNetworking, parseWslPath, probeInDistro, WSL_INSTALL } from './wsl';
+import { createWslOffice, describeWslError, distroHomeUnc, fromLinuxPath, runInDistroAsync, listDistros, toWslUnc, mirroredNetworking, parseWslPath, probeInDistro, WSL_INSTALL } from './wsl';
 import { WslBridge } from './wslBridge';
 import { McpServers } from './mcpServers';
 import { EnvVault, fingerprintOf } from './envVault';
 import { addConnection, connectionAccessFor, setConnectionAccess, connectionKeyStored, connectionLaunchEnv, instancesOf, listConnections, removeConnection, renameConnection, serviceOf, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
 import { McpGateway, type McpCallRecord } from './mcpGateway';
-import { explainConnection } from '../shared/connectionAccess';
+import { effectiveApiAccess, explainConnection, isAccess, type Access } from '../shared/connectionAccess';
 import { blockedMcpServers } from '../shared/nativeTools';
 import { TeamNode, type TeamInbound } from './teamNode';
 import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, relayToken, saveTeamState, setRelayToken, teamEnabled, teamPublicStatus } from './team';
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
 import type { PromptConnection } from '../shared/agentConnections';
 import { PROVIDER_BACKENDS, providerKeyEnv } from '../shared/providerBackends';
+import { LIST_MODELS, SIGN_IN, authProviders, parseModelList, type ManagedEngine } from '../shared/engineModels';
 import { DELIVERABLES_DIR, addLink, canOpenExternally, currentTaskOf, isInside, linkFor, writtenFiles, type DeliverableLink } from '../shared/deliverables';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES, hasPlaceholderHost, probeSpecFor } from '../shared/integrations';
 import { RosterStore } from './roster';
@@ -3309,14 +3310,14 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     let brokerIntegrations: Array<{ id: string; label: string }> = [];
     const runnersForAgent = envVault.describeRunners();
     if (integrationBroker.running()) {
-      const ids = integrations.enabledIds();
+      const { ids, access } = apisFor(opts.hive.id);
       if (ids.length || runnersForAgent.length) {
-        if (!opts.env?.MD_BROKER_TOKEN) {
-          const token = integrationBroker.grant(opts.id, ids);
-          opts.env = { ...(opts.env ?? {}), MD_BROKER_URL: integrationBroker.url(), MD_BROKER_TOKEN: token };
-        }
+        // Always this agent's own grant (a worker's early grant included): only the
+        // APIs it may use, each at its level. Re-granting revokes the earlier token.
+        const token = integrationBroker.grant(opts.id, ids, access);
+        opts.env = { ...(opts.env ?? {}), MD_BROKER_URL: integrationBroker.url(), MD_BROKER_TOKEN: token };
         const labels = new Map(integrations.listRecords().map((r) => [r.id, r.label]));
-        brokerIntegrations = ids.map((id) => ({ id, label: labels.get(id) ?? id }));
+        brokerIntegrations = ids.map((id) => ({ id, label: `${labels.get(id) ?? id}${access[id] === 'read' ? ', read-only: GET and searches' : ''}` }));
       }
     }
     try {
@@ -3763,6 +3764,44 @@ ipcMain.handle('providerKey:set', (_evt, payload: unknown) => {
   if (typeof p.key !== 'string' || !p.key) return { ok: false, error: 'key required' };
   return integrations.setSecret(providerKeyRef(p.backend), p.key);
 });
+// Engines the app drives (Pi, OpenCode): where they sign in, and the models their
+// own CLI lists. Names only — never a token.
+function engineAuthFile(engine: ManagedEngine): string {
+  return engine === 'pi' ? hive.piAuthStatus().file : join(agentsHome(), '.local', 'share', 'opencode', 'auth.json');
+}
+ipcMain.handle('engines:status', (_evt, engine: unknown) => {
+  if (engine !== 'pi' && engine !== 'opencode') return { ok: false };
+  const file = engineAuthFile(engine);
+  let providers: Array<{ id: string; kind: string }> = [];
+  try { providers = authProviders(readFileSync(file, 'utf8')); } catch { /* not signed in */ }
+  return { ok: true, home: agentsHome(), file, providers, signIn: SIGN_IN[engine] };
+});
+ipcMain.handle('engines:models', async (_evt, engine: unknown) => {
+  if (engine !== 'pi' && engine !== 'opencode') return { ok: false, models: [], error: 'unknown engine' };
+  const { cmd, args } = LIST_MODELS[engine];
+  const w = hive.enabled() ? hive.wslRoot() : null;
+  try {
+    let out: string;
+    if (w) {
+      // A WSL floor's engines live in the distro: a login shell finds npm's bin.
+      out = await runInDistroAsync(w.distro, 'sh', ['-lc', [cmd, ...args].join(' ')]);
+    } else {
+      out = await new Promise<string>((resolve, reject) => {
+        // The stored model keys too, so an engine lists what those keys unlock.
+        const env = { ...process.env, PATH: userShellPath(), ...providerKeyEnv('', (b) => integrations.getSecret(providerKeyRef(b))) };
+        execFile(cmd, args, { env, timeout: 30_000, maxBuffer: 8 * 1024 * 1024, windowsHide: true, shell: process.platform === 'win32' }, (err, stdout, stderr) => {
+          if (err && !String(stdout).trim()) reject(new Error((String(stderr).trim() || err.message).split('\n')[0]));
+          else resolve(String(stdout));
+        });
+      });
+    }
+    const models = parseModelList(out);
+    return models.length ? { ok: true, models } : { ok: false, models: [], error: 'the CLI listed no models (sign in or add a key first)' };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, models: [], error: /ENOENT|not found|not recognized/i.test(msg) ? `${cmd} is not installed` : msg };
+  }
+});
 // Pi's own sign-in (`pi` → /login), as provider names only.
 ipcMain.handle('providers:piStatus', () => hive.piAuthStatus());
 ipcMain.handle('providerKey:has', (_evt, backend: unknown) =>
@@ -4030,6 +4069,21 @@ ipcMain.handle('connections:activity', (_evt, id: unknown) => {
   if (typeof id !== 'string') return [];
   const names = new Map(hive.enabled() ? Object.values(hive.registry().agents).map((a) => [a.id, a.name] as const) : []);
   return mcpCalls.filter((c) => c.serverId === id).slice(-50).reverse().map((c) => ({ ...c, agentName: names.get(c.agentId) ?? c.agentId }));
+});
+// REST APIs: the most any agent may do with one, and which agents get it.
+ipcMain.handle('integrations:setAccess', (_evt, id: unknown, level: unknown) => {
+  if (typeof id !== 'string' || !integrations.getRecord(id) || !isAccess(level)) return { ok: false, error: 'bad request' };
+  writeConfig({ integrationPolicy: { ...(readConfig().integrationPolicy ?? {}), [id]: level } });
+  return { ok: true };
+});
+ipcMain.handle('integrations:setScope', (_evt, id: unknown, agentIds: unknown) => {
+  if (typeof id !== 'string' || !integrations.getRecord(id)) return { ok: false, error: 'bad request' };
+  const scopes = { ...(readConfig().integrationScopes ?? {}) };
+  if (agentIds === null) delete scopes[id];
+  else if (Array.isArray(agentIds) && agentIds.every((a) => typeof a === 'string')) scopes[id] = [...new Set(agentIds as string[])];
+  else return { ok: false, error: 'bad request' };
+  writeConfig({ integrationScopes: scopes });
+  return { ok: true };
 });
 ipcMain.handle('connections:setAccess', (_evt, id: unknown, access: unknown) => setConnectionAccess(id, access));
 ipcMain.handle('connections:setScope', (_evt, id: unknown, agentIds: unknown) => setConnectionScope(id, agentIds));
@@ -4301,6 +4355,23 @@ ipcMain.handle('hive:setAgentHold', (_evt, id: unknown, hold: unknown) => {
 });
 ipcMain.handle('hive:board', () => hive.board());
 ipcMain.handle('hive:tasks', () => hive.tasks());
+/** The REST APIs one agent may use, and how (Connections → REST APIs): enabled,
+ *  its "who" list, and the lower of the API's limit and the agent's role. */
+function apisFor(agentId: string): { ids: string[]; access: Record<string, Access> } {
+  const cfg = readConfig();
+  const ids: string[] = [];
+  const access: Record<string, Access> = {};
+  for (const id of integrations.enabledIds()) {
+    const scope = cfg.integrationScopes?.[id];
+    if (Array.isArray(scope) && !scope.includes(agentId)) continue;
+    const a = effectiveApiAccess(cfg.integrationPolicy?.[id], cfg.agentMcpAccess?.[agentId], id);
+    if (a === 'none') continue;
+    ids.push(id);
+    access[id] = a;
+  }
+  return { ids, access };
+}
+
 // Deliverables ↔ tasks: when an agent writes a file in research/, it is linked
 // to the task the agent has in "doing". Kept in deliverableLinks.json, which only
 // main writes — tasks.json stays the orchestrator's.
@@ -6021,7 +6092,8 @@ async function processSpawnRequest(filePath: string): Promise<void> {
   // is up; the grant is revoked in teardownPty (and below if the spawn fails).
   const brokerEnv: Record<string, string> = {};
   if (integrationBroker.running()) {
-    const token = integrationBroker.grant(workerId, integrations.enabledIds());
+    const apis = apisFor(workerId);
+    const token = integrationBroker.grant(workerId, apis.ids, apis.access);
     brokerEnv.MD_BROKER_URL = integrationBroker.url();
     brokerEnv.MD_BROKER_TOKEN = token;
   }
