@@ -1596,7 +1596,8 @@
       "idle": "空闲",
       "temps": "临时工",
       "providers": "AI 提供商",
-      "deliverables": "交付物"
+      "deliverables": "交付物",
+      "now": "现在"
     },
     "state": {
       "needsYou": "需要你",
@@ -1604,7 +1605,8 @@
       "thinking": "思考中",
       "breaker": "熔断",
       "done": "完成",
-      "idle": "空闲"
+      "idle": "空闲",
+      "stopped": "已停止"
     },
     "spend": {
       "ofCap": "上限 ${{cap}}",
@@ -2330,6 +2332,26 @@
     "boot": {
       "title": "办公室正在启动。",
       "body": "{{name}} 正在就位；首次启动可能需要一点时间。"
+    },
+    "now": {
+      "sub": "办公室正在做什么，最新的在前。",
+      "filter_all": "全部",
+      "filter_message": "消息",
+      "filter_step": "步骤",
+      "filter_problem": "问题",
+      "empty": "还没有发生任何事。智能体工作、交流或完成时会显示在这里。",
+      "secs": "{{n}} 秒",
+      "mins": "{{n}} 分钟",
+      "hours": "{{n}} 小时",
+      "msgAsk": "{{from}} → {{to}}：{{subject}}",
+      "msgInform": "{{from}} 告知 {{to}}：{{subject}}",
+      "msgDone": "{{from}} 已完成：{{subject}}",
+      "joined": "{{who}} 加入了办公室",
+      "left": "{{who}} 离开了办公室",
+      "crashed": "{{who}} 因错误停止（代码 {{code}}）",
+      "degraded": "{{who}} 在没有办公室事件的情况下运行",
+      "nowLabel": "现在：",
+      "stoppedCard": "其终端已结束（代码 {{code}}）。请在其页面重新启动。"
     }
   },
   "hivePicker": {

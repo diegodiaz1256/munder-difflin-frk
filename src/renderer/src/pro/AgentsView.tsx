@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { currentStep, exitedCode } from '@shared/officeActivity';
+import { useOfficeActivity } from './activityStore';
+import { useActivityText } from './NowView';
 import { actionLabel } from '@/scene/office/actionLabel';
 import type { TFunction } from 'i18next';
 import type { HarnessConfig } from '@/store/config';
@@ -186,6 +189,12 @@ function AgentTile({ agent, ticket, dir, asksYou, onOpen }: {
   const lines = screen.length ? screen : (feed ?? []).slice(-3).map(stripAnsi);
   const tail = lines.length ? lines.join('\n') : stripAnsi(agent.recentAssistantText ?? agent.action ?? '').slice(-160);
   const ctxRatio = agent.contextTokens && agent.contextLimit ? agent.contextTokens / agent.contextLimit : 0;
+  // Its terminal ended ("— process exited (code 1) —"): say it stopped, not "idle".
+  const stoppedCode = exitedCode(tail);
+  const badge = stoppedCode ? { label: 'Stopped', tone: 'red' as const } : st;
+  // What it is doing right now (its latest step, if recent).
+  const now = currentStep(useOfficeActivity(), agent.id, Date.now());
+  const sentence = useActivityText();
   return (
     <article className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div className="pro-row" style={{ alignItems: 'flex-start' }}>
@@ -194,14 +203,21 @@ function AgentTile({ agent, ticket, dir, asksYou, onOpen }: {
           <p className="pro-title">{agent.name}</p>
           <div className="pro-sub" style={{ fontSize: 12 }}>{agent.model ?? agent.provider ?? t('pro.agents.cliDefault')}</div>
         </div>
-        <StateBadge {...st} />
+        <StateBadge {...badge} />
       </div>
+      {stoppedCode && <p className="pro-text" style={{ color: 'var(--cth-coral)' }}>{t('pro.now.stoppedCard', { code: stoppedCode })}</p>}
+      {now && !stoppedCode && (
+        <p className="pro-text" style={{ margin: 0 }}>
+          <strong>{t('pro.now.nowLabel')}</strong> {t(`pro.steps.${now.key}`, { defaultValue: now.params.tool })}
+          {sentence(now).detail && <span className="pro-mono" style={{ display: 'block', fontSize: 12, opacity: 0.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sentence(now).detail}</span>}
+        </p>
+      )}
       {ticket ? (
         <button className="pro-card" style={{ padding: '6px 10px', display: 'flex', gap: 8, minWidth: 0 }} onClick={() => useStore.getState().openTaskDetail(ticket.id)}>
           {ticket.key && <span className="pro-ticket">{ticket.key}</span>}
           <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ticket.title}</span>
         </button>
-      ) : (
+      ) : stoppedCode ? null : (
         <p className="pro-text">{(agent.action && actionLabel(agent.action, t)) || agent.description || t('pro.agents.waitingForWork')}</p>
       )}
       <div>

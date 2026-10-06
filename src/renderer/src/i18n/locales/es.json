@@ -1596,7 +1596,8 @@
       "idle": "Libre",
       "temps": "Temporales",
       "providers": "Proveedores de IA",
-      "deliverables": "Entregables"
+      "deliverables": "Entregables",
+      "now": "Ahora"
     },
     "state": {
       "needsYou": "Te necesita",
@@ -1604,7 +1605,8 @@
       "thinking": "Pensando",
       "breaker": "Cortacircuitos",
       "done": "Hecho",
-      "idle": "Libre"
+      "idle": "Libre",
+      "stopped": "Detenido"
     },
     "spend": {
       "ofCap": "de un límite de {{cap}} $",
@@ -2330,6 +2332,26 @@
     "boot": {
       "title": "La oficina se está iniciando.",
       "body": "{{name}} está llegando; la primera vez puede tardar un poco."
+    },
+    "now": {
+      "sub": "Lo que está haciendo la oficina, lo último primero.",
+      "filter_all": "Todo",
+      "filter_message": "Mensajes",
+      "filter_step": "Pasos",
+      "filter_problem": "Problemas",
+      "empty": "Todavía no ha pasado nada. Cuando los agentes trabajen, hablen o terminen, aparecerá aquí.",
+      "secs": "{{n}} s",
+      "mins": "{{n}} min",
+      "hours": "{{n}} h",
+      "msgAsk": "{{from}} → {{to}}: {{subject}}",
+      "msgInform": "{{from}} informa a {{to}}: {{subject}}",
+      "msgDone": "{{from}} terminó: {{subject}}",
+      "joined": "{{who}} entra en la oficina",
+      "left": "{{who}} salió de la oficina",
+      "crashed": "{{who}} se detuvo con un error (código {{code}})",
+      "degraded": "{{who}} funciona sin eventos de la oficina",
+      "nowLabel": "Ahora:",
+      "stoppedCard": "Su terminal terminó (código {{code}}). Reinícialo desde su página."
     }
   },
   "hivePicker": {

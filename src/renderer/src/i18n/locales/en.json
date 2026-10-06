@@ -1596,7 +1596,8 @@
       "idle": "Idle",
       "temps": "Temps",
       "providers": "AI providers",
-      "deliverables": "Deliverables"
+      "deliverables": "Deliverables",
+      "now": "Now"
     },
     "state": {
       "needsYou": "Needs you",
@@ -1604,7 +1605,8 @@
       "thinking": "Thinking",
       "breaker": "Breaker",
       "done": "Done",
-      "idle": "Idle"
+      "idle": "Idle",
+      "stopped": "Stopped"
     },
     "spend": {
       "ofCap": "of ${{cap}} cap",
@@ -2330,6 +2332,26 @@
     "boot": {
       "title": "The office is starting.",
       "body": "{{name}} is clocking in; this can take a little while on the first start."
+    },
+    "now": {
+      "sub": "What the office is doing, newest first.",
+      "filter_all": "All",
+      "filter_message": "Messages",
+      "filter_step": "Steps",
+      "filter_problem": "Problems",
+      "empty": "Nothing has happened yet. When agents work, talk or finish, it shows up here.",
+      "secs": "{{n}} s",
+      "mins": "{{n}} min",
+      "hours": "{{n}} h",
+      "msgAsk": "{{from}} → {{to}}: {{subject}}",
+      "msgInform": "{{from}} tells {{to}}: {{subject}}",
+      "msgDone": "{{from}} finished: {{subject}}",
+      "joined": "{{who}} joined the office",
+      "left": "{{who}} left the office",
+      "crashed": "{{who}} stopped with an error (code {{code}})",
+      "degraded": "{{who}} is running without office events",
+      "nowLabel": "Now:",
+      "stoppedCard": "Its terminal ended (code {{code}}). Restart it from its page."
     }
   },
   "hivePicker": {

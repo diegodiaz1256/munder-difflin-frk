@@ -1596,7 +1596,8 @@
       "idle": "خامل",
       "temps": "المؤقتون",
       "providers": "مزودو الذكاء الاصطناعي",
-      "deliverables": "المُخرَجات"
+      "deliverables": "المُخرَجات",
+      "now": "الآن"
     },
     "state": {
       "needsYou": "يحتاجك",
@@ -1604,7 +1605,8 @@
       "thinking": "يفكر",
       "breaker": "القاطع",
       "done": "تم",
-      "idle": "خامل"
+      "idle": "خامل",
+      "stopped": "متوقف"
     },
     "spend": {
       "ofCap": "من سقف ${{cap}}",
@@ -2330,6 +2332,26 @@
     "boot": {
       "title": "المكتب قيد التشغيل.",
       "body": "{{name}} في طريقه؛ قد يستغرق ذلك قليلًا في المرة الأولى."
+    },
+    "now": {
+      "sub": "ما يفعله المكتب، الأحدث أولًا.",
+      "filter_all": "الكل",
+      "filter_message": "الرسائل",
+      "filter_step": "الخطوات",
+      "filter_problem": "المشكلات",
+      "empty": "لم يحدث شيء بعد. عندما يعمل الوكلاء أو يتحدثون أو ينهون، يظهر ذلك هنا.",
+      "secs": "{{n}} ث",
+      "mins": "{{n}} د",
+      "hours": "{{n}} س",
+      "msgAsk": "{{from}} ← {{to}}: {{subject}}",
+      "msgInform": "{{from}} يُبلغ {{to}}: {{subject}}",
+      "msgDone": "{{from}} أنهى: {{subject}}",
+      "joined": "{{who}} انضم إلى المكتب",
+      "left": "{{who}} غادر المكتب",
+      "crashed": "{{who}} توقف بخطأ (الرمز {{code}})",
+      "degraded": "{{who}} يعمل دون أحداث المكتب",
+      "nowLabel": "الآن:",
+      "stoppedCard": "انتهت طرفيته (الرمز {{code}}). أعد تشغيله من صفحته."
     }
   },
   "hivePicker": {
