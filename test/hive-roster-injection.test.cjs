@@ -130,14 +130,21 @@ test('rename rejects empty and unknown agents without changing the registry', as
   assert.equal(hive.registry().agents['jim-1'].name, 'Jim');
 });
 
-test('god gets the roster on SessionStart and on every prompt — nobody else does', async (t) => {
+test('god gets the roster on SessionStart and when it changes — nobody else does', async (t) => {
   const { hive, fire } = await floor(t);
   snapshot(hive);
 
   const start = await fire('god-1', 'SessionStart');
   assert.match(context(start), /LIVE ROSTER/);
   assert.equal(start.hookSpecificOutput.hookEventName, 'SessionStart');
-  assert.match(context(await fire('god-1', 'UserPromptSubmit')), /LIVE ROSTER/);
+  // Unchanged since the session start: not repeated on every prompt (token diet).
+  assert.doesNotMatch(context(await fire('god-1', 'UserPromptSubmit')), /LIVE ROSTER/);
+  // Someone joins the floor: the next prompt carries the new roster.
+  const fleetPath = path.join(hive.root(), 'fleet.json');
+  const fleet = JSON.parse(fs.readFileSync(fleetPath, 'utf8'));
+  fleet.agents.push({ id: 'pam-1', name: 'Pam', role: 'painter' });
+  fs.writeFileSync(fleetPath, JSON.stringify(fleet));
+  assert.match(context(await fire('god-1', 'UserPromptSubmit')), /pam-1/);
 
   assert.doesNotMatch(context(await fire('jim-1', 'SessionStart')), /LIVE ROSTER/);
   assert.doesNotMatch(context(await fire('jim-1', 'UserPromptSubmit')), /LIVE ROSTER/);

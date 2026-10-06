@@ -89,6 +89,7 @@ import { McpGateway, type McpCallRecord } from './mcpGateway';
 import { effectiveApiAccess, explainConnection, isAccess, type Access } from '../shared/connectionAccess';
 import { blockedMcpServers, cleanToolBlocks } from '../shared/nativeTools';
 import { browseChars, formatBrowsed, formatSearch } from '../shared/browsePage';
+import { floorActiveSince } from '../shared/tokenDiet';
 import { browsePage, searchWeb } from './browser';
 import { TeamNode, type TeamInbound } from './teamNode';
 import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, relayToken, saveTeamState, setRelayToken, teamEnabled, teamPublicStatus } from './team';
@@ -1169,7 +1170,10 @@ function syncMissions(): void {
         // Gate on `kind!=='compact'` ALONE — that already excludes the compact mission;
         // we deliberately do NOT add `&& m.body`, so other (dispatch) missions keep
         // their prior behaviour, including the historical empty-body send (Pam N1).
-        if (m.kind !== 'compact' && hive.enabled()) {
+        // The hourly standup on a floor where nothing has happened since the last
+        // one only cost the orchestrator a turn to find that out (tokenDiet.ts).
+        const idleStandup = m.id === 'ops-standup' && !floorBusySince(m.lastFiredAt ?? 0);
+        if (m.kind !== 'compact' && hive.enabled() && !idleStandup) {
           hive.send({ to: m.to, act: 'request', subject: m.label, body: m.body }, 'scheduler');
         }
         // Auto-compact: do NOT jam /compact into busy terminals. Hand it to the
@@ -1605,6 +1609,20 @@ function buildHeartbeatDigest(quietMs: number, actionable = 0): string {
     '',
     'Re-engage anyone stalled or blocked and keep the board accurate — or rest if the work is genuinely done.'
   ].join('\n');
+}
+
+/** Anything on the floor since `since`: a log event that is not the
+ *  scheduler's own, or a worker active in the meantime (fleet.json). */
+function floorBusySince(since: number): boolean {
+  const root = hive.root();
+  if (!root || !since) return true;
+  try {
+    const log = readFileSync(join(root, 'log.jsonl'), 'utf8').split(/\r?\n/).filter(Boolean).slice(-500);
+    if (floorActiveSince(log, since)) return true;
+    const fleet = JSON.parse(readFileSync(join(root, 'fleet.json'), 'utf8')) as { agents?: Array<{ isGod?: boolean; lastActiveSecAgo?: number | null }> };
+    const window = (Date.now() - since) / 1000;
+    return (fleet.agents ?? []).some((a) => !a.isGod && typeof a.lastActiveSecAgo === 'number' && a.lastActiveSecAgo < window);
+  } catch { return true; }
 }
 
 /** Senders whose mail is the scheduler's OWN noise (heartbeat beats, ops-standup

@@ -2083,7 +2083,8 @@ export class HiveManager {
       hireLine,
       runtimeLine,
       slackLine,
-      ctxLine,
+      // Only the orchestrator routes work; the line meant nothing to a worker.
+      meta.isGod ? ctxLine : '',
       `Env vars available to you: AGENT_ID, AGENT_NAME, HIVE_ROOT, AGENT_DIR.`
     ].filter(Boolean).join('\n');
   }
