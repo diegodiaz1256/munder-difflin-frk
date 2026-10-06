@@ -23,6 +23,7 @@ import { EnvironmentView } from './EnvironmentView';
 import { McpView } from './McpView';
 import { ProvidersView } from './ProvidersView';
 import { DeliverablesView } from './DeliverablesView';
+import { BootBanner } from './BootBanner';
 import './pro.css';
 
 /** Sections in the sidebar; their names are `pro.nav.<id>`. */
@@ -144,7 +145,7 @@ export function ProShell({ config }: { config: HarnessConfig }) {
           <ProIcon name="temps" /> {t('pro.nav.temps')}
         </button>
       </nav>
-      <main className="pro-main">{page}</main>
+      <main className="pro-main"><BootBanner />{page}</main>
     </div>
   );
 }
