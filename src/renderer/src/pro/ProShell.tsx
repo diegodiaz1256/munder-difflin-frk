@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { APP_NAME, LAYOUT_LABELS } from '@shared/fork';
 import type { HarnessConfig } from '@/store/config';
@@ -44,6 +44,18 @@ const TOP: { id: ProSection; icon: ProIconName }[] = [
   { id: 'factories', icon: 'factories' }
 ];
 
+/** The sidebar in groups: the daily pages always shown, the rest folded. Twelve
+ *  entries in a row read as clutter; settings-like pages are opened rarely. */
+const NAV_GROUPS: Array<{ id: string; label?: string; items: ProSection[] }> = [
+  { id: 'main', items: ['now', 'tasks', 'inbox', 'deliverables'] },
+  { id: 'office', label: 'group_office', items: ['automations', 'memory', 'team', 'factories'] },
+  { id: 'setup', label: 'group_setup', items: ['capabilities', 'connections', 'environment', 'providers', 'mcp'] }
+];
+const LS_GROUPS = 'cth.proNavGroups';
+function readGroups(): Record<string, boolean> {
+  try { const v = JSON.parse(window.localStorage.getItem(LS_GROUPS) ?? '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; }
+}
+
 /**
  * PRO — the office in a sidebar, one screen at a time. Replaces the Classic
  * floor + detail sidebar + agent strip when the title-bar switch says PRO; the
@@ -60,6 +72,12 @@ export function ProShell({ config }: { config: HarnessConfig }) {
   const asking = useMemo(() => askingAgents(tasks), [tasks]);
   const openAsks = tasks.filter(waitsOnHuman).length;
   const god = roster.find((a) => a.isGod);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(readGroups);
+  const toggleGroup = (id: string): void => setOpenGroups((g) => {
+    const next = { ...g, [id]: !g[id] };
+    try { window.localStorage.setItem(LS_GROUPS, JSON.stringify(next)); } catch { /* private window */ }
+    return next;
+  });
   // The boot-time "restore your team" lives in this hook, and Classic mounts it
   // from the agent strip — which PRO replaces. Without it here, opening the app
   // in PRO left every worker from the last session unrestored.
@@ -105,12 +123,26 @@ export function ProShell({ config }: { config: HarnessConfig }) {
             <span className="pro-sub" style={{ fontSize: 10 }}>Munder Difflin</span>
           </span>
         </div>
-        {TOP.map((item) => (
-          <button key={item.id} className="pro-nav" aria-current={section === item.id} onClick={() => go(item.id)}>
-            <ProIcon name={item.icon} /> {t(`pro.nav.${item.id}`)}
-            {item.id === 'inbox' && openAsks > 0 && <span className="pro-nav-end"><span className="pro-count">{openAsks}</span></span>}
-          </button>
-        ))}
+        {NAV_GROUPS.map((g) => {
+          const items = TOP.filter((i) => g.items.includes(i.id));
+          // The group holding the open page stays open, whatever was saved.
+          const open = !g.label || openGroups[g.id] || items.some((i) => i.id === section);
+          return (
+            <div key={g.id} style={{ display: 'contents' }}>
+              {g.label && (
+                <button className="pro-nav pro-nav-group" aria-expanded={open} onClick={() => toggleGroup(g.id)}>
+                  <span aria-hidden style={{ width: 16, textAlign: 'center' }}>{open ? '▾' : '▸'}</span> {t(`pro.nav.${g.label}`)}
+                </button>
+              )}
+              {open && items.map((item) => (
+                <button key={item.id} className="pro-nav" aria-current={section === item.id} onClick={() => go(item.id)} style={g.label ? { paddingInlineStart: 22 } : undefined}>
+                  <ProIcon name={item.icon} /> {t(`pro.nav.${item.id}`)}
+                  {item.id === 'inbox' && openAsks > 0 && <span className="pro-nav-end"><span className="pro-count">{openAsks}</span></span>}
+                </button>
+              ))}
+            </div>
+          );
+        })}
 
         <div className="pro-side-label">{t('pro.nav.agents')}</div>
         <button className="pro-nav" aria-current={section === 'agents'} onClick={() => go('agents')}>

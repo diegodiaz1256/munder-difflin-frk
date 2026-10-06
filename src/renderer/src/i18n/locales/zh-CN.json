@@ -1597,7 +1597,9 @@
       "temps": "临时工",
       "providers": "AI 提供商",
       "deliverables": "交付物",
-      "now": "现在"
+      "now": "现在",
+      "group_office": "办公室",
+      "group_setup": "设置"
     },
     "state": {
       "needsYou": "需要你",
