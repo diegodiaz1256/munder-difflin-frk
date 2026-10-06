@@ -1,38 +1,24 @@
-# Scranton Branch 0.4.6-fork.26
+# Scranton Branch 0.4.6-fork.27
 
-Connections your agents actually use, with permissions per role; one place to read what agents made; and their steps, readable instead of scrolling past in a terminal.
+Pi and OpenCode managed from the app — sign-in, models and your local models — and who may use each REST API, per role.
 
 ## What's new
 
-### Connections and permissions
-- **Agents know their connections and use them by default.** Each agent's prompt lists the connections it can call (GitHub, Database, Notion, Sentry, Web Search…) and says when one is read-only for it. OpenCode agents get them too, not only Claude Code.
-- **Roles decide what an agent may do.** Capabilities → a role gives each connection *Read only* or *Read & write*; Connections sets the most any agent can do (*Nothing / Read only / Read & write*). The lower of the two wins, and the app's gateway enforces it on every call, whatever the agent's CLI. New and existing connections start read-only.
-- **Who has it, and why not.** Every connection shows each agent's access, the reason when it has none (switched off, key missing, not chosen, its role does not include it…), and the latest calls agents made with it, refused ones included.
-- Choosing agents for a connection that is off turns it on; Claude Code no longer asks for permission on every call to a connection you already allowed.
+### Pi and OpenCode
+- **Sign in from the app.** AI providers → Engines shows who Pi and OpenCode are signed in to and opens their own sign-in (Pi `/login`, `opencode auth login`) in a terminal inside the app — your Claude, ChatGPT, Copilot or Gemini subscription, or an API key.
+- **Pi agents sign in as you.** They now use your Pi login (`~/.pi/agent/auth.json`, linked so a refreshed token stays fresh) and your Pi settings; before, a Pi agent started by the app was never signed in.
+- **Pick the default model from a list.** *Load models* asks the engine itself which models it has.
+- **Local and OpenAI-compatible providers.** Add Ollama, LM Studio, vLLM, llama.cpp or any OpenAI-compatible server once (models fetched from the server, optional key stored encrypted); every OpenCode and Pi agent gets them, as `provider/model`.
 
-### MCP
-- **Agents use only the servers managed here.** Claude Code agents no longer load servers from your own settings, a project's `.mcp.json` or ones an agent adds for itself (switch in Manager → MCP).
-- **What each agent gets**, listed per agent. Servers found on the machine or added by an agent (also in a WSL distribution's home) say whether agents can reach them, and a GitHub, Postgres, Brave, Notion or Sentry server recommends setting it up as a Connection instead.
-
-### Deliverables
-- **Manager → Deliverables**: what agents made for you, grouped by task — files linked from the task card, the office's `research/` folder, and what each agent wrote this session. Markdown rendered (or as source), CSV as a table, JSON formatted, images shown.
-- **Linked to the task automatically.** A file an agent writes in `research/` while it works a task is linked to that task, for Claude Code, Codex, Antigravity, OpenCode and Pi. A task's detail opens its deliverables.
-- **Open in its app** (documents, PDFs, images, Office files without macros) or show it in its folder. Executables and scripts are only ever shown in their folder.
-
-### Agents' steps
-- **Terminal / Steps / Both** in an agent's room: a readable timeline of what it ran, read, edited, searched and called, with the file or command each time, durations and failures, filters, and credentials hidden. Works for every CLI that reports tool use.
-
-### Environment and AI providers
-- Plain variables are hidden until you press *Show*; each kind says how agents use it, and agents are told which variables they have.
-- **Manager → AI providers**: model keys, endpoints and default models for OpenCode, Pi, Crush and Qwen in one place. New keys: Mistral, DeepSeek, xAI, Together AI.
-
-### Integrations
-- **Jira's Test connection works.** It called the bare `/rest/api/3` (a 404); each service is now tested with a real read (Jira `/myself`, Confluence, GitHub, Notion, Stripe, Sentry, Linear), and an untouched `your-domain` is pointed out.
+### REST APIs (Jira, Linear, Notion…)
+- **Who may use each API, and how.** Connections → *Who may use each REST API*: a limit per API (*Nothing / Read only / Read & write*, read only by default), every agent or chosen ones, and a level per role in Capabilities. The key broker enforces it on every request: read only lets GET and searches through (Jira JQL, Notion queries, GraphQL queries) and refuses anything that would change data.
+- Ephemeral workers no longer get every API: they follow the same rule.
 
 ## Earlier releases
 
 | Version | Highlights |
 |---|---|
+| fork.26 | Connections with per-role permissions, Deliverables linked to tasks, readable agent steps, MCP managed in the app. |
 | fork.25 | Memory by project and lists, model and effort per role, Spanish everywhere, 5h/weekly usage in the title bar. |
 | fork.24 | Memory offline with a concept graph, hires as a CV, Remote Control button, WSL orchestrator always starts. |
 | fork.23 | Upgrades install over the previous version instead of running its uninstaller. |
@@ -51,26 +37,26 @@ Connections your agents actually use, with permissions per role; one place to re
 ### macOS
 | | |
 |---|---|
-| Universal (Apple Silicon + Intel) | [`Scranton-Branch-0.4.6-fork.26-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.26-mac-universal.dmg) |
+| Universal (Apple Silicon + Intel) | [`Scranton-Branch-0.4.6-fork.27-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.27-mac-universal.dmg) |
 
 ### Windows
 | | |
 |---|---|
-| Installer (x64), *recommended* | [`Scranton-Branch-0.4.6-fork.26-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.26-win-x64-setup.exe) |
-| Portable (x64, no install) | [`Scranton-Branch-0.4.6-fork.26-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.26-win-x64-portable.exe) |
+| Installer (x64), *recommended* | [`Scranton-Branch-0.4.6-fork.27-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.27-win-x64-setup.exe) |
+| Portable (x64, no install) | [`Scranton-Branch-0.4.6-fork.27-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.27-win-x64-portable.exe) |
 
 ### Linux
 | | |
 |---|---|
-| AppImage (x86_64) | [`Scranton-Branch-0.4.6-fork.26-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.26-linux-x86_64.AppImage) |
-| Server, no GUI (x64) | [`scranton-branch-server-0.4.6-fork.26-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.26-linux-x64.tar.gz) |
-| Server, no GUI (arm64) | [`scranton-branch-server-0.4.6-fork.26-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.26-linux-arm64.tar.gz) |
+| AppImage (x86_64) | [`Scranton-Branch-0.4.6-fork.27-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.27-linux-x86_64.AppImage) |
+| Server, no GUI (x64) | [`scranton-branch-server-0.4.6-fork.27-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.27-linux-x64.tar.gz) |
+| Server, no GUI (arm64) | [`scranton-branch-server-0.4.6-fork.27-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.27-linux-arm64.tar.gz) |
 
 Server: unpack, then run `sudo ./install.sh`. Setup, Docker and secrets are in [SERVER.md](https://github.com/diegodiaz1256/scranton-branch/blob/main/SERVER.md).
 
 Builds are not code-signed yet: macOS asks you to allow the app in System Settings → Privacy & Security, and Windows SmartScreen asks you to confirm ("More info" → "Run anyway").
 
-Source: [`v0.4.6-fork.26`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v0.4.6-fork.26.tar.gz)
+Source: [`v0.4.6-fork.27`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v0.4.6-fork.27.tar.gz)
 
 ## About this fork
 

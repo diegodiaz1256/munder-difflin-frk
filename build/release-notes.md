@@ -1,5 +1,4 @@
-- **Connections** agents use by default, **read/write per role**.
-- **Deliverables**: read what agents made, linked to its task.
-- **Agent steps**, readable next to the terminal.
-- MCP: agents use **only managed servers**.
-- **AI providers** screen; Jira test fixed.
+- **Pi and OpenCode**: sign in and pick models in the app.
+- **Local models** (Ollama, LM Studio, vLLM…) for both.
+- Pi agents now **use your Pi login**.
+- **REST APIs** (Jira…): who may use each, read or write, per role.
