@@ -1,4 +1,3 @@
-- **Offline dictation**: optional local Whisper, no key needed.
-- **Agents stop searching your disk**: an office map and a split protocol.
-- **Pi and OpenCode** record session and cost; Pi updates an old Node.
-- Fixes: garbled Claude theme menu, stuck "reconnecting" bubble.
+- **Office browser**: agents read pages a plain fetch cannot.
+- Works from WSL; off when an agent's Web is off.
+- **Manager** says when the office is starting.
