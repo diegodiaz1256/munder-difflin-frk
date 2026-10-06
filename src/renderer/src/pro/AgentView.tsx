@@ -71,7 +71,8 @@ export function AgentView({ agent, roster, tasks, directory, config, onOpen }: P
             <StepsView agentId={agent.id} />
           </div>
         )}
-        <aside style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* Side by side, terminal and steps need the width more than the facts do. */}
+        {pane !== 'both' && <aside style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Fact label={t('pro.agent.goal')}>{agent.goal || agent.description || '—'}</Fact>
           <Fact label={t('pro.agent.engine')}>{[agent.provider ?? 'claude', agent.model].filter(Boolean).join(' · ')}</Fact>
           <Fact label={t('pro.agent.usage')}>
@@ -85,7 +86,7 @@ export function AgentView({ agent, roster, tasks, directory, config, onOpen }: P
             <button className="pro-btn" style={{ marginTop: 8 }} onClick={() => setView({ kind: 'section', section: 'capabilities' })}>{t('pro.agent.manage')}</button>
           </Fact>
           {agent.worktreePath && <Fact label={t('pro.agent.worktree')}><span className="pro-mono" style={{ wordBreak: 'break-all' }}>{agent.worktreePath}</span></Fact>}
-        </aside>
+        </aside>}
       </div>
     </div>
   );

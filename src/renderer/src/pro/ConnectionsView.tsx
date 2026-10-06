@@ -244,6 +244,8 @@ function ConnectionCard({ c, roster, onChange }: { c: Connection; roster: Agent[
         <span className="pro-sub" style={{ fontSize: 11.5 }}>{t('pro.conn.restartNote')}</span>
       </div>
 
+      <WhoAndActivity id={c.id} version={`${c.enabled}|${c.ready}|${c.access}|${(c.scope ?? []).join(',')}`} />
+
       {c.examples.length > 0 && (
         <details>
           <summary className="pro-sub" style={{ fontSize: 12, cursor: 'pointer' }}>{t('pro.conn.thingsToAsk')}</summary>
@@ -264,5 +266,55 @@ function ConnectionCard({ c, roster, onChange }: { c: Connection; roster: Agent[
         </details>
       )}
     </article>
+  );
+}
+
+type AgentAccess = Awaited<ReturnType<typeof window.cth.connectionsAgents>>[number];
+type Call = Awaited<ReturnType<typeof window.cth.connectionsActivity>>[number];
+
+/** Who has this connection (and why not, for the rest) and the latest calls made
+ *  with it, refused ones included. Loaded only when opened. */
+function WhoAndActivity({ id, version }: { id: string; version: string }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [agents, setAgents] = useState<AgentAccess[]>([]);
+  const [calls, setCalls] = useState<Call[]>([]);
+  useEffect(() => {
+    if (!open) return;
+    const load = () => {
+      void window.cth.connectionsAgents(id).then(setAgents).catch(() => {});
+      void window.cth.connectionsActivity(id).then(setCalls).catch(() => {});
+    };
+    load();
+    const timer = setInterval(load, 5000);
+    return () => clearInterval(timer);
+  }, [open, id, version]);
+  const level = (a: AgentAccess) => a.access === 'readwrite' ? t('pro.caps.accessWriteShort') : a.access === 'read' ? t('pro.caps.accessReadShort') : t(`pro.conn.why_${a.reason ?? 'off'}`);
+  return (
+    <details onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+      <summary className="pro-sub" style={{ fontSize: 12, cursor: 'pointer' }}>{t('pro.conn.whoAndActivity')}</summary>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+        {agents.length === 0 && <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.conn.noAgents')}</span>}
+        {agents.map((a) => (
+          <div key={a.agentId} className="pro-row" style={{ gap: 8, fontSize: 12.5 }}>
+            <span className="pro-dot" style={{ background: a.access === 'none' ? 'var(--cth-ink-300)' : 'var(--cth-mint)' }} />
+            <span style={{ minWidth: 100 }}>{a.name}</span>
+            <span className={a.access === 'none' ? 'pro-sub' : undefined} style={{ fontSize: 12 }}>{level(a)}</span>
+          </div>
+        ))}
+        <span className="pro-sub" style={{ fontSize: 11, marginTop: 6, letterSpacing: '.08em', textTransform: 'uppercase' }}>{t('pro.conn.recentCalls')}</span>
+        {calls.length === 0 && <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.conn.noCalls')}</span>}
+        {calls.map((c, i) => (
+          <div key={i} className="pro-row" style={{ gap: 8, fontSize: 12 }}>
+            <span className="pro-sub pro-mono" style={{ fontSize: 11 }}>{new Date(c.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+            <span style={{ minWidth: 80 }}>{c.agentName}</span>
+            <span className="pro-mono" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.tool}</span>
+            <span style={{ color: !c.allowed || c.ok === false ? 'var(--cth-coral)' : 'var(--cth-ink-700)' }}>
+              {!c.allowed ? t('pro.conn.callRefused') : c.ok === false ? t('pro.conn.callFailed') : t('pro.conn.callOk')}
+            </span>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }

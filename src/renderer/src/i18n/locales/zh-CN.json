@@ -1873,7 +1873,20 @@
       "access_none": "无",
       "access_read": "只读",
       "access_readwrite": "读写",
-      "accessHint": "无论角色如何，任何智能体能做的最大范围。角色只能降低，不能提高。新连接默认只读。"
+      "accessHint": "无论角色如何，任何智能体能做的最大范围。角色只能降低，不能提高。新连接默认只读。",
+      "whoAndActivity": "谁拥有它，以及做了什么",
+      "recentCalls": "最近调用",
+      "noCalls": "暂无调用。",
+      "callOk": "完成",
+      "callFailed": "失败",
+      "callRefused": "已拒绝",
+      "why_off": "否：已关闭",
+      "why_noKey": "否：缺少密钥",
+      "why_notChosen": "否：未被选中",
+      "why_roleLacks": "否：其角色不包含它",
+      "why_webBlocked": "否：网页权限已被移除",
+      "why_ceilingNone": "否：上限为“无”",
+      "why_providerNoMcp": "否：其 CLI 不从应用获取 MCP"
     },
     "env": {
       "step1": "普通变量提供给所有代理",
@@ -1994,7 +2007,9 @@
       "addedByAgent": "由 {{name}} 添加",
       "useConnection": "设置为 {{name}} 连接",
       "useConnectionTip": "推荐：相同的 {{name}} 工具，由应用保管密钥，按角色限制读写，并带有测试按钮。",
-      "alreadyBuiltIn": "已内置：{{name}}"
+      "alreadyBuiltIn": "已内置：{{name}}",
+      "office_memory": "办公室记忆",
+      "office_lists": "你的清单"
     },
     "team": {
       "step1": "你的办公室获得身份",

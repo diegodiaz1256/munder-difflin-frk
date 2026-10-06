@@ -84,7 +84,9 @@ import { WslBridge } from './wslBridge';
 import { McpServers } from './mcpServers';
 import { EnvVault, fingerprintOf } from './envVault';
 import { addConnection, connectionAccessFor, setConnectionAccess, connectionKeyStored, connectionLaunchEnv, instancesOf, listConnections, removeConnection, renameConnection, serviceOf, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
-import { McpGateway } from './mcpGateway';
+import { McpGateway, type McpCallRecord } from './mcpGateway';
+import { explainConnection } from '../shared/connectionAccess';
+import { blockedMcpServers } from '../shared/nativeTools';
 import { TeamNode, type TeamInbound } from './teamNode';
 import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, relayToken, saveTeamState, setRelayToken, teamEnabled, teamPublicStatus } from './team';
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
@@ -436,8 +438,12 @@ const liveWorkers = new Map<string, WorkerRec>();
  *  it without ever seeing a credential. getRecord/getSecret are injected so the broker
  *  stays electron-free + unit-testable. Started in bootstrapHiveServices; each worker is
  *  granted a per-worker capability token at spawn (revoked in teardownPty). */
+/** The last tool calls agents made through the gateway (memory only): who, which
+ *  connection, which tool, allowed or refused. Shown under each Connection. */
+const mcpCalls: McpCallRecord[] = [];
 const mcpGateway = new McpGateway({
   serviceOf: (id) => serviceOf(id),
+  onCall: (e) => { mcpCalls.push(e); if (mcpCalls.length > 1000) mcpCalls.splice(0, mcpCalls.length - 1000); },
   resolveSpec: (serverId) => {
     if (serverId.startsWith('custom--')) {
       const spec = mcpServers.launchSpec(serverId);
@@ -3995,6 +4001,27 @@ ipcMain.handle('config:saveRoleBundles', (_evt, bundles: unknown) => {
 });
 ipcMain.handle('connections:setSecret', (_evt, id: unknown, env: unknown, value: unknown) => setConnectionSecret(id, env, value));
 ipcMain.handle('connections:setEnabled', (_evt, id: unknown, on: unknown) => setConnectionEnabled(id, on));
+// Who has a connection, with what access, and if not, why — and what they did with it.
+ipcMain.handle('connections:agents', (_evt, id: unknown) => {
+  if (typeof id !== 'string' || !hive.enabled()) return [];
+  const conn = listConnections().find((c) => c.id === id);
+  if (!conn) return [];
+  const cfg = readConfig();
+  return Object.values(hive.registry().agents).filter((a) => a.status !== 'gone' && !a.isAssistant).map((a) => {
+    const provider = a.provider ?? 'claude';
+    const r = explainConnection(a.id, {
+      service: conn.service, enabled: conn.enabled, ready: conn.ready, scope: conn.scope,
+      grant: cfg.agentMcpGrants?.[a.id], webBlocked: blockedMcpServers(cfg.agentToolBlocks?.[a.id]).has(conn.service),
+      ceiling: cfg.connectionPolicy?.[id], record: cfg.agentMcpAccess?.[a.id], mcpCapable: provider === 'claude' || provider === 'opencode'
+    });
+    return { agentId: a.id, name: a.name, ...r };
+  });
+});
+ipcMain.handle('connections:activity', (_evt, id: unknown) => {
+  if (typeof id !== 'string') return [];
+  const names = new Map(hive.enabled() ? Object.values(hive.registry().agents).map((a) => [a.id, a.name] as const) : []);
+  return mcpCalls.filter((c) => c.serverId === id).slice(-50).reverse().map((c) => ({ ...c, agentName: names.get(c.agentId) ?? c.agentId }));
+});
 ipcMain.handle('connections:setAccess', (_evt, id: unknown, access: unknown) => setConnectionAccess(id, access));
 ipcMain.handle('connections:setScope', (_evt, id: unknown, agentIds: unknown) => setConnectionScope(id, agentIds));
 ipcMain.handle('connections:test', (_evt, id: unknown) => testConnection(id));

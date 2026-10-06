@@ -126,3 +126,43 @@ test('gateway: read & write, none, and a grant without access levels', async (t)
   const legacy = await setup(t, undefined); // callers that predate access levels stay unrestricted
   assert.match((await legacy('tools/call', { name: 'create_issue' }, 3)).result.content[0].text, /ran create_issue/);
 });
+
+// ─── why an agent has or lacks a connection ─────────────────────────────────
+
+const { explainConnection } = loadTs('src/shared/connectionAccess.ts');
+const base = { service: 'github-token', enabled: true, ready: true, scope: null, webBlocked: false, mcpCapable: true };
+
+test('explainConnection: the first thing to fix, in order', () => {
+  assert.deepEqual(explainConnection('a', { ...base, mcpCapable: false }), { access: 'none', reason: 'providerNoMcp' });
+  assert.equal(explainConnection('a', { ...base, enabled: false }).reason, 'off');
+  assert.equal(explainConnection('a', { ...base, ready: false }).reason, 'noKey');
+  assert.equal(explainConnection('a', { ...base, scope: ['b'] }).reason, 'notChosen');
+  assert.equal(explainConnection('a', { ...base, grant: ['git'] }).reason, 'roleLacks');
+  assert.equal(explainConnection('a', { ...base, ceiling: 'none' }).reason, 'ceilingNone');
+  assert.equal(explainConnection('a', { ...base, record: { notion: 'read' } }).reason, 'roleLacks');
+});
+
+test('explainConnection: matches the effective access when it has it', () => {
+  assert.deepEqual(explainConnection('a', base), { access: 'read' });
+  assert.deepEqual(explainConnection('a', { ...base, ceiling: 'readwrite', record: { 'github-token': 'readwrite' }, grant: ['github-token'] }), { access: 'readwrite' });
+});
+
+test('gateway: every tool call is recorded — refused ones too — without arguments', async (t) => {
+  const calls = [];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'md-log-'));
+  const script = path.join(dir, 'server.cjs');
+  fs.writeFileSync(script, SERVER);
+  const gw = new McpGateway({
+    resolveSpec: () => ({ command: process.execPath, args: [script], env: {} }),
+    serviceOf: (id) => id, onCall: (e) => calls.push(e), requestTimeoutMs: 5000
+  });
+  await gw.start();
+  t.after(() => { gw.stop(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const token = gw.grant('pam', ['github-token'], { 'github-token': 'read' });
+  const rpc = (method, params, id) => fetch(`${gw.url()}/mcp/github-token`, { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ jsonrpc: '2.0', id, method, params }) }).then((r) => r.json());
+  await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 't', version: '1' } }, 1);
+  await rpc('tools/call', { name: 'list_issues', arguments: { secret: 'x' } }, 2);
+  await rpc('tools/call', { name: 'create_issue', arguments: {} }, 3);
+  assert.deepEqual(calls.map((c) => [c.agentId, c.serverId, c.tool, c.allowed, c.ok]), [['pam', 'github-token', 'list_issues', true, true], ['pam', 'github-token', 'create_issue', false, undefined]]);
+  assert.ok(calls.every((c) => !('arguments' in c) && !('params' in c)));
+});

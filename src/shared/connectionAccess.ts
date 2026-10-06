@@ -81,3 +81,44 @@ export function filterTools<T extends { name?: unknown; annotations?: ToolAnnota
   if (access === 'none') return [];
   return tools.filter((t) => typeof t.name === 'string' && isReadTool(service, t.name, t.annotations));
 }
+
+// ─── why an agent has (or lacks) a connection ────────────────────────────────
+
+export type MissingReason =
+  | 'off'           // the connection is switched off
+  | 'noKey'         // a required key is not stored
+  | 'notChosen'     // "Choose agents" leaves this agent out
+  | 'roleLacks'     // the agent's role does not include the service
+  | 'webBlocked'    // Web was taken from the agent (Capabilities)
+  | 'ceilingNone'   // the connection's own limit is "nothing"
+  | 'providerNoMcp';// the agent's CLI does not take MCP servers from the app
+
+export interface ConnectionFacts {
+  service: string;
+  enabled: boolean;
+  ready: boolean;
+  /** "Choose agents" list, or null for everyone. */
+  scope: string[] | null;
+  /** The agent's MCP grant (role servers), or undefined when it has none. */
+  grant?: string[];
+  webBlocked: boolean;
+  ceiling?: Access;
+  record?: Record<string, Access>;
+  /** The agent's CLI can use the app's MCP servers (Claude Code, OpenCode). */
+  mcpCapable: boolean;
+}
+
+/** What this agent may do with a connection, and if nothing, the first reason why
+ *  (the one the human would fix first). Mirrors hive.keyedConnectionsFor. */
+export function explainConnection(agentId: string, f: ConnectionFacts): { access: Access; reason?: MissingReason } {
+  const none = (reason: MissingReason) => ({ access: 'none' as const, reason });
+  if (!f.mcpCapable) return none('providerNoMcp');
+  if (!f.enabled) return none('off');
+  if (!f.ready) return none('noKey');
+  if (f.scope && !f.scope.includes(agentId)) return none('notChosen');
+  if (f.grant && !f.grant.includes(f.service)) return none('roleLacks');
+  if (f.webBlocked) return none('webBlocked');
+  const access = effectiveAccess(f.ceiling, f.record, f.service);
+  if (access === 'none') return none((f.ceiling ?? DEFAULT_CEILING) === 'none' ? 'ceilingNone' : 'roleLacks');
+  return { access };
+}

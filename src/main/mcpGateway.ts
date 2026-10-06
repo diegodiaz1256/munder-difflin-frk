@@ -40,8 +40,23 @@ export interface McpGatewayDeps {
   /** The catalog service a connection id belongs to (an added connection is
    *  `<service>--<name>`); the read-only rules are per service. Unset → the id. */
   serviceOf?: (serverId: string) => string | undefined;
+  /** Told about every tool call: who, which server, which tool, allowed or not,
+   *  how it went. For the activity log; never given arguments or results. */
+  onCall?: (e: McpCallRecord) => void;
   /** Override for tests. */
   requestTimeoutMs?: number;
+}
+
+export interface McpCallRecord {
+  ts: number;
+  agentId: string;
+  serverId: string;
+  tool: string;
+  /** false: refused by the agent's access before reaching the server. */
+  allowed: boolean;
+  /** The server answered without an error (allowed calls only). */
+  ok?: boolean;
+  ms?: number;
 }
 
 /** `access` per server: absent for a server means unrestricted (custom servers,
@@ -177,6 +192,7 @@ export class McpGateway {
       if (isRequest && msg.method === 'tools/call' && access && access !== 'readwrite') {
         const name = String((msg.params as { name?: unknown } | undefined)?.name ?? '');
         if (access === 'none' || !isReadTool(service, name, session.annotations.get(name))) {
+          this.record({ ts: Date.now(), agentId: grant.agentId, serverId, tool: name, allowed: false });
           replies.push({ jsonrpc: '2.0', id: msg.id, result: { isError: true, content: [{ type: 'text', text: `Not allowed: your role gives read-only access to this connection, and "${name}" changes things. Ask the human to give your role read & write access under Capabilities.` }] } });
           continue;
         }
@@ -184,7 +200,13 @@ export class McpGateway {
       if (isRequest && msg.method === 'initialize') session.initialized = true;
       this.write(session, msg);
       if (isRequest) {
+        const started = Date.now();
         const reply = await this.await(session, msg.id, serverId);
+        if (msg.method === 'tools/call') {
+          const r = reply as { error?: unknown; result?: { isError?: boolean } };
+          const tool = String((msg.params as { name?: unknown } | undefined)?.name ?? '');
+          this.record({ ts: started, agentId: grant.agentId, serverId, tool, allowed: true, ok: !r?.error && r?.result?.isError !== true, ms: Date.now() - started });
+        }
         replies.push(msg.method === 'tools/list' ? this.shapeToolList(reply, session, service, access) : reply);
       }
     }
@@ -200,6 +222,10 @@ export class McpGateway {
     for (const t of tools) if (typeof t.name === 'string' && t.annotations) session.annotations.set(t.name, t.annotations);
     if (!access || access === 'readwrite') return reply;
     return { ...(reply as object), result: { ...r.result, tools: filterTools(service, tools, access) } };
+  }
+
+  private record(e: McpCallRecord): void {
+    try { this.deps.onCall?.(e); } catch { /* a log must never break a call */ }
   }
 
   private json(res: ServerResponse, status: number, value: unknown): void {

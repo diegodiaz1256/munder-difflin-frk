@@ -1873,7 +1873,20 @@
       "access_none": "Nada",
       "access_read": "Solo lectura",
       "access_readwrite": "Lectura y escritura",
-      "accessHint": "Lo máximo que puede hacer cualquier agente, sea cual sea su rol. Un rol puede bajarlo, nunca subirlo. Las conexiones nuevas son de solo lectura."
+      "accessHint": "Lo máximo que puede hacer cualquier agente, sea cual sea su rol. Un rol puede bajarlo, nunca subirlo. Las conexiones nuevas son de solo lectura.",
+      "whoAndActivity": "Quién la tiene y qué hicieron",
+      "recentCalls": "Llamadas recientes",
+      "noCalls": "Aún no hay llamadas.",
+      "callOk": "hecha",
+      "callFailed": "falló",
+      "callRefused": "rechazada",
+      "why_off": "no: está apagada",
+      "why_noKey": "no: falta la clave",
+      "why_notChosen": "no: no está elegido",
+      "why_roleLacks": "no: su rol no la incluye",
+      "why_webBlocked": "no: se le quitó la Web",
+      "why_ceilingNone": "no: el límite es «nada»",
+      "why_providerNoMcp": "no: su CLI no toma MCP de la app"
     },
     "env": {
       "step1": "Las variables normales llegan a todos los agentes",
@@ -1994,7 +2007,9 @@
       "addedByAgent": "añadido por {{name}}",
       "useConnection": "Configurar como Conexión de {{name}}",
       "useConnectionTip": "Recomendado: las mismas herramientas de {{name}}, con la clave guardada por la app, límites de lectura/escritura por rol y botón de prueba.",
-      "alreadyBuiltIn": "Ya incluido: {{name}}"
+      "alreadyBuiltIn": "Ya incluido: {{name}}",
+      "office_memory": "Memoria de la oficina",
+      "office_lists": "Tus listas"
     },
     "team": {
       "step1": "Tu oficina recibe una identidad",

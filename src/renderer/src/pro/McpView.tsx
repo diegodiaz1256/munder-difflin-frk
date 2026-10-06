@@ -5,6 +5,7 @@ import type { Agent } from '@/store/store';
 import type { McpFoundView, McpMineView, McpOverviewView, McpTransportView } from '../../../preload/index';
 import type { HarnessConfig } from '@/store/config';
 import { useProStore } from './proStore';
+import { serverLabel } from '@shared/agentSteps';
 import { StateBadge } from './data';
 import { Guide, useGuide } from './Guide';
 
@@ -80,7 +81,7 @@ export function McpView({ roster, config }: { roster: Agent[]; config: HarnessCo
             {o.servers.length === 0 && (o.provider === 'claude' || o.provider === 'opencode') && <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.mcp.nothingManaged')}</span>}
             {(o.provider === 'claude' || o.provider === 'opencode') && o.servers.map((s) => (
               <span key={s.name} className={`pro-chip${s.origin === 'connection' ? ' pro-chip-on' : ''}`} title={t(`pro.mcp.origin_${s.origin}`)}>
-                {s.id.replace(/^custom--/, '')}{s.origin === 'connection' ? ` · ${s.access === 'readwrite' ? t('pro.caps.accessWriteShort') : t('pro.caps.accessReadShort')}` : ''}
+                {s.origin === 'yours' ? s.id.replace(/^custom--/, '') : s.origin === 'office' ? t(`pro.mcp.office_${s.id}`, { defaultValue: s.id }) : serverLabel(s.id)}{s.origin === 'connection' ? ` · ${s.access === 'readwrite' ? t('pro.caps.accessWriteShort') : t('pro.caps.accessReadShort')}` : ''}
               </span>
             ))}
           </div>

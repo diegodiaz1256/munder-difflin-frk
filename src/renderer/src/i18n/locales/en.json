@@ -1873,7 +1873,20 @@
       "access_none": "Nothing",
       "access_read": "Read only",
       "access_readwrite": "Read & write",
-      "accessHint": "The most any agent can do, whatever its role. A role can lower it, never raise it. New connections are read-only."
+      "accessHint": "The most any agent can do, whatever its role. A role can lower it, never raise it. New connections are read-only.",
+      "whoAndActivity": "Who has it, and what they did",
+      "recentCalls": "Recent calls",
+      "noCalls": "No calls yet.",
+      "callOk": "done",
+      "callFailed": "failed",
+      "callRefused": "refused",
+      "why_off": "no: switched off",
+      "why_noKey": "no: key missing",
+      "why_notChosen": "no: not chosen",
+      "why_roleLacks": "no: its role does not include it",
+      "why_webBlocked": "no: Web taken away",
+      "why_ceilingNone": "no: limit is “nothing”",
+      "why_providerNoMcp": "no: its CLI does not take MCP from the app"
     },
     "env": {
       "step1": "Plain variables reach every agent",
@@ -1994,7 +2007,9 @@
       "addedByAgent": "added by {{name}}",
       "useConnection": "Set up as {{name}} Connection",
       "useConnectionTip": "Recommended: the same {{name}} tools, with the key kept by the app, read/write limits per role and a Test button.",
-      "alreadyBuiltIn": "Already built in: {{name}}"
+      "alreadyBuiltIn": "Already built in: {{name}}",
+      "office_memory": "Office memory",
+      "office_lists": "Your lists"
     },
     "team": {
       "step1": "Your office gets an identity",

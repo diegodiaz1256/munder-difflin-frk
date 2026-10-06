@@ -92,7 +92,7 @@ function StepRow({ s, expanded, onToggle }: { s: AgentStep; expanded: boolean; o
   const label = s.kind === 'prompt' ? t('pro.steps.prompt') : s.kind === 'stop' ? t('pro.steps.stop') : s.kind === 'tool' ? t(`pro.steps.tool_${s.tool}`, { defaultValue: s.label }) : s.label;
   return (
     <div style={{ display: 'flex', gap: 10, padding: '9px 14px', borderBottom: '1px solid var(--pro-line)', alignItems: 'flex-start', background: prompt ? 'var(--cth-lemon-light)' : undefined }}>
-      <span className="pro-sub pro-mono" style={{ fontSize: 11, width: 64, flexShrink: 0, paddingTop: 2 }}>{fmtTime(s.ts)}</span>
+      <span className="pro-sub pro-mono" style={{ fontSize: 11, width: 86, flexShrink: 0, paddingTop: 2, whiteSpace: 'nowrap' }}>{fmtTime(s.ts)}</span>
       <span aria-hidden="true" className="pro-mono" style={{ width: 22, flexShrink: 0, textAlign: 'center', color: 'var(--cth-ink-500)' }}>{ICON[s.group]}</span>
       <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <span style={{ fontSize: 13, fontWeight: 600 }}>{label}</span>

@@ -1473,6 +1473,12 @@ const api = {
     ipcRenderer.invoke('connections:setSecret', id, env, value),
   connectionsSetEnabled: (id: string, on: boolean): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('connections:setEnabled', id, on),
+  /** Every agent: what it may do with this connection, and if nothing, why. */
+  connectionsAgents: (id: string): Promise<Array<{ agentId: string; name: string; access: 'none' | 'read' | 'readwrite'; reason?: 'off' | 'noKey' | 'notChosen' | 'roleLacks' | 'webBlocked' | 'ceilingNone' | 'providerNoMcp' }>> =>
+    ipcRenderer.invoke('connections:agents', id),
+  /** The latest tool calls agents made with this connection (newest first): never arguments or results. */
+  connectionsActivity: (id: string): Promise<Array<{ ts: number; agentId: string; agentName: string; tool: string; allowed: boolean; ok?: boolean; ms?: number }>> =>
+    ipcRenderer.invoke('connections:activity', id),
   connectionsSetAccess: (id: string, access: 'none' | 'read' | 'readwrite'): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('connections:setAccess', id, access),
   connectionsSetScope: (id: string, agentIds: string[] | null): Promise<{ ok: boolean; error?: string }> =>
