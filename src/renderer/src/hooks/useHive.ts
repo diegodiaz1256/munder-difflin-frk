@@ -23,6 +23,7 @@ import { resolveGodName } from '../../../shared/godIdentity';
 import { acquireTerminal, resetTerminal, isTerminalAutomationSafe } from '@/components/terminalPool';
 import { canDeliverToAgent, deliverWithAcknowledgement, checkPrecondition } from './queueDelivery';
 import { OFFICE_CAST, DEFAULT_CHARACTER } from '@/scene/office/cast';
+import { reconnectedAction } from '@/scene/office/actionLabel';
 
 const GOD_ID = 'god';
 /** Accent palette for MAIN-spawned (voice-hired) agents — picked deterministically
@@ -697,6 +698,8 @@ export function useHive(config: HarnessConfig | null): void {
       const now = Date.now();
       const { agents, updateAgent } = useStore.getState();
       for (const a of agents) {
+        const back = a.ptyId ? reconnectedAction(a.action, a.isGod, a.ptyId in lastOut) : null;
+        if (back) updateAgent(a.id, { action: back });
         if (!a.ptyId || a.status !== 'working') continue;
         // Never fight the breaker pin (a constrained/stopped agent stays 'looping')
         // or a still-booting agent (its boot sequence is mid-type).
