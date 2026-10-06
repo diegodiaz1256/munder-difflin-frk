@@ -2006,6 +2006,8 @@ export class HiveManager {
         .map((f) => parseList(f.replace(/\.md$/, ''), readFileSync(inRoot('lists', f), 'utf8')));
     } catch { /* no lists yet */ }
     const listsLine = listsInstruction(inRoot('lists'), existingLists);
+    // Deliverables: one place the human can find them (Manager → Deliverables).
+    const deliverablesLine = `DELIVERABLES: anything you produce for the human to read or use — a report, analysis, plan, table (CSV), image, export — goes in ${inRoot('research')} (a subfolder per task is fine), with a clear file name; Markdown for documents. Say the path in your reply${meta.isGod ? `, and set the "deliverable" field of its task card in ${inRoot('tasks.json')} to that path (relative to ${root}, e.g. research/<topic>/report.md) — also when an agent reports one to you` : ' and in your done message to god, who records it on the task card'}. Code changes stay in their repository as usual; do not copy code into research/.`;
     const integrationsLine = integrations && integrations.length
       ? `REST APIs you can call (the harness adds the key; you never see it): ${integrations.map((i) => `${i.id} (${i.label})`).join(', ')}. Run \`"${hiveNode}" "${apiCli}" <api> GET /path\`, or \`"${hiveNode}" "${apiCli}" <api> POST /path '<json body>'\` (also PUT, PATCH, DELETE). The path is relative to that API's base URL, e.g. \`"${hiveNode}" "${apiCli}" ${integrations[0].id} GET /\`. It prints the HTTP status and the response body.`
       : '';
@@ -2033,6 +2035,7 @@ export class HiveManager {
       guardrailsLine,
       memoryLine,
       knowledgeLine,
+      deliverablesLine,
       integrationsLine,
       connectionsPromptLine(connections),
       envPromptLine(envNames),

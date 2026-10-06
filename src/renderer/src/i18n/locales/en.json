@@ -1372,7 +1372,9 @@
     "awaitingAnswer": "AWAITING YOUR ANSWER — ASK ME TAB",
     "dependsOn": "DEPENDS ON",
     "assign": "assign",
-    "priority": "Priority {{level}}/5"
+    "priority": "Priority {{level}}/5",
+    "deliverable": "DELIVERABLE",
+    "openDeliverable": "Open"
   },
   "queueComposer": {
     "recording": "● recording — click stop to transcribe",
@@ -1563,7 +1565,8 @@
       "activeOne": "Active",
       "idle": "Idle",
       "temps": "Temps",
-      "providers": "AI providers"
+      "providers": "AI providers",
+      "deliverables": "Deliverables"
     },
     "state": {
       "needsYou": "Needs you",
@@ -2217,6 +2220,26 @@
       "tool_Task": "Handed work to a sub-agent",
       "tool_Agent": "Handed work to a sub-agent",
       "tool_TodoWrite": "Updated its plan"
+    },
+    "dlv": {
+      "sub": "What the agents made for you: linked from tasks, in the office’s research folder, or written this session.",
+      "openFolder": "Open the folder",
+      "noOffice": "Open an office first.",
+      "search": "Search by name, task or agent",
+      "empty": "Nothing yet. Agents are told to save what they make for you in {{dir}} and to link it from the task; it shows up here.",
+      "group_tasks": "From tasks",
+      "group_office": "Office deliverables",
+      "group_agents": "Written by agents this session",
+      "created": "created",
+      "edited": "edited",
+      "pick": "Pick a file to read it here.",
+      "cannotPreview": "This kind of file cannot be shown here. Use “Show in folder” to open it.",
+      "copyPath": "Copy path",
+      "showInFolder": "Show in folder",
+      "loading": "Loading…",
+      "emptyFile": "The file is empty.",
+      "firstRows": "Showing the first 200 rows.",
+      "htmlSource": "HTML is shown as source, not run."
     }
   },
   "hivePicker": {

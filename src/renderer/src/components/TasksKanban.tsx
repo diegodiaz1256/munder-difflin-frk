@@ -7,6 +7,7 @@ import { Icon } from './Icon';
 import { useStore } from '@/store/store';
 import { MarkdownPreview } from '@/markdown/MarkdownPreview';
 import { useRtl } from '@/i18n/useDirection';
+import { useProStore } from '@/pro/proStore';
 
 /** A card on the task kanban. Mirrors HiveTask in the main/preload process —
  *  re-declared locally so the renderer doesn't reach into the preload package
@@ -34,6 +35,10 @@ export interface HiveTask {
   /** First-class human feedback: the god appends {q} when a card needs the
    *  human; the ASK ME view fills in {a}. Full history stays on the card. */
   humanQA?: HumanQA[];
+  /** Outcome summary the orchestrator wrote when the card was done. */
+  result?: string;
+  /** Path(s) of what the card produced for the human (Manager → Deliverables). */
+  deliverable?: string;
 }
 
 /** The card's currently open question for the human, if any. An entry the human
@@ -94,6 +99,8 @@ export function parseTasks(raw: unknown): HiveTask[] {
         ? (t.status as Status) : 'todo',
       dependsOn: Array.isArray(t.dependsOn) ? t.dependsOn.filter((d): d is string => typeof d === 'string') : [],
       priority: typeof t.priority === 'number' ? t.priority : 3,
+      deliverable: typeof t.deliverable === 'string' && t.deliverable.trim() ? t.deliverable : undefined,
+      result: typeof t.result === 'string' && t.result.trim() ? t.result : undefined,
       createdAt: typeof t.createdAt === 'string' ? t.createdAt : new Date().toISOString(),
       humanQA: Array.isArray(t.humanQA)
         ? (t.humanQA as unknown[])
@@ -372,6 +379,20 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
             }} dir={rtl ? 'auto' : undefined}>
               {task.description?.trim() || <span style={{ color: 'var(--cth-ink-300)' }}>{t('kanban.noDescription')}</span>}
             </div>
+
+            {/* What the card produced: open it in Manager → Deliverables. */}
+            {task.deliverable && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: 'var(--cth-font-display)', fontSize: 8, color: 'var(--cth-ink-500)' }}>{t('kanban.deliverable')}</span>
+                <span style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 12, color: 'var(--cth-ink-900)', overflowWrap: 'anywhere', flex: 1, minWidth: 0 }}>{task.deliverable}</span>
+                <PixelButton variant="secondary" size="sm" onClick={() => {
+                  const pro = useProStore.getState();
+                  pro.setLayout('pro');
+                  pro.setView({ kind: 'section', section: 'deliverables' });
+                  onClose();
+                }}>{t('kanban.openDeliverable')}</PixelButton>
+              </div>
+            )}
 
             {/* The human Q&A trail — every decision documented on the card.
                 Rendered as markdown (card variant), matching the ASK ME tab the

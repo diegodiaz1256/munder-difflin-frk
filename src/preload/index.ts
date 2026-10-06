@@ -247,6 +247,8 @@ export interface HiveTask {
   humanQA?: HumanQA[];
   /** Outcome summary used for the Slack done-notification. */
   result?: string;
+  /** Path(s) of what the task produced for the human (research/… or absolute). */
+  deliverable?: string;
   /** Origin thread for a Slack-sourced task (drives the done-summary reply). */
   slack?: { channel: string; thread_ts: string };
   /** SHA-256 of the capability token for a generic-webhook-sourced task (drives
@@ -994,6 +996,9 @@ const api = {
     ipcRenderer.invoke('hive:send', msg, from),
 
   /** What an agent has done lately (hook events with what each tool was asked), oldest first. */
+  /** Deliverables: the office's research/ folder (newest first) and what each agent wrote this session. */
+  deliverablesList: (): Promise<{ root: string | null; dir: string | null; files: Array<{ rel: string; abs: string; size: number; mtime: number }>; written: Array<{ path: string; ts: number; created: boolean; agentId: string; name: string }> }> =>
+    ipcRenderer.invoke('deliverables:list'),
   hiveSteps: (agentId: string): Promise<HookEvent[]> => ipcRenderer.invoke('hive:steps', agentId),
   onHiveHookEvent: (
     cb: (e: HookEvent) => void

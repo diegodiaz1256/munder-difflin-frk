@@ -92,6 +92,7 @@ import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, rel
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
 import type { PromptConnection } from '../shared/agentConnections';
 import { PROVIDER_BACKENDS, providerKeyEnv } from '../shared/providerBackends';
+import { DELIVERABLES_DIR, writtenFiles } from '../shared/deliverables';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES, hasPlaceholderHost, probeSpecFor } from '../shared/integrations';
 import { RosterStore } from './roster';
 import { buildWorkerLaunch, workerRequestProblem } from './workerLaunch';
@@ -4292,6 +4293,39 @@ ipcMain.handle('hive:setAgentHold', (_evt, id: unknown, hold: unknown) => {
 });
 ipcMain.handle('hive:board', () => hive.board());
 ipcMain.handle('hive:tasks', () => hive.tasks());
+// Deliverables (shared/deliverables.ts): the office's research/ folder, newest
+// first, and the files each agent wrote this session (from its tool calls).
+// Metadata only; the viewer reads a file through the root-confined fs IPC.
+ipcMain.handle('deliverables:list', async () => {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root) return { root: null, dir: null, files: [], written: [] };
+  const { readdir, stat } = await import('node:fs/promises');
+  const dir = join(root, DELIVERABLES_DIR);
+  const files: Array<{ rel: string; abs: string; size: number; mtime: number }> = [];
+  const walk = async (abs: string, rel: string, depth: number): Promise<void> => {
+    if (depth > 4 || files.length >= 500) return;
+    let entries: import('node:fs').Dirent[] = [];
+    try { entries = await readdir(abs, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.name.startsWith('.') || (depth === 0 && e.name === 'hires')) continue;
+      const a = join(abs, e.name);
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) await walk(a, r, depth + 1);
+      else if (e.isFile()) { try { const s = await stat(a); files.push({ rel: r, abs: a, size: s.size, mtime: s.mtimeMs }); } catch { /* gone */ } }
+    }
+  };
+  await walk(dir, '', 0);
+  files.sort((a, b) => b.mtime - a.mtime);
+  // An agent's own hive folder (memory, inbox) is bookkeeping, not a deliverable.
+  const agentsDir = join(root, 'agents');
+  const norm = (p: string) => p.replace(/\\/g, '/').toLowerCase();
+  const written = Object.values(hive.registry().agents).flatMap((a) =>
+    writtenFiles(hookServer.stepsFor(a.id))
+      .filter((f) => !norm(f.path).startsWith(norm(agentsDir) + '/'))
+      .map((f) => ({ ...f, agentId: a.id, name: a.name }))
+  ).sort((x, y) => y.ts - x.ts).slice(0, 200);
+  return { root, dir, files, written };
+});
 ipcMain.handle('hive:steps', (_evt, agentId: unknown) => (typeof agentId === 'string' ? hookServer.stepsFor(agentId) : []));
 ipcMain.handle('hive:log', (_evt, n: unknown) => hive.logTail(typeof n === 'number' ? n : 200));
 ipcMain.handle('hive:memory', (_evt, id: unknown) => (typeof id === 'string' ? hive.memory(id) : ''));

@@ -22,12 +22,14 @@ import { FactoriesView } from './FactoriesView';
 import { EnvironmentView } from './EnvironmentView';
 import { McpView } from './McpView';
 import { ProvidersView } from './ProvidersView';
+import { DeliverablesView } from './DeliverablesView';
 import './pro.css';
 
 /** Sections in the sidebar; their names are `pro.nav.<id>`. */
 const TOP: { id: ProSection; icon: ProIconName }[] = [
   { id: 'tasks', icon: 'tasks' },
   { id: 'inbox', icon: 'inbox' },
+  { id: 'deliverables', icon: 'deliverables' },
   { id: 'automations', icon: 'automations' },
   { id: 'memory', icon: 'memory' },
   { id: 'capabilities', icon: 'capabilities' },
@@ -74,6 +76,7 @@ export function ProShell({ config }: { config: HarnessConfig }) {
   switch (section) {
     case 'tasks': page = <TasksView tasks={tasks} roster={roster} />; break;
     case 'inbox': page = <InboxView tasks={tasks} />; break;
+    case 'deliverables': page = <DeliverablesView tasks={tasks} roster={roster} />; break;
     case 'automations': page = <AutomationsView />; break;
     case 'memory': page = <MemoryView tasks={tasks} roster={roster} />; break;
     case 'capabilities': page = <CapabilitiesView roster={roster} config={config} />; break;
