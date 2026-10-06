@@ -3883,18 +3883,47 @@ module.exports.default = module.exports;
 const OPENCODE_PLUGIN = `import { createConnection } from 'node:net';
 const SOCK = process.env.HIVE_SOCK;
 const AGENT = process.env.AGENT_ID || null;
+// The session this agent runs in (session.created), on every payload: the
+// office records it to resume the agent and to key its cost rows.
+let SID = null;
+let MODEL = '';
+const seenSteps = new Set();
 function post(payload) {
   try {
     if (!SOCK) return;
     payload.agent_id = payload.agent_id || AGENT;
+    if (SID && !payload.session_id) payload.session_id = SID;
     const c = createConnection((String(SOCK).startsWith('tcp://') ? { host: '127.0.0.1', port: Number(String(SOCK).slice(String(SOCK).lastIndexOf(':') + 1)) } : SOCK), () => { try { c.end(JSON.stringify(payload) + '\\n'); } catch (e) {} });
     c.on('error', () => {});
   } catch (e) {}
 }
 export const HiveBridge = async () => {
+  // The app writes this file to plugin/ and plugins/ (older and newer OpenCode
+  // read one or the other); OpenCode 1.18 loads both, which sent every event
+  // twice. The second copy registers nothing.
+  if (globalThis.__mdHiveBridge) return {};
+  globalThis.__mdHiveBridge = true;
   return {
     event: async (input) => {
-      try { if (input && input.event && input.event.type === 'session.idle') post({ hook_event_name: 'Stop' }); } catch (e) {}
+      try {
+        const e = input && input.event;
+        const p = (e && e.properties) || {};
+        if (!e) return;
+        if (e.type === 'session.created' && p.info && !p.info.parentID && !SID) {
+          SID = p.info.id;
+          post({ hook_event_name: 'SessionStart' });
+        } else if (e.type === 'message.updated' && p.info && p.info.role === 'assistant' && p.info.modelID) {
+          MODEL = (p.info.providerID ? p.info.providerID + '/' : '') + p.info.modelID;
+        } else if (e.type === 'message.part.updated' && p.part && p.part.type === 'step-finish' && !seenSteps.has(p.part.id)) {
+          // One row per model step, with OpenCode's own price (0 for a local model).
+          seenSteps.add(p.part.id);
+          const k = p.part.tokens || {};
+          const cache = k.cache || {};
+          post({ hook_event_name: 'CostSample', model: MODEL, input: k.input || 0, output: k.output || 0, cache_read: cache.read || 0, cache_creation: cache.write || 0, usd: typeof p.part.cost === 'number' ? p.part.cost : undefined });
+        } else if (e.type === 'session.idle' && (!SID || p.sessionID === SID)) {
+          post({ hook_event_name: 'Stop' });
+        }
+      } catch (err) {}
     },
     // The arguments (output.args) too: which file a write touches, which command
     // ran — the steps timeline and Deliverables read them, as for every other CLI.

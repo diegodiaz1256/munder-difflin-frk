@@ -53,6 +53,8 @@ interface HookPayload {
   output?: number;
   cache_read?: number;
   cache_creation?: number;
+  /** The CLI's own price for this response (Pi), when it reports one. */
+  usd?: number;
 }
 
 /** Live health of the hook socket — the ONE endpoint every lifecycle hook,
@@ -473,7 +475,9 @@ export class HookServer {
           cacheRead,
           cacheCreation,
           model: p.model ?? '',
-          usd: estimateCostUsd(p.model, {
+          // The CLI's own figure when it gives one (Pi knows its providers'
+          // prices, and a local model costs 0); else the per-model estimate.
+          usd: typeof p.usd === 'number' && Number.isFinite(p.usd) && p.usd >= 0 ? p.usd : estimateCostUsd(p.model, {
             inputTokens: input,
             outputTokens: output,
             cacheReadTokens: cacheRead,
