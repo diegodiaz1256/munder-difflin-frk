@@ -5,6 +5,7 @@ An office browser for pages a plain fetch cannot read, and the Manager view says
 ## What's new
 
 - **Office browser.** Agents can open a page with the app's own Chromium when a plain fetch gets a 403, an empty page or "enable JavaScript", and search the web. Claude Code agents get it as tools, every other engine as a command, and it works from WSL offices. Pages open in an isolated, throwaway session (none of the app's logins). It does not solve captchas or bot challenges, and it is off for any agent whose Web is switched off in Capabilities.
+- **Lighter on a laptop.** The Floor view draws at 30 frames a second (15 when nobody is working, 10 behind another window) instead of the screen's refresh rate: an idle office went from about 85% of a core to under 30%. The office browser opens at most two pages at a time, skips images, video and fonts, and gives the memory back as soon as it has read a page.
 - **Manager shows the office starting.** Opening the app in the Manager view now says the office is starting until Michael is at his terminal, and shows the error with Retry if he could not start, as the Floor view already did.
 
 ## Earlier releases

@@ -1,3 +1,3 @@
 - **Office browser**: agents read pages a plain fetch cannot.
-- Works from WSL; off when an agent's Web is off.
+- **Lighter**: the Floor uses far less CPU when idle.
 - **Manager** says when the office is starting.
