@@ -286,6 +286,24 @@ const ptyToAgent = new Map<string, string>();
  *  install disabled) so the freshly-installed CLI launches in the SAME pty/window —
  *  no user click. Cleared the moment it's consumed, so it can never loop installs. */
 const pendingInstallRelaunch = new Map<string, { opts: AgentSpawnOptions; owner: Electron.WebContents | null; bin: string; rung: string }>();
+/** One install per engine CLI at a time. Restoring a team with several agents of
+ *  a CLI that was missing started one global `npm install -g` per agent at once;
+ *  they overwrote each other and left a package with an empty bin/ behind. The
+ *  first agent installs; the others wait for it, then start normally. */
+const installsInFlight = new Map<string, { done: Promise<void>; resolve: () => void }>();
+/** Take the install slot for `bin`. Synchronous on purpose: the next spawn of
+ *  the same CLI must see it before this one awaits anything (a network lookup
+ *  for the Node installer), or both start installing. */
+function claimInstall(bin: string): void {
+  if (installsInFlight.has(bin)) return;
+  let resolve = (): void => {};
+  const done = new Promise<void>((r) => { resolve = r; });
+  installsInFlight.set(bin, { done, resolve });
+}
+function finishInstall(bin: string): void {
+  const f = installsInFlight.get(bin);
+  if (f) { installsInFlight.delete(bin); f.resolve(); }
+}
 const hive = new HiveManager(
   () => readConfig().harnessHome,
   (channel, payload) => {
@@ -1054,6 +1072,8 @@ ptyManager.setExitHandler((id, exitCode, info) => {
   const pending = pendingInstallRelaunch.get(id);
   if (pending) {
     pendingInstallRelaunch.delete(id);
+    // Whatever the outcome, agents waiting on this install may go ahead now.
+    finishInstall(pending.bin);
     // Activation funnel: did the auto-installer actually complete? A non-zero exit
     // is the Linux-installer-cannot-finish-unattended signal that used to be silent.
     const provider = pending.opts.provider ?? inferAgentProvider(pending.opts.command, undefined);
@@ -3207,7 +3227,15 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   {
     const bin = opts.command.trim().split(/\s+/)[0] || opts.command;
     const onWsl = process.platform === 'win32' && !!parseWslPath(opts.cwd);
+    // Another agent is already installing this CLI: wait for it instead of
+    // starting a second install over the same files.
+    const inFlight = bin && !opts.noAutoInstall && !onWsl ? installsInFlight.get(bin) : undefined;
+    if (inFlight) {
+      spawnStep(opts.id, `waiting for ${bin} to finish installing`);
+      await inFlight.done;
+    }
     if (bin && !opts.noAutoInstall && !onWsl && !ptyManager.isCommandAvailable(bin)) {
+      claimInstall(bin);
       // The installer commands are `npm install -g …`. Probe for npm the same way
       // we probe for the engine CLI, so a no-Node machine gets the node-free rung
       // (or an honest manual hint) instead of watching `npm: not found` scroll by.
@@ -3242,6 +3270,8 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
       // and exits 0, and relaunching there would just respawn the still-missing
       // binary and die with the bare "process exited (code 1)" this whole path exists
       // to replace.
+      // No installer running (manual hint, or the PTY failed): free the slot now.
+      if (!(res.ok && rung.command)) finishInstall(bin);
       if (res.ok && rung.command) {
         pendingInstallRelaunch.set(opts.id, { opts, owner, bin, rung: rung.kind });
         // The auto-installer PTY is running; agent_install_finished on its exit says
@@ -3267,6 +3297,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     if (bin && minNode && !opts.noAutoInstall && !onWsl) {
       const have = detectNodeVersion(ptyManager.commandPath('node'));
       if (have && !nodeAtLeast(have, minNode)) {
+        claimInstall(bin);
         const nodeInstaller = await resolveNodeInstaller();
         const rung = chooseInstallRung(installInfoForProvider(provider), false, nodeInstaller);
         const res = ptyManager.spawn(
@@ -3277,6 +3308,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           owner
         );
         if (res.ok && rung.command) pendingInstallRelaunch.set(opts.id, { opts, owner, bin, rung: rung.kind });
+        else finishInstall(bin);
         syncKeepAwake();
         return res;
       }
