@@ -1,3 +1,3 @@
-- **Office browser**: agents read pages a plain fetch cannot.
-- **Lighter**: the Floor uses far less CPU when idle.
-- **Manager** says when the office is starting.
+- Agents find the **office browser** when a page fails.
+- It opens two pages at most and frees memory at once.
+- About 0.8 GB peak for five heavy pages (was 1.4 GB).
