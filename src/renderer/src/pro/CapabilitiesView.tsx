@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HarnessConfig } from '@/store/config';
 import type { Agent } from '@/store/store';
@@ -102,7 +102,11 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
   const saveDraft = () => {
     if (!draft || !draft.label.trim()) return;
     const rest = custom.filter((b) => b.id !== draft.id).map(({ custom: _c, ...b }) => b);
-    const access = Object.fromEntries(draft.servers.filter(isKeyed).map((s) => [s, levelOf(draft.access, s)]));
+    const access = {
+      ...Object.fromEntries(draft.servers.filter(isKeyed).map((s) => [s, levelOf(draft.access, s)])),
+      // REST API levels (api:<id>) set in the editor.
+      ...Object.fromEntries(Object.entries(draft.access ?? {}).filter(([k]) => k.startsWith('api:')))
+    };
     const edited = { id: draft.id ?? '', label: draft.label.trim(), icon: draft.icon, servers: draft.servers, access };
     const next = draft.id
       ? custom.map(({ custom: _c, ...b }) => (b.id === draft.id ? edited : b))
@@ -248,6 +252,10 @@ function BundleEditor({ draft, config, saving, onChange, onCancel, onSave, onCon
   const { t } = useTranslation();
   const flip = (id: string) =>
     onChange({ ...draft, servers: draft.servers.includes(id) ? draft.servers.filter((s) => s !== id) : [...draft.servers, id] });
+  // REST APIs (Connections → REST APIs): the role's level for each. Not set =
+  // read-only, as for an agent with no role.
+  const [apis, setApis] = useState<Array<{ id: string; label: string }>>([]);
+  useEffect(() => { void window.cth.integrationsList().then((r) => setApis(r.map((x) => ({ id: x.id, label: x.label })))).catch(() => {}); }, []);
   const needsKey = draft.servers.filter((s) => !consented(config, s));
   return (
     <section className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 12, borderColor: 'var(--cth-lemon)' }}>
@@ -276,6 +284,27 @@ function BundleEditor({ draft, config, saving, onChange, onCancel, onSave, onCon
           );
         })}
       </div>
+      {apis.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.caps.apiHelp')}</span>
+          {apis.map((a) => {
+            const cur = draft.access?.[`api:${a.id}`] ?? 'read';
+            return (
+              <div key={a.id} className="pro-row" style={{ gap: 8 }}>
+                <span style={{ minWidth: 120, fontSize: 13 }}>{a.label}</span>
+                <div className="pro-switch" role="radiogroup" aria-label={a.label}>
+                  {(['none', 'read', 'readwrite'] as const).map((lv) => (
+                    <button key={lv} role="radio" aria-checked={cur === lv} aria-pressed={cur === lv}
+                      onClick={() => onChange({ ...draft, access: { ...(draft.access ?? {}), [`api:${a.id}`]: lv } })}>
+                      {lv === 'none' ? t('pro.conn.access_none') : lv === 'read' ? t('pro.caps.accessRead') : t('pro.caps.accessWrite')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       {draft.servers.filter(isKeyed).length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.caps.accessHelp')}</span>

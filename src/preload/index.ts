@@ -406,6 +406,9 @@ export interface HarnessConfig {
   agentMcpGrants?: Record<string, string[]>;
   /** Claude Code agents reach only the MCP servers managed in the app (default on). */
   mcpOnlyManaged?: boolean;
+  integrationPolicy?: Record<string, 'none' | 'read' | 'readwrite'>;
+  integrationScopes?: Record<string, string[]>;
+  agentMcpAccess?: Record<string, Record<string, 'none' | 'read' | 'readwrite'>>;
   /** Claude Code tool groups taken from an agent (Capabilities): agent id → group ids (shared/nativeTools.ts). */
   agentToolBlocks?: Record<string, string[]>;
   autoDeliveryPausedAgents?: string[];
@@ -425,6 +428,7 @@ export interface HarnessConfig {
   providerBaseUrls?: Partial<Record<AgentProvider, string>>;
   /** Per-CLI-provider default model slug, used to pre-fill the model picker. */
   providerDefaultModels?: Partial<Record<AgentProvider, string>>;
+  customModelProviders?: Array<{ id: string; label: string; baseUrl: string; models: string[] }>;
   /** Certificates for agents' HTTPS (custom endpoints, company gateways):
    *  verify on/off, an extra CA file, and trusting the Windows / WSL stores.
    *  See src/main/caBundle.ts. */
@@ -1486,6 +1490,9 @@ const api = {
   /** The latest tool calls agents made with this connection (newest first): never arguments or results. */
   connectionsActivity: (id: string): Promise<Array<{ ts: number; agentId: string; agentName: string; tool: string; allowed: boolean; ok?: boolean; ms?: number }>> =>
     ipcRenderer.invoke('connections:activity', id),
+  /** REST APIs: limit (none | read | readwrite) and which agents get one (null = every agent). */
+  integrationsSetAccess: (id: string, level: 'none' | 'read' | 'readwrite'): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('integrations:setAccess', id, level),
+  integrationsSetScope: (id: string, agentIds: string[] | null): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('integrations:setScope', id, agentIds),
   connectionsSetAccess: (id: string, access: 'none' | 'read' | 'readwrite'): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('connections:setAccess', id, access),
   connectionsSetScope: (id: string, agentIds: string[] | null): Promise<{ ok: boolean; error?: string }> =>
@@ -1523,6 +1530,19 @@ const api = {
   integrationsTest: (req: { id: string; path?: string }): Promise<{ ok: boolean; status?: number; error?: string }> =>
     ipcRenderer.invoke('integrations:test', req),
   // Per-CLI-provider BYOK keys — WRITE-ONLY. `providerKeySet` stores a backend key one
+  /** Your own OpenAI-compatible providers for OpenCode and Pi: save the list, a key (write-only), fetch models. */
+  customProvidersSave: (list: Array<{ id: string; label: string; baseUrl: string; models: string[] }>): Promise<Array<{ id: string; label: string; baseUrl: string; models: string[] }>> => ipcRenderer.invoke('customProviders:save', list),
+  customProvidersSetKey: (id: string, key: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('customProviders:setKey', id, key),
+  customProvidersHasKey: (id: string): Promise<boolean> => ipcRenderer.invoke('customProviders:hasKey', id),
+  customProvidersFetchModels: (baseUrl: string, id?: string): Promise<{ ok: boolean; models: string[]; error?: string }> => ipcRenderer.invoke('customProviders:fetchModels', baseUrl, id),
+  /** An engine the app drives (pi / opencode): who it is signed in to (names only) and how to sign in. */
+  engineStatus: (engine: 'pi' | 'opencode'): Promise<{ ok: boolean; home?: string; file?: string; providers?: Array<{ id: string; kind: string }>; signIn?: { cmd: string; args: string[] } }> =>
+    ipcRenderer.invoke('engines:status', engine),
+  /** The models the engine's own CLI lists, as provider/model ids. */
+  engineModels: (engine: 'pi' | 'opencode'): Promise<{ ok: boolean; models: string[]; error?: string }> =>
+    ipcRenderer.invoke('engines:models', engine),
+  /** Which providers Pi is signed in to (names and kind only, never a token). */
+  piAuthStatus: (): Promise<{ file: string; providers: Array<{ id: string; kind: string }> }> => ipcRenderer.invoke('providers:piStatus'),
   // way (never echoed); `providerKeyHas` returns only a boolean; no method ever returns
   // the plaintext. Keys are materialized MAIN-ONLY at spawn.
   providerKeySet: (req: { backend: string; key: string }): Promise<{ ok: boolean; error?: string }> =>

@@ -911,7 +911,18 @@
     "runningOpenModels": "Running open models? Step-by-step guides:",
     "runOnOpenModels": "run Scranton Branch on open models",
     "setUpMacMini": "set it up on a Mac Mini",
-    "autoModeCaveat": "⚠ In auto mode these engines run with full filesystem + shell access (no sandbox) — like Claude's bypass mode. Turn auto mode off (General) to make them ask first. Live end-to-end verification with real model calls is pending your keys / a local LLM."
+    "autoModeCaveat": "⚠ In auto mode these engines run with full filesystem + shell access (no sandbox) — like Claude's bypass mode. Turn auto mode off (General) to make them ask first. Live end-to-end verification with real model calls is pending your keys / a local LLM.",
+    "piTitle": "Pi: sign-in",
+    "piHow": "Pi agents can sign in two ways:",
+    "piKeyWay": "An API key in the list above (Anthropic, OpenAI, Google, OpenRouter, Groq, Mistral, xAI…): Pi reads it from the environment.",
+    "piLoginWay": "Your subscription (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini): in any terminal run",
+    "piCopy": "Copy",
+    "piCopied": "Copied",
+    "piSignedIn": "Pi is signed in to: {{list}}. The app’s Pi agents use it.",
+    "piNotSignedIn": "Pi is not signed in on this machine yet.",
+    "piSubscription": "subscription",
+    "piCheck": "Check again",
+    "piRestart": "Restart a running Pi agent after signing in. On a WSL office, run pi inside the distribution."
   },
   "mcpDefaults": {
     "title": "Default MCP servers",
@@ -1332,7 +1343,7 @@
     "availability": "Availability",
     "enabled": "enabled",
     "disabled": "disabled",
-    "availableToAll": "✓ Available to all workers",
+    "availableToAll": "✓ Enabled — who may use it and how is set under “Who may use each REST API”",
     "notAvailableYet": "Not available to workers yet",
     "addSecretToEnable": "Add a secret and enable to make it available.",
     "readyOnceSaved": "Ready once saved.",
@@ -1825,7 +1836,8 @@
       "accessWrite": "Read & write",
       "accessReadShort": "read",
       "accessWriteShort": "read & write",
-      "accessHelp": "What this role may do with each connection. The connection’s own limit (Connections) still caps it."
+      "accessHelp": "What this role may do with each connection. The connection’s own limit (Connections) still caps it.",
+      "apiHelp": "What this role may do with each REST API (Connections → REST APIs). Not set means read-only."
     },
     "conn": {
       "step1": "Pick a service and get its key",
@@ -1890,7 +1902,10 @@
       "why_roleLacks": "no: its role does not include it",
       "why_webBlocked": "no: Web taken away",
       "why_ceilingNone": "no: limit is “nothing”",
-      "why_providerNoMcp": "no: its CLI does not take MCP from the app"
+      "why_providerNoMcp": "no: its CLI does not take MCP from the app",
+      "apiAccessTitle": "Who may use each REST API",
+      "apiAccessBody": "The most any agent can do with each API, and which agents get it. A role can lower it, never raise it. The app checks every request.",
+      "apiReadMeans": "Read-only: GET requests and searches (Jira JQL, Notion search, GraphQL queries). Anything that would change data is refused."
     },
     "env": {
       "step1": "Plain variables reach every agent",
@@ -2250,6 +2265,47 @@
       "openFailed": "Could not open it.",
       "showAll": "Show all",
       "noneForTask": "Nothing for this task yet."
+    },
+    "engines": {
+      "title": "Engines",
+      "keysTitle": "API keys, endpoints and certificates",
+      "signedIn": "Signed in",
+      "notSignedIn": "Not signed in",
+      "signInTitle": "Sign-in",
+      "signedInTo": "Signed in to: {{list}}. The app’s agents use it.",
+      "notSignedInBody": "Not signed in with a subscription on this machine. Sign in, or add an API key below.",
+      "subscription": "subscription",
+      "signIn": "Sign in…",
+      "check": "Check again",
+      "orKey": "or use an API key below",
+      "modelTitle": "Default model",
+      "loadModels": "Load models",
+      "loading": "Loading…",
+      "modelsFound": "{{count}} models available: pick one in the field.",
+      "noModels": "No models listed.",
+      "saved": "Saved. New agents of this engine start with it.",
+      "modelHint": "Used when you add an agent of this engine without choosing a model. Restart a running agent to change it.",
+      "signInTo": "Sign in to {{name}}",
+      "done": "Done",
+      "couldNotStart": "Could not start {{cmd}}: is it installed?",
+      "piSteps": "Type /login, press Enter and choose your provider (Claude Pro/Max, ChatGPT, GitHub Copilot, Gemini…). Follow the link it shows. Then press Done.",
+      "opencodeSteps": "Pick your provider with the arrow keys and Enter, then follow the steps (a link to open, or paste a key). Then press Done.",
+      "customTitle": "Local & OpenAI-compatible providers",
+      "customBody": "Local models (Ollama, LM Studio, vLLM, llama.cpp) or any OpenAI-compatible server. Every OpenCode and Pi agent gets them; pick a model as provider/model.",
+      "customAdd": "Add:",
+      "customOther": "Other server",
+      "customSaved": "Saved. Restart a running OpenCode or Pi agent to use it.",
+      "customDropped": "Saved, without the entries that had no valid name or http(s) URL.",
+      "customHint": "On a WSL office, localhost is the distribution itself: a server running on Windows needs mirrored networking or the Windows host’s address.",
+      "customName": "Name",
+      "customIdTip": "Model ids start with this, e.g. ollama/llama3.1:8b",
+      "customKeyStored": "key stored — paste a new one to replace it",
+      "customKeyPh": "API key (optional; local servers usually need none)",
+      "customKeyAfterSave": "Save first to add a key.",
+      "customModels": "Models:",
+      "customRemoveModel": "Click to remove",
+      "customModelPh": "add a model id",
+      "customFetch": "Fetch from server"
     }
   },
   "hivePicker": {

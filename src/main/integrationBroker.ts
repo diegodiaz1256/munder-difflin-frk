@@ -26,6 +26,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
+import { isReadRequest, type Access } from '../shared/connectionAccess';
 import {
   type IntegrationRecord,
   buildAuthHeaders,
@@ -55,6 +56,8 @@ const STRIP_RESPONSE = new Set([
 interface Capability {
   workerId: string;
   allowedIds: Set<string>;
+  /** Per integration: 'read' lets only reads through (isReadRequest). Absent → unrestricted. */
+  access: Map<string, Access>;
   grantedAt: number;
 }
 
@@ -131,10 +134,10 @@ export class IntegrationBroker {
   /** Mint a per-worker capability token granting access to `allowedIds`. Any prior
    *  token for this worker is revoked first. The token is a random handle — never a
    *  secret, never persisted. */
-  grant(workerId: string, allowedIds: string[]): string {
+  grant(workerId: string, allowedIds: string[], access?: Record<string, Access>): string {
     this.revoke(workerId);
     const token = randomBytes(32).toString('base64url');
-    this.byToken.set(token, { workerId, allowedIds: new Set(allowedIds), grantedAt: Date.now() });
+    this.byToken.set(token, { workerId, allowedIds: new Set(allowedIds), access: new Map(Object.entries(access ?? {})), grantedAt: Date.now() });
     this.byWorker.set(workerId, token);
     return token;
   }
@@ -212,7 +215,7 @@ export class IntegrationBroker {
     const query = m[3] ?? '';
 
     // 4) Authorize against this worker's capability.
-    if (!cap.allowedIds.has(integrationId)) {
+    if (!cap.allowedIds.has(integrationId) || cap.access.get(integrationId) === 'none') {
       return IntegrationBroker.sendError(res, 403, 'forbidden', 'integration not in this worker capability');
     }
     // 5) Resolve the record (still enabled?).
@@ -231,7 +234,9 @@ export class IntegrationBroker {
       if (!secret) return IntegrationBroker.sendError(res, 503, 'no_secret', 'no secret configured for this integration');
     }
 
-    void this.forward(req, res, rec, upstream, secret);
+    // The full upstream path: an API whose base is the endpoint (Linear's /graphql)
+    // sends an empty relative one.
+    void this.forward(req, res, rec, upstream, secret, cap.access.get(integrationId), upstream.pathname);
   }
 
   private async forward(
@@ -239,7 +244,9 @@ export class IntegrationBroker {
     res: ServerResponse,
     rec: IntegrationRecord,
     upstream: URL,
-    secret: string | undefined
+    secret: string | undefined,
+    access?: Access,
+    path = ''
   ): Promise<void> {
     // Buffer the request body with a hard cap (write methods).
     const method = (req.method ?? 'GET').toUpperCase();
@@ -254,6 +261,12 @@ export class IntegrationBroker {
         }
         return IntegrationBroker.sendError(res, 400, 'bad_request', 'could not read request body');
       }
+    }
+
+    // Read-only access (Connections → REST APIs, or the agent's role): reads and
+    // searches only. Checked before the secret ever goes upstream.
+    if (access === 'read' && !isReadRequest(method, path, body?.toString('utf8'))) {
+      return IntegrationBroker.sendError(res, 403, 'read_only', `${method} ${path} would change things; your access to this API is read-only. Ask the human to give your role read & write access (Capabilities) or raise the API's limit (Connections).`);
     }
 
     // Sanitize worker headers, then inject the auth header(s). Injected auth ALWAYS

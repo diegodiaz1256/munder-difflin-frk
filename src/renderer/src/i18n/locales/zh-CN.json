@@ -911,7 +911,18 @@
     "runningOpenModels": "要跑开源模型？分步指南：",
     "runOnOpenModels": "在开源模型上运行 Scranton Branch",
     "setUpMacMini": "在 Mac Mini 上配置",
-    "autoModeCaveat": "⚠ 在自动模式下，这些引擎以完整的文件系统 + shell 访问权限运行（无沙箱）——就像 Claude 的绕过模式。把自动模式关掉（通用页）即可让它们先询问。与真实模型调用的端到端实测仍在等待你的密钥 / 本地 LLM。"
+    "autoModeCaveat": "⚠ 在自动模式下，这些引擎以完整的文件系统 + shell 访问权限运行（无沙箱）——就像 Claude 的绕过模式。把自动模式关掉（通用页）即可让它们先询问。与真实模型调用的端到端实测仍在等待你的密钥 / 本地 LLM。",
+    "piTitle": "Pi：登录",
+    "piHow": "Pi 智能体有两种登录方式：",
+    "piKeyWay": "在上方列表中填入 API 密钥（Anthropic、OpenAI、Google、OpenRouter、Groq、Mistral、xAI…）：Pi 从环境变量读取。",
+    "piLoginWay": "你的订阅（Claude Pro/Max、ChatGPT、GitHub Copilot、Gemini）：在任意终端运行",
+    "piCopy": "复制",
+    "piCopied": "已复制",
+    "piSignedIn": "Pi 已登录：{{list}}。应用中的 Pi 智能体会使用它。",
+    "piNotSignedIn": "此机器上的 Pi 尚未登录。",
+    "piSubscription": "订阅",
+    "piCheck": "再次检查",
+    "piRestart": "登录后请重启正在运行的 Pi 智能体。在 WSL 办公室中，请在发行版内运行 pi。"
   },
   "mcpDefaults": {
     "title": "默认 MCP 服务器",
@@ -1332,7 +1343,7 @@
     "availability": "可用性",
     "enabled": "已启用",
     "disabled": "已禁用",
-    "availableToAll": "✓ 所有工人可用",
+    "availableToAll": "✓ 已启用 — 谁可以使用以及如何使用，见“谁可以使用各个 REST API”",
     "notAvailableYet": "工人尚不可用",
     "addSecretToEnable": "添加密钥并启用即可使其可用。",
     "readyOnceSaved": "保存后即就绪。",
@@ -1825,7 +1836,8 @@
       "accessWrite": "读写",
       "accessReadShort": "只读",
       "accessWriteShort": "读写",
-      "accessHelp": "此角色可对每个连接执行的操作。连接自身的上限（连接页）仍然有效。"
+      "accessHelp": "此角色可对每个连接执行的操作。连接自身的上限（连接页）仍然有效。",
+      "apiHelp": "此角色对每个 REST API 可执行的操作（连接 → REST API）。未设置即为只读。"
     },
     "conn": {
       "step1": "选择服务并获取密钥",
@@ -1890,7 +1902,10 @@
       "why_roleLacks": "否：其角色不包含它",
       "why_webBlocked": "否：网页权限已被移除",
       "why_ceilingNone": "否：上限为“无”",
-      "why_providerNoMcp": "否：其 CLI 不从应用获取 MCP"
+      "why_providerNoMcp": "否：其 CLI 不从应用获取 MCP",
+      "apiAccessTitle": "谁可以使用各个 REST API",
+      "apiAccessBody": "任何智能体对每个 API 能做的最大范围，以及哪些智能体可以使用。角色只能降低，不能提高。应用会检查每个请求。",
+      "apiReadMeans": "只读：GET 请求和搜索（Jira JQL、Notion 搜索、GraphQL 查询）。任何会修改数据的请求都会被拒绝。"
     },
     "env": {
       "step1": "普通变量提供给所有代理",
@@ -2250,6 +2265,47 @@
       "openFailed": "无法打开。",
       "showAll": "显示全部",
       "noneForTask": "此任务暂无内容。"
+    },
+    "engines": {
+      "title": "引擎",
+      "keysTitle": "API 密钥、端点和证书",
+      "signedIn": "已登录",
+      "notSignedIn": "未登录",
+      "signInTitle": "登录",
+      "signedInTo": "已登录：{{list}}。应用中的智能体会使用它。",
+      "notSignedInBody": "此机器上尚未用订阅登录。请登录，或在下方添加 API 密钥。",
+      "subscription": "订阅",
+      "signIn": "登录…",
+      "check": "再次检查",
+      "orKey": "或在下方使用 API 密钥",
+      "modelTitle": "默认模型",
+      "loadModels": "加载模型",
+      "loading": "加载中…",
+      "modelsFound": "有 {{count}} 个模型可用：在输入框中选择。",
+      "noModels": "没有列出模型。",
+      "saved": "已保存。此引擎的新智能体将使用它启动。",
+      "modelHint": "添加此引擎的智能体且未选模型时使用。重启运行中的智能体以更改。",
+      "signInTo": "登录 {{name}}",
+      "done": "完成",
+      "couldNotStart": "无法启动 {{cmd}}：是否已安装？",
+      "piSteps": "输入 /login，按回车并选择你的提供商（Claude Pro/Max、ChatGPT、GitHub Copilot、Gemini…）。按提示打开链接。然后点击完成。",
+      "opencodeSteps": "用方向键和回车选择提供商，然后按步骤操作（打开链接或粘贴密钥）。然后点击完成。",
+      "customTitle": "本地与 OpenAI 兼容的提供商",
+      "customBody": "本地模型（Ollama、LM Studio、vLLM、llama.cpp）或任何 OpenAI 兼容服务器。所有 OpenCode 和 Pi 智能体都会获得；按 提供商/模型 选择模型。",
+      "customAdd": "添加：",
+      "customOther": "其他服务器",
+      "customSaved": "已保存。重启运行中的 OpenCode 或 Pi 智能体以使用。",
+      "customDropped": "已保存，已去除没有有效名称或 http(s) 地址的条目。",
+      "customHint": "在 WSL 办公室中，localhost 指发行版本身：在 Windows 上运行的服务器需要镜像网络或 Windows 主机地址。",
+      "customName": "名称",
+      "customIdTip": "模型 ID 以此开头，例如 ollama/llama3.1:8b",
+      "customKeyStored": "密钥已保存 — 粘贴新的以替换",
+      "customKeyPh": "API 密钥（可选；本地服务器通常不需要）",
+      "customKeyAfterSave": "先保存再添加密钥。",
+      "customModels": "模型：",
+      "customRemoveModel": "点击移除",
+      "customModelPh": "添加模型 ID",
+      "customFetch": "从服务器获取"
     }
   },
   "hivePicker": {

@@ -2849,6 +2849,19 @@ export class HiveManager {
     }
   }
 
+  /** Which providers your Pi is signed in to (~/.pi/agent/auth.json): names and
+   *  kind only (oauth / api key), never a token. For Settings → AI providers. */
+  piAuthStatus(): { file: string; providers: Array<{ id: string; kind: string }> } {
+    const file = join(this.userHome(), '.pi', 'agent', 'auth.json');
+    try {
+      const raw = JSON.parse(readFileSync(file, 'utf8')) as Record<string, { type?: unknown } | unknown>;
+      const providers = Object.entries(raw)
+        .filter(([, v]) => !!v && typeof v === 'object')
+        .map(([id, v]) => ({ id, kind: typeof (v as { type?: unknown }).type === 'string' ? String((v as { type?: unknown }).type) : 'key' }));
+      return { file, providers };
+    } catch { return { file, providers: [] }; }
+  }
+
   /** Pi (earendil-works) bridge. Pi has a rich `pi.on(event, …)` lifecycle but no
    *  Claude-shaped hook file; instead we drop a bundled EXTENSION into a PER-AGENT
    *  PI_CODING_AGENT_DIR (so the user's global ~/.pi is never mutated) that, when Pi
@@ -2875,7 +2888,24 @@ export class HiveManager {
       writeFileSync(join(home, 'extensions.json'), JSON.stringify(manifest, null, 2), 'utf8');
 
       const userPiDir = join(this.userHome(), '.pi', 'agent');
-      for (const fileName of ['models.json', 'models-store.json'] as const) {
+      // Your Pi login (`/login`: Claude, ChatGPT, Copilot, Gemini…) and the keys
+      // Pi stored lives in auth.json. Linked, like Codex's, so the agent signs in
+      // as you and a token Pi refreshes stays fresh for both; copied where a link
+      // is not allowed. Without it a hive Pi agent was never logged in.
+      const authSrc = join(userPiDir, 'auth.json');
+      const authDest = join(home, 'auth.json');
+      if (existsSync(authSrc)) {
+        let linked = false;
+        try { linked = lstatSync(authDest).isSymbolicLink(); } catch { /* not there yet */ }
+        if (!linked) {
+          // A copy (or nothing yet): try the link again, else refresh the copy so a
+          // token Pi renewed since last time is the one the agent gets.
+          try { rmSync(authDest, { force: true }); this.linkPath(authSrc, authDest, false); }
+          catch { try { copyFileSync(authSrc, authDest); } catch (e) { console.error('[hive] installPiHooks auth.json:', e); } }
+        }
+      }
+      // Your default provider and model (settings.json) and custom models.
+      for (const fileName of ['models.json', 'models-store.json', 'settings.json'] as const) {
         try {
           const data = readFileSync(join(userPiDir, fileName), 'utf8');
           writeFileSync(join(home, fileName), data, 'utf8');

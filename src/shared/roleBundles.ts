@@ -73,7 +73,9 @@ export function cleanCustomBundles(raw: unknown): RoleBundle[] {
     taken.add(id);
     const icon = (BUNDLE_ICONS as readonly string[]).includes(r.icon as string) ? (r.icon as BundleIcon) : 'mcp';
     const servers = cleanServerList(r.servers);
-    const access = cleanAccessMap(r.access, new Set(servers));
+    // Levels for its catalog servers, and for REST APIs (api:<integration id>).
+    const all = cleanAccessMap(r.access);
+    const access = Object.fromEntries(Object.entries(all).filter(([k]) => servers.includes(k) || /^api:[a-z0-9][a-z0-9-]{0,39}$/.test(k)));
     out.push({ id, label, icon, servers, ...(Object.keys(access).length ? { access } : {}), custom: true });
   }
   return out;

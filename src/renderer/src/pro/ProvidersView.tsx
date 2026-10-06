@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { HarnessConfig } from '@/store/config';
 import { AiEnginesSettings } from '@/components/AiEnginesSettings';
+import { EnginesPanel } from './EnginesPanel';
 
 /**
  * AI providers — model API keys, local endpoints, default models and
@@ -17,6 +18,9 @@ export function ProvidersView({ config }: { config: HarnessConfig }) {
         <span className="pro-sub">{t('pro.prov.sub')}</span>
       </div>
       <p className="pro-text">{t('pro.prov.hint')}</p>
+      <h3 style={{ margin: '6px 0 0', fontSize: 14 }}>{t('pro.engines.title')}</h3>
+      <EnginesPanel config={config} />
+      <h3 style={{ margin: '6px 0 0', fontSize: 14 }}>{t('pro.engines.keysTitle')}</h3>
       <div className="pro-card" style={{ flexShrink: 0 }}><AiEnginesSettings config={config} /></div>
     </div>
   );
