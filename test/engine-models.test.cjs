@@ -56,7 +56,8 @@ test('Pi: your models.json kept, our providers added, the key by env var name', 
   assert.ok(out.providers.mine);
   assert.equal(out.other, 1);
   assert.deepEqual(out.providers.lmstudio, { baseUrl: 'http://localhost:1234/v1', api: 'openai-completions', apiKey: 'none', models: [{ id: 'qwen2.5-coder', name: 'qwen2.5-coder' }] });
-  assert.equal(out.providers.gw.apiKey, customKeyEnv('gw'));
+  // Pi only reads `$NAME` / `${NAME}` from the environment; a bare name would be sent as the key.
+  assert.equal(out.providers.gw.apiKey, '${MD_MODEL_KEY_GW}');
   assert.doesNotThrow(() => JSON.parse(piModelsJson('not json', lm, () => false)));
 });
 

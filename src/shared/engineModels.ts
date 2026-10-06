@@ -118,8 +118,9 @@ export function opencodeProviders(list: CustomModelProvider[], withKey: (id: str
   }]));
 }
 
-/** Pi: your models.json (if any) with these providers added. Pi reads an
- *  `apiKey` that names an environment variable from that variable. */
+/** Pi: your models.json (if any) with these providers added. The key is read
+ *  from the agent's environment: Pi only interpolates `$NAME` / `${NAME}`; a
+ *  bare name is sent as the key itself (LiteLLM: "Received=MD_M****ELLM"). */
 export function piModelsJson(existing: string | null, list: CustomModelProvider[], withKey: (id: string) => boolean): string {
   let base: { providers?: Record<string, unknown> } & Record<string, unknown> = {};
   if (existing) { try { const j = JSON.parse(existing); if (j && typeof j === 'object') base = j; } catch { /* keep ours only */ } }
@@ -129,7 +130,7 @@ export function piModelsJson(existing: string | null, list: CustomModelProvider[
       baseUrl: p.baseUrl,
       api: 'openai-completions',
       // Local servers ignore the key, but the field must be set.
-      apiKey: withKey(p.id) ? customKeyEnv(p.id) : 'none',
+      apiKey: withKey(p.id) ? `${'$'}{${customKeyEnv(p.id)}}` : 'none',
       models: p.models.map((m) => ({ id: m, name: m }))
     };
   }
