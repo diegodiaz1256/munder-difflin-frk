@@ -31,7 +31,8 @@ export type {
 export interface EnvVarView { name: string; kind: 'plain' | 'secret' | 'op'; value?: string; agents?: string[] | null; note?: string; stored?: boolean }
 export type McpTransportView = { kind: 'stdio'; command: string; args: string[] } | { kind: 'http'; url: string };
 export interface McpMineView { id: string; name: string; transport: McpTransportView; env: Record<string, string>; secretEnv: string[]; enabled: boolean; agents: string[] | null; source?: string; secretsStored: Record<string, boolean> }
-export interface McpFoundView { source: string; file: string; name: string; transport: McpTransportView; env: Array<{ name: string; secret: boolean; value?: string }>; headerNames: string[]; imported: boolean }
+export interface McpFoundView { source: string; file: string; name: string; transport: McpTransportView; env: Array<{ name: string; secret: boolean; value?: string }>; headerNames: string[]; imported: boolean; agent?: string; suggest: { kind: 'connection' | 'builtin'; id: string; label: string } | null }
+export interface McpOverviewView { agentId: string; name: string; provider: string; servers: Array<{ name: string; id: string; origin: 'connection' | 'builtin' | 'yours' | 'office'; access?: 'none' | 'read' | 'readwrite' }> }
 export interface RunnerView { id: string; name: string; command: string; description?: string; secrets: string[]; approval: 'always' | 'on-change' | 'never'; timeoutSec?: number }
 
 /** Factories as the renderer sees them (main/factories.ts; FACTORY-MCP.md). */
@@ -104,6 +105,8 @@ export interface ConnectionStatusView {
   enabled: boolean;
   ready: boolean;
   scope: string[] | null;
+  /** The most an agent may do with it: none | read | readwrite. */
+  access: 'none' | 'read' | 'readwrite';
   testable: boolean;
 }
 
@@ -244,6 +247,8 @@ export interface HiveTask {
   humanQA?: HumanQA[];
   /** Outcome summary used for the Slack done-notification. */
   result?: string;
+  /** Path(s) of what the task produced for the human (research/… or absolute). */
+  deliverable?: string;
   /** Origin thread for a Slack-sourced task (drives the done-summary reply). */
   slack?: { channel: string; thread_ts: string };
   /** SHA-256 of the capability token for a generic-webhook-sourced task (drives
@@ -399,6 +404,8 @@ export interface HarnessConfig {
   agentTokenCaps?: Record<string, number>;
   /** Per-agent MCP grants (Pro Capabilities): agent id → catalog ids. */
   agentMcpGrants?: Record<string, string[]>;
+  /** Claude Code agents reach only the MCP servers managed in the app (default on). */
+  mcpOnlyManaged?: boolean;
   /** Claude Code tool groups taken from an agent (Capabilities): agent id → group ids (shared/nativeTools.ts). */
   agentToolBlocks?: Record<string, string[]>;
   autoDeliveryPausedAgents?: string[];
@@ -755,8 +762,8 @@ const api = {
   /** Set or clear one per-agent token ceiling against main's latest config. */
   /** Grant an agent exactly these MCP catalog servers (undefined clears the
    *  grant). Takes effect on the agent's next restart. */
-  setAgentMcpGrant: (agentId: string, servers?: string[]): Promise<HarnessConfig> =>
-    ipcRenderer.invoke('config:setAgentMcpGrant', agentId, servers),
+  setAgentMcpGrant: (agentId: string, servers?: string[], access?: Record<string, 'none' | 'read' | 'readwrite'>): Promise<HarnessConfig> =>
+    ipcRenderer.invoke('config:setAgentMcpGrant', agentId, servers, access),
   setAgentTokenCap: (agentId: string, tokenCap?: number): Promise<HarnessConfig> =>
     ipcRenderer.invoke('config:setAgentTokenCap', agentId, tokenCap),
   ensureHarnessHome: (path: string): Promise<{ ok: boolean; error?: string }> =>
@@ -988,6 +995,13 @@ const api = {
   hiveSend: (msg: Partial<HiveMessage>, from?: string): Promise<{ ok: boolean; error?: string; message?: HiveMessage }> =>
     ipcRenderer.invoke('hive:send', msg, from),
 
+  /** What an agent has done lately (hook events with what each tool was asked), oldest first. */
+  /** Deliverables: the office's research/ folder (newest first) and what each agent wrote this session. */
+  deliverablesList: (): Promise<{ root: string | null; dir: string | null; distro: string | null; files: Array<{ rel: string; abs: string; size: number; mtime: number }>; written: Array<{ path: string; ts: number; created: boolean; agentId: string; name: string }>; links: Array<{ path: string; taskId: string; agentId: string; ts: number }> }> =>
+    ipcRenderer.invoke('deliverables:list'),
+  /** Open a deliverable in its default program (document types only). */
+  deliverablesOpenExternal: (path: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('deliverables:openExternal', path),
+  hiveSteps: (agentId: string): Promise<HookEvent[]> => ipcRenderer.invoke('hive:steps', agentId),
   onHiveHookEvent: (
     cb: (e: HookEvent) => void
   ): (() => void) => {
@@ -1418,7 +1432,7 @@ const api = {
   // Manager → Connections (keyed MCP servers). WRITE-ONLY like the integrations:
   // `connectionsList` reports only whether each field is stored.
   /** Save the user's own role bundles; resolves to what was kept after validation. */
-  saveRoleBundles: (bundles: Array<{ id?: string; label: string; icon: string; servers: string[] }>): Promise<Array<{ id: string; label: string; icon: string; servers: string[]; custom?: boolean }>> =>
+  saveRoleBundles: (bundles: Array<{ id?: string; label: string; icon: string; servers: string[]; access?: Record<string, 'none' | 'read' | 'readwrite'> }>): Promise<Array<{ id: string; label: string; icon: string; servers: string[]; access?: Record<string, 'none' | 'read' | 'readwrite'>; custom?: boolean }>> =>
     ipcRenderer.invoke('config:saveRoleBundles', bundles),
   connectionsList: (): Promise<ConnectionStatusView[]> =>
     ipcRenderer.invoke('connections:list'),
@@ -1436,6 +1450,8 @@ const api = {
   envOpStatus: (): Promise<{ installed: boolean; version?: string }> => ipcRenderer.invoke('env:opStatus'),
   // Manager → MCP (main/mcpServers.ts). Keys are write-only.
   mcpList: (): Promise<{ mine: McpMineView[]; found: McpFoundView[] }> => ipcRenderer.invoke('mcp:list'),
+  /** What each agent is given, decided by the app: server, where it came from, and what it may do. */
+  mcpOverview: (): Promise<McpOverviewView[]> => ipcRenderer.invoke('mcp:overview'),
   mcpImport: (source: string, name: string, secretNames?: string[]): Promise<{ ok: boolean; id?: string; error?: string }> =>
     ipcRenderer.invoke('mcp:import', source, name, secretNames),
   mcpSave: (input: { id?: string; name: string; transport: McpTransportView; env: Record<string, string> }, secretNames: string[]): Promise<{ ok: boolean; id?: string; error?: string }> =>
@@ -1464,6 +1480,14 @@ const api = {
     ipcRenderer.invoke('connections:setSecret', id, env, value),
   connectionsSetEnabled: (id: string, on: boolean): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('connections:setEnabled', id, on),
+  /** Every agent: what it may do with this connection, and if nothing, why. */
+  connectionsAgents: (id: string): Promise<Array<{ agentId: string; name: string; access: 'none' | 'read' | 'readwrite'; reason?: 'off' | 'noKey' | 'notChosen' | 'roleLacks' | 'webBlocked' | 'ceilingNone' | 'providerNoMcp' }>> =>
+    ipcRenderer.invoke('connections:agents', id),
+  /** The latest tool calls agents made with this connection (newest first): never arguments or results. */
+  connectionsActivity: (id: string): Promise<Array<{ ts: number; agentId: string; agentName: string; tool: string; allowed: boolean; ok?: boolean; ms?: number }>> =>
+    ipcRenderer.invoke('connections:activity', id),
+  connectionsSetAccess: (id: string, access: 'none' | 'read' | 'readwrite'): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('connections:setAccess', id, access),
   connectionsSetScope: (id: string, agentIds: string[] | null): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('connections:setScope', id, agentIds),
   connectionsTest: (id: string): Promise<{ ok: boolean; message: string }> =>

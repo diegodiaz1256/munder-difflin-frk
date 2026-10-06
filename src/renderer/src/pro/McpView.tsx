@@ -2,7 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { Agent } from '@/store/store';
-import type { McpFoundView, McpMineView, McpTransportView } from '../../../preload/index';
+import type { McpFoundView, McpMineView, McpOverviewView, McpTransportView } from '../../../preload/index';
+import type { HarnessConfig } from '@/store/config';
+import { useProStore } from './proStore';
+import { serverLabel } from '@shared/agentSteps';
 import { StateBadge } from './data';
 import { Guide, useGuide } from './Guide';
 
@@ -20,8 +23,11 @@ const STEPS = (t: TFunction): Array<[string, string]> =>
 
 const transportText = (t: McpTransportView) => (t.kind === 'stdio' ? [t.command, ...t.args].join(' ') : t.url);
 
-export function McpView({ roster }: { roster: Agent[] }) {
+export function McpView({ roster, config }: { roster: Agent[]; config: HarnessConfig }) {
   const { t } = useTranslation();
+  const setView = useProStore((s) => s.setView);
+  const [overview, setOverview] = useState<McpOverviewView[]>([]);
+  const onlyManaged = config.mcpOnlyManaged !== false;
   const [mine, setMine] = useState<McpMineView[]>([]);
   const [found, setFound] = useState<McpFoundView[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +35,7 @@ export function McpView({ roster }: { roster: Agent[] }) {
   const [guideOpen, toggleGuide] = useGuide('cth.guide.mcp');
   const reload = useCallback(() => {
     void window.cth.mcpList().then((r) => { setMine(r.mine); setFound(r.found); });
+    void window.cth.mcpOverview().then(setOverview).catch(() => {});
   }, []);
   useEffect(() => { reload(); }, [reload]);
   const agents = roster.filter((a) => !a.archived);
@@ -52,6 +59,35 @@ export function McpView({ roster }: { roster: Agent[] }) {
       {guideOpen && <Guide title={t('pro.mcp.guideTitle')} steps={STEPS(t)} onClose={toggleGuide} />}
       {error && <div className="pro-card" style={{ borderColor: 'var(--cth-coral)' }}><span className="pro-text">{error}</span></div>}
 
+      <section className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+        <div className="pro-row" style={{ gap: 10 }}>
+          <strong style={{ fontSize: 13 }}>{t('pro.mcp.onlyManaged')}</strong>
+          <div className="pro-switch" role="group" aria-label={t('pro.mcp.onlyManaged')} style={{ marginInlineStart: 'auto' }}>
+            <button aria-pressed={onlyManaged} onClick={() => void window.cth.updateConfig({ mcpOnlyManaged: true })}>{t('pro.conn.on')}</button>
+            <button aria-pressed={!onlyManaged} onClick={() => void window.cth.updateConfig({ mcpOnlyManaged: false })}>{t('pro.conn.off')}</button>
+          </div>
+        </div>
+        <span className="pro-sub" style={{ fontSize: 12 }}>{t(onlyManaged ? 'pro.mcp.onlyManagedOn' : 'pro.mcp.onlyManagedOff')}</span>
+      </section>
+
+      <h3 style={{ margin: '6px 0 0', fontSize: 14 }}>{t('pro.mcp.agentsGet')}</h3>
+      <p className="pro-sub" style={{ margin: '-6px 0 0', fontSize: 12 }}>{t('pro.mcp.agentsGetSub')}</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+        {overview.length === 0 && <p className="pro-sub" style={{ margin: 0 }}>{t('pro.mcp.noAgents')}</p>}
+        {overview.map((o) => (
+          <div key={o.agentId} className="pro-card pro-row" style={{ flexWrap: 'wrap', gap: 6, padding: '8px 12px' }}>
+            <strong style={{ fontSize: 13, minWidth: 110 }}>{o.name}</strong>
+            {o.provider !== 'claude' && o.provider !== 'opencode' && <span className="pro-sub" style={{ fontSize: 11 }}>{t('pro.mcp.noMcpHere', { provider: o.provider })}</span>}
+            {o.servers.length === 0 && (o.provider === 'claude' || o.provider === 'opencode') && <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.mcp.nothingManaged')}</span>}
+            {(o.provider === 'claude' || o.provider === 'opencode') && o.servers.map((s) => (
+              <span key={s.name} className={`pro-chip${s.origin === 'connection' ? ' pro-chip-on' : ''}`} title={t(`pro.mcp.origin_${s.origin}`)}>
+                {s.origin === 'yours' ? s.id.replace(/^custom--/, '') : s.origin === 'office' ? t(`pro.mcp.office_${s.id}`, { defaultValue: s.id }) : serverLabel(s.id)}{s.origin === 'connection' ? ` · ${s.access === 'readwrite' ? t('pro.caps.accessWriteShort') : t('pro.caps.accessReadShort')}` : ''}
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+
       <h3 style={{ margin: '6px 0 0', fontSize: 14 }}>{t('pro.mcp.yours')}</h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {mine.length === 0 && !adding && <p className="pro-sub" style={{ margin: 0 }}>{t('pro.mcp.noneYet')}</p>}
@@ -71,14 +107,14 @@ export function McpView({ roster }: { roster: Agent[] }) {
             <strong style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{source}</strong>
             <span className="pro-sub pro-mono" style={{ fontSize: 11, marginInlineStart: 'auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list[0].file}</span>
           </div>
-          {list.map((f) => <FoundRow key={f.name} f={f} onImport={() => void doImport(f)} />)}
+          {list.map((f) => <FoundRow key={f.name} f={f} blocked={onlyManaged} onImport={() => void doImport(f)} onConnection={() => setView({ kind: 'section', section: 'connections' })} />)}
         </section>
       ))}
     </div>
   );
 }
 
-function FoundRow({ f, onImport }: { f: McpFoundView; onImport: () => void }) {
+function FoundRow({ f, blocked, onImport, onConnection }: { f: McpFoundView; blocked: boolean; onImport: () => void; onConnection: () => void }) {
   const { t } = useTranslation();
   const secrets = f.env.filter((e) => e.secret).map((e) => e.name);
   const needsHeader = f.transport.kind === 'http' && f.headerNames.length > 0;
@@ -88,9 +124,22 @@ function FoundRow({ f, onImport }: { f: McpFoundView; onImport: () => void }) {
       <StateBadge label={f.transport.kind === 'stdio' ? t('pro.mcp.local') : t('pro.mcp.remote')} tone={f.transport.kind === 'stdio' ? 'grey' : 'blue'} />
       <span className="pro-mono" style={{ fontSize: 12, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--cth-ink-700)' }}>{transportText(f.transport)}</span>
       {secrets.length > 0 && <span className="pro-sub" style={{ fontSize: 11 }} title={secrets.join(', ')}>{t(secrets.length === 1 ? 'pro.mcp.keysOne' : 'pro.mcp.keysMany', { count: secrets.length })}</span>}
+      {f.agent && <span className="pro-sub" style={{ fontSize: 11 }}>{t('pro.mcp.addedByAgent', { name: f.agent })}</span>}
+      {!f.imported && (
+        <StateBadge label={t(blocked ? 'pro.mcp.blocked' : 'pro.mcp.agentsMayReach')} tone={blocked ? 'grey' : 'amber'} />
+      )}
       {f.imported
         ? <StateBadge label={t('pro.mcp.imported')} tone="green" />
-        : <button className="pro-btn" disabled={needsHeader} title={needsHeader ? t('pro.mcp.headerKey') : undefined} onClick={onImport}>{t('pro.mcp.import')}</button>}
+        : f.suggest?.kind === 'connection'
+          ? (
+            <>
+              <button className="pro-btn pro-btn-primary" title={t('pro.mcp.useConnectionTip', { name: f.suggest.label })} onClick={onConnection}>{t('pro.mcp.useConnection', { name: f.suggest.label })}</button>
+              <button className="pro-btn" disabled={needsHeader} onClick={onImport}>{t('pro.mcp.import')}</button>
+            </>
+          )
+          : f.suggest?.kind === 'builtin'
+            ? <StateBadge label={t('pro.mcp.alreadyBuiltIn', { name: f.suggest.label })} tone="green" />
+            : <button className="pro-btn" disabled={needsHeader} title={needsHeader ? t('pro.mcp.headerKey') : undefined} onClick={onImport}>{t('pro.mcp.import')}</button>}
     </div>
   );
 }

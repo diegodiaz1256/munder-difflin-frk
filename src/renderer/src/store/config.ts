@@ -130,6 +130,7 @@ export interface HarnessConfig {
   /** Manager → Connections "Choose agents": a keyed MCP server listed here reaches
    *  only these agent ids (on their next spawn). Absent → every agent. */
   connectionScopes?: Record<string, string[]>;
+  mcpOnlyManaged?: boolean;
   /** Extra Connections beyond each service's first (two GitHub accounts…):
    *  id `<service>--<slug>`, the service's catalog id, and a name. */
   connectionInstances?: Array<{ id: string; service: string; label: string }>;
@@ -143,7 +144,8 @@ export interface HarnessConfig {
   factories?: Array<{ id: string; name: string; url: string; addedAt: number }>;
   /** The user's own role bundles (Pro Capabilities), after the built-ins.
    *  Saved through config:saveRoleBundles, which validates them. */
-  customRoleBundles?: Array<{ id: string; label: string; icon: string; servers: string[] }>;
+  customRoleBundles?: Array<{ id: string; label: string; icon: string; servers: string[]; access?: Record<string, 'none' | 'read' | 'readwrite'> }>;
+  agentMcpAccess?: Record<string, Record<string, 'none' | 'read' | 'readwrite'>>;
   autoDeliveryPausedAgents?: string[];
   maxTurns?: number;
   circuitBreaker?: CircuitBreakerConfig;

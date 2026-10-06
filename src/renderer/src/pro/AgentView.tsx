@@ -8,6 +8,7 @@ import { mcpLabel } from '@shared/roleBundles';
 import { useProStore } from './proStore';
 import { Avatar, Bar, StateBadge, agentState, fmtTokens, isActive, type AgentDirectoryEntry, type KeyedTask } from './data';
 import { currentTicket, spendLine } from './AgentsView';
+import { StepsView } from './StepsView';
 import { delegations, envelopeReturning, type Delegation, type LogMessage } from '@shared/delegations';
 
 interface Props {
@@ -39,6 +40,8 @@ export function AgentView({ agent, roster, tasks, directory, config, onOpen }: P
   const st = agentState(agent, false);
   const cap = config.agentTokenCaps?.[agent.id];
   const servers = effectiveServers(config, agent.id);
+  // The terminal is for typing to the agent; the steps are for reading what it is doing.
+  const [pane, setPane] = useState<'terminal' | 'steps' | 'both'>('terminal');
 
   return (
     <div className="pro-page" style={{ gap: 12 }}>
@@ -48,15 +51,28 @@ export function AgentView({ agent, roster, tasks, directory, config, onOpen }: P
         {agent.isGod
           ? <span className="pro-badge" style={{ background: 'var(--cth-lemon-light)' }}>{t('pro.nav.orchestrator')}</span>
           : <StateBadge {...st} />}
+        <div className="pro-switch pro-head-end" role="group" aria-label={t('pro.agent.view')}>
+          {(['terminal', 'steps', 'both'] as const).map((p) => (
+            <button key={p} aria-pressed={pane === p} onClick={() => setPane(p)}>{t(`pro.agent.view_${p}`)}</button>
+          ))}
+        </div>
       </div>
 
       {agent.isGod && <RoutingMap god={agent} roster={roster} tasks={tasks} directory={directory} config={config} onOpen={onOpen} />}
 
       <div style={{ flex: 1, minHeight: 420, display: 'flex', gap: 12 }}>
-        <div className="pro-embed" style={{ minWidth: 0 }}>
-          <AgentDetailPanel agent={agent} />
-        </div>
-        <aside style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {pane !== 'steps' && (
+          <div className="pro-embed" style={{ minWidth: 0, ...(pane === 'both' ? { flex: '1 1 45%' } : {}) }}>
+            <AgentDetailPanel agent={agent} />
+          </div>
+        )}
+        {pane !== 'terminal' && (
+          <div style={{ flex: pane === 'both' ? '1 1 55%' : 1, minWidth: 0, display: 'flex' }}>
+            <StepsView agentId={agent.id} />
+          </div>
+        )}
+        {/* Side by side, terminal and steps need the width more than the facts do. */}
+        {pane !== 'both' && <aside style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Fact label={t('pro.agent.goal')}>{agent.goal || agent.description || '—'}</Fact>
           <Fact label={t('pro.agent.engine')}>{[agent.provider ?? 'claude', agent.model].filter(Boolean).join(' · ')}</Fact>
           <Fact label={t('pro.agent.usage')}>
@@ -70,7 +86,7 @@ export function AgentView({ agent, roster, tasks, directory, config, onOpen }: P
             <button className="pro-btn" style={{ marginTop: 8 }} onClick={() => setView({ kind: 'section', section: 'capabilities' })}>{t('pro.agent.manage')}</button>
           </Fact>
           {agent.worktreePath && <Fact label={t('pro.agent.worktree')}><span className="pro-mono" style={{ wordBreak: 'break-all' }}>{agent.worktreePath}</span></Fact>}
-        </aside>
+        </aside>}
       </div>
     </div>
   );

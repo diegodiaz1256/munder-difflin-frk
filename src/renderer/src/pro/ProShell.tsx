@@ -21,17 +21,21 @@ import { TeamView } from './TeamView';
 import { FactoriesView } from './FactoriesView';
 import { EnvironmentView } from './EnvironmentView';
 import { McpView } from './McpView';
+import { ProvidersView } from './ProvidersView';
+import { DeliverablesView } from './DeliverablesView';
 import './pro.css';
 
 /** Sections in the sidebar; their names are `pro.nav.<id>`. */
 const TOP: { id: ProSection; icon: ProIconName }[] = [
   { id: 'tasks', icon: 'tasks' },
   { id: 'inbox', icon: 'inbox' },
+  { id: 'deliverables', icon: 'deliverables' },
   { id: 'automations', icon: 'automations' },
   { id: 'memory', icon: 'memory' },
   { id: 'capabilities', icon: 'capabilities' },
   { id: 'connections', icon: 'connections' },
   { id: 'environment', icon: 'environment' },
+  { id: 'providers', icon: 'providers' },
   { id: 'mcp', icon: 'mcp' },
   { id: 'team', icon: 'team' },
   { id: 'factories', icon: 'factories' }
@@ -72,6 +76,7 @@ export function ProShell({ config }: { config: HarnessConfig }) {
   switch (section) {
     case 'tasks': page = <TasksView tasks={tasks} roster={roster} />; break;
     case 'inbox': page = <InboxView tasks={tasks} />; break;
+    case 'deliverables': page = <DeliverablesView tasks={tasks} roster={roster} />; break;
     case 'automations': page = <AutomationsView />; break;
     case 'memory': page = <MemoryView tasks={tasks} roster={roster} />; break;
     case 'capabilities': page = <CapabilitiesView roster={roster} config={config} />; break;
@@ -80,7 +85,8 @@ export function ProShell({ config }: { config: HarnessConfig }) {
     case 'team': page = <TeamView />; break;
     case 'factories': page = <FactoriesView />; break;
     case 'environment': page = <EnvironmentView roster={roster} />; break;
-    case 'mcp': page = <McpView roster={roster} />; break;
+    case 'providers': page = <ProvidersView config={config} />; break;
+    case 'mcp': page = <McpView roster={roster} config={config} />; break;
     case 'agents': page = <AgentsView roster={roster} tasks={tasks} directory={directory} asking={asking} config={config} onOpen={openAgent} />; break;
     default: page = <AgentView agent={agentInView!} roster={roster} tasks={tasks} directory={directory} config={config} onOpen={openAgent} />;
   }

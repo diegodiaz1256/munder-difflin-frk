@@ -83,6 +83,9 @@ function scopeText(v: EnvVarView, agents: Agent[], t: TFunction): string {
 function VarRow({ v, agents, onChanged, onError }: { v: EnvVarView; agents: Agent[]; onChanged: () => void; onError: (e: string | null) => void }) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
+  // Plain values are not secret, but they are often tokens-in-waiting (a URL
+  // with a key in it): hidden until asked for, so opening the page shows nothing.
+  const [shown, setShown] = useState(false);
   const remove = async () => {
     if (!(await window.cth.confirm(t('pro.env.deleteVar', { name: v.name }), { detail: v.kind === 'secret' ? t('pro.env.deleteVarDetail') : undefined, ok: t('pro.caps.delete') }))) return;
     await window.cth.envRemoveVar(v.name);
@@ -94,8 +97,13 @@ function VarRow({ v, agents, onChanged, onError }: { v: EnvVarView; agents: Agen
       <span className="pro-mono" style={{ fontSize: 13, fontWeight: 600, minWidth: 160 }}>{v.name}</span>
       <StateBadge label={kindLabel(t, v.kind)} tone={KIND_TONE[v.kind]} />
       <span className="pro-mono" style={{ fontSize: 12, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--cth-ink-700)' }}>
-        {v.kind === 'plain' ? v.value : v.kind === 'op' ? v.value : v.stored ? `•••••••• ${t('pro.env.stored')}` : t('pro.env.noValue')}
+        {v.kind === 'secret'
+          ? (v.stored ? `•••••••• ${t('pro.env.stored')}` : t('pro.env.noValue'))
+          : shown ? v.value : t('pro.env.hiddenValue')}
       </span>
+      {v.kind !== 'secret' && (
+        <button className="pro-btn" aria-pressed={shown} onClick={() => setShown((s) => !s)}>{shown ? t('pro.env.hide') : t('pro.env.reveal')}</button>
+      )}
       <span className="pro-sub" style={{ fontSize: 11 }}>{v.kind === 'plain' ? scopeText(v, agents, t) : t('pro.env.runnersOnly')}</span>
       <button className="pro-btn" onClick={() => setEditing(true)}>{t('pro.caps.edit')}</button>
       <button className="pro-btn" onClick={() => void remove()}>{t('pro.caps.delete')}</button>
@@ -133,6 +141,7 @@ function VarForm({ initial, agents, onDone, onCancel, onError }: {
           {(['plain', 'secret', 'op'] as const).map((k) => <button key={k} aria-pressed={kind === k} onClick={() => setKind(k)}>{kindLabel(t, k)}</button>)}
         </div>
       </div>
+      <span className="pro-sub" style={{ fontSize: 11 }}>{t(`pro.env.kindHelp_${kind}`)}</span>
       {kind === 'plain' && <input className="pro-input pro-mono" placeholder={t('pro.env.valuePh')} value={value} onChange={(e) => setValue(e.target.value)} />}
       {kind === 'secret' && (
         <>

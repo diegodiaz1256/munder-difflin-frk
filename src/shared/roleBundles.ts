@@ -8,6 +8,7 @@
  * `buildDefaultMcpServers` in hive.ts.
  */
 import { MCP_CATALOG } from './mcpCatalog';
+import { cleanAccessMap, type Access } from './connectionAccess';
 
 export const BUNDLE_ICONS = ['sparkle', 'code', 'ledger', 'sidebar', 'web', 'terminal', 'git', 'mcp'] as const;
 export type BundleIcon = typeof BUNDLE_ICONS[number];
@@ -18,6 +19,9 @@ export interface RoleBundle {
   /** Icon name from the renderer's pixel icon set. */
   icon: BundleIcon;
   servers: string[];
+  /** What the role may do with each service (a keyed one): read or read & write.
+   *  A server without an entry is read-only. The connection's own ceiling still caps it. */
+  access?: Record<string, Access>;
   /** Set on the user's own bundles (config.customRoleBundles); the built-ins
    *  are templates and cannot be edited, only duplicated. */
   custom?: boolean;
@@ -68,7 +72,9 @@ export function cleanCustomBundles(raw: unknown): RoleBundle[] {
     for (let i = 2; taken.has(id); i++) id = `${bundleSlug(label)}-${i}`;
     taken.add(id);
     const icon = (BUNDLE_ICONS as readonly string[]).includes(r.icon as string) ? (r.icon as BundleIcon) : 'mcp';
-    out.push({ id, label, icon, servers: cleanServerList(r.servers), custom: true });
+    const servers = cleanServerList(r.servers);
+    const access = cleanAccessMap(r.access, new Set(servers));
+    out.push({ id, label, icon, servers, ...(Object.keys(access).length ? { access } : {}), custom: true });
   }
   return out;
 }
