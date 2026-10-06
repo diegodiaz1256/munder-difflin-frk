@@ -98,3 +98,26 @@ export function formatSearch(query: string, results: Array<{ title: string; href
   if (!results.length) return `No results parsed for "${query}".${fallbackText ? `\n\n${fallbackText}` : ''}`;
   return [`# Web results for "${query}"`, '', ...results.map((r, i) => `${i + 1}. [${r.title}](${unwrapSearchHref(r.href)})${r.snippet ? `\n   ${r.snippet}` : ''}`)].join('\n');
 }
+
+/** Signs that a fetched page is a refusal, not the content: status words, bot
+ *  walls, "enable JavaScript" shells. Read from the start of the text only. */
+const REFUSAL = /\b(?:40[13]|429|forbidden|access denied|unauthorized|too many requests|just a moment|enable javascript|javascript is (?:disabled|required)|captcha|are you a robot|verify you are human|request blocked|unable to fetch)\b/i;
+
+/**
+ * Did this WebFetch fail to get the page? A failed call (PostToolUseFailure),
+ * unless the user stopped it; or a "successful" one whose result is a refusal
+ * or next to empty. The agent is told about the office browser at that moment,
+ * not in its prompt.
+ */
+export function webFetchFailed(event: string | undefined, error: unknown, response: unknown): boolean {
+  if (event === 'PostToolUseFailure') {
+    const e = typeof error === 'string' ? error : JSON.stringify(error ?? '');
+    return !/interrupt|user (?:rejected|denied|doesn't want)|permission/i.test(e);
+  }
+  if (event !== 'PostToolUse') return false;
+  const text = typeof response === 'string' ? response : JSON.stringify(response ?? '');
+  return text.trim().length < 80 || REFUSAL.test(text.slice(0, 2000));
+}
+
+/** What the agent reads right after a failed WebFetch (Claude Code agents). */
+export const WEB_FETCH_HINT = 'That page did not load with WebFetch. The office has a browser for this: it opens the page in a real Chromium (JavaScript runs, normal browser headers) and returns its text. Call the munder-browser tool browse_page with the same URL (if it is not loaded yet, load it with ToolSearch "select:mcp__munder-browser__browse_page"), or, where those tools are not available (a sub-agent), run in Bash: node "$HIVE_ROOT/bin/md-browse.cjs" <url> (add --links for its links; --search "<query>" to search). It does not solve captchas or bot challenges: if the page asks for one, say so.';

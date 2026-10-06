@@ -1531,6 +1531,9 @@ export class HiveManager {
         SubagentStop: [entry()],
         PreToolUse: [entry('*')],
         PostToolUse: [entry('*')],
+        // A failed tool call (a WebFetch refused with 403…): the hook server
+        // answers it with the office browser (hooks.ts, browsePage.ts).
+        PostToolUseFailure: [entry('WebFetch')],
         UserPromptSubmit: [entry()],
         Notification: [entry()],
         SessionStart: [entry()],
@@ -2047,7 +2050,9 @@ export class HiveManager {
     const officeMapLine = `WHERE THINGS ARE (full paths; do not search the disk for them): protocol index ${inRoot('PROTOCOL.md')}; plan ${inRoot('board.md')}; task cards ${inRoot('tasks.json')}; who is on the floor ${inRoot('registry.json')} and their live state ${inRoot('fleet.json')}; deliverables ${inRoot('research')}; the human's lists ${inRoot('lists')}; REST APIs \`"${hiveNode}" "${apiCli}"\`; runners \`"${hiveNode}" "${runCli}"\` (both list what you may use when run with no arguments). Never look for office files or tools elsewhere on the disk, in other projects, or in Scranton Branch's own installation or source code: if something is not here, in your folder, your working directory or this prompt, it does not exist for you — ask ${meta.isGod ? 'the human' : 'god'} instead of hunting for it.`;
     // The office browser: a real Chromium for pages a plain fetch cannot read.
     const browseCli = inRoot('bin', 'md-browse.cjs');
-    const browserLine = webOff ? '' : `BROWSER: for a page that is empty, needs JavaScript or refuses a plain fetch (403, "enable JavaScript", a bot wall for non-browsers), use the office browser — the app's own Chromium${hasOfficeMcp ? ': the munder-browser tools browse_page and web_search, or' : ':'} \`"${hiveNode}" "${browseCli}" <url>\` (add --links for the page's links) and \`"${hiveNode}" "${browseCli}" --search "<query>"\`. It does not solve captchas or bot challenges; if a page asks for one, say so instead of trying to get around it.`;
+    // Claude Code agents are told when a WebFetch fails (PostToolUseFailure, see
+    // hooks.ts), not up front; other CLIs have no such moment, so they read it here.
+    const browserLine = webOff || hasOfficeMcp ? '' : `BROWSER: for a page that is empty, needs JavaScript or refuses a plain fetch (403, "enable JavaScript", a bot wall for non-browsers), use the office browser — the app's own Chromium${hasOfficeMcp ? ': the munder-browser tools browse_page and web_search, or' : ':'} \`"${hiveNode}" "${browseCli}" <url>\` (add --links for the page's links) and \`"${hiveNode}" "${browseCli}" --search "<query>"\`. It does not solve captchas or bot challenges; if a page asks for one, say so instead of trying to get around it.`;
     const hireLine = meta.isGod
       ? `HIRING A PERMANENT EMPLOYEE (not a temp): write a manifest to ${inRoot('research', 'hires')}/<name>.json — {"spec":"munder-difflin/hire@1","name":"…","description":"one-line role","goal":"standing mission","provider":"claude|codex|cursor|antigravity","model":"…","character":"…","isolate":false,"tokenCap":0} (only spec and name are required). The app opens the Add-Agent review prefilled and the human confirms; then the agent appears in registry.json and you dispatch to its inbox. An invalid file comes back to your inbox as "[hire manifest rejected]" with the reason.`
       : '';
