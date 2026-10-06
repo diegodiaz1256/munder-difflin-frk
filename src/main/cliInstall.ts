@@ -57,9 +57,13 @@ export function buildMissingCliScript(
   provider: AgentProvider,
   npmAvailable: boolean,
   platform: string = process.platform,
-  nodeInstaller?: NodeInstaller | null
+  nodeInstaller?: NodeInstaller | null,
+  /** The CLI is there but this Node is too old for it (preset.minNode). */
+  nodeTooOld?: { have: string; need: string }
 ): string {
   const info: ProviderInstallInfo = installInfoForProvider(provider, platform);
+  // Versions go into echo lines: digits and dots only.
+  const ver = (v: string): string => v.replace(/[^0-9.v]/g, '');
   const safeBin = (bin || provider).replace(/[^A-Za-z0-9._-]/g, '') || provider;
   const rung = chooseInstallRung(info, npmAvailable, nodeInstaller);
   // Only the rung that actually needs it gets the Node install spliced in.
@@ -76,17 +80,19 @@ export function buildMissingCliScript(
     // script carries NO double-quotes (it is wrapped verbatim in `/d /s /c "..."`).
     // We avoid `if errorlevel` branching (untestable here) — a combined success/
     // failure hint after the install is robust and satisfies the manual-fallback DoD.
-    const parts: string[] = ['echo.', `echo ${rule}`, `echo   Engine CLI not found:  ${safeBin}`, 'echo.'];
+    const parts: string[] = ['echo.', `echo ${rule}`, nodeTooOld
+      ? `echo   ${label} needs Node.js ${ver(nodeTooOld.need)} or newer; this machine has ${ver(nodeTooOld.have)}.`
+      : `echo   Engine CLI not found:  ${safeBin}`, 'echo.'];
     if (nodeSteps && nodeInstaller) {
       parts.push(
-        'echo   Node.js is not installed on this machine, so the usual npm',
-        `echo   installer cannot run yet. Installing Node ${nodeInstaller.version} ^(+ npm^) first,`,
+        ...(nodeTooOld ? [] : ['echo   Node.js is not installed on this machine, so the usual npm']),
+        `echo   ${nodeTooOld ? 'Updating it:' : 'installer cannot run yet.'} Installing Node ${nodeInstaller.version} ^(+ npm^) first,`,
         'echo   straight from nodejs.org, checksum-verified.',
         'echo.',
         ...nodeSteps,
         'echo.'
       );
-    } else if (rung.nodeMissing) {
+    } else if (rung.nodeMissing && !nodeTooOld) {
       parts.push('echo   Node.js is not installed on this machine, so the usual', 'echo   npm installer cannot run here.', 'echo.');
     }
     if (cmd) {
@@ -131,7 +137,9 @@ export function buildMissingCliScript(
   const lines: string[] = [
     `echo ''`,
     `echo '${rule}'`,
-    `echo '  Engine CLI not found:  ${safeBin}'`,
+    nodeTooOld
+      ? `echo '  ${label} needs Node.js ${ver(nodeTooOld.need)} or newer; this machine has ${ver(nodeTooOld.have)}.'`
+      : `echo '  Engine CLI not found:  ${safeBin}'`,
     `echo ''`
   ];
   if (nodeSteps && nodeInstaller) {
@@ -139,14 +147,14 @@ export function buildMissingCliScript(
     // step aborts the whole script on failure, so the npm install below only
     // ever runs against a Node that actually landed.
     lines.push(
-      `echo '  Node.js is not installed on this machine, so the usual npm'`,
-      `echo '  installer cannot run yet. Installing Node ${nodeInstaller.version} (+ npm) first,'`,
+      ...(nodeTooOld ? [] : [`echo '  Node.js is not installed on this machine, so the usual npm'`]),
+      `echo '  ${nodeTooOld ? 'Updating it:' : 'installer cannot run yet.'} Installing Node ${nodeInstaller.version} (+ npm) first,'`,
       `echo '  straight from nodejs.org, checksum-verified.'`,
       `echo ''`,
       ...nodeSteps,
       `echo ''`
     );
-  } else if (rung.nodeMissing) {
+  } else if (rung.nodeMissing && !nodeTooOld) {
     lines.push(
       `echo '  Node.js is not installed on this machine, so the usual npm'`,
       `echo '  installer cannot run here.'`,

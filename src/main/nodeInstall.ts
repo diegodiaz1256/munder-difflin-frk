@@ -46,6 +46,18 @@ export function nodeMajor(version: string | null | undefined): number | null {
   return m ? Number(m[1]) : null;
 }
 
+/** Whether `version` (v22.19.0) is at least `min` (22.19.0). Unparseable → false. */
+export function nodeAtLeast(version: string | null | undefined, min: string): boolean {
+  const parse = (v: string | null | undefined): number[] | null => {
+    const m = /^v?(\d+)\.(\d+)\.(\d+)/.exec((v ?? '').trim());
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+  };
+  const a = parse(version), b = parse(min);
+  if (!a || !b) return false;
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
+  return true;
+}
+
 /** Whether the user's own Node is good enough to be left alone. */
 export function nodeIsUsable(version: string | null | undefined): boolean {
   const major = nodeMajor(version);
