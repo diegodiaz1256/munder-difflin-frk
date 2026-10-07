@@ -1401,7 +1401,12 @@
     "priority": "Priority {{level}}/5",
     "deliverable": "DELIVERABLE",
     "openDeliverable": "Open",
-    "linkedFiles": "linked files: {{count}}"
+    "linkedFiles": "linked files: {{count}}",
+    "partOf": "Part of",
+    "subtasks": "Subtasks · {{done}}/{{total}} done",
+    "asksYou": "Asks you:",
+    "emptyColumn": "Nothing here",
+    "subtasksShort": "{{done}}/{{total}} subtasks"
   },
   "queueComposer": {
     "recording": "● recording — click stop to transcribe",
@@ -1663,7 +1668,16 @@
       "col_blocked": "Blocked",
       "col_done": "Done",
       "asksYou": "Asks you",
-      "unassigned": "unassigned"
+      "unassigned": "unassigned",
+      "recent": "Recent activity",
+      "since": "for {{time}}",
+      "fewerDone": "Show fewer",
+      "allDone": "Show all {{count}}",
+      "subtaskOf": "Subtask of",
+      "subtasks": "Subtasks {{done}}/{{total}}",
+      "layout": "Layout",
+      "layout_board": "Board",
+      "layout_tree": "By request"
     },
     "automations": {
       "rules": "Schedules, context & webhooks",
@@ -2466,5 +2480,24 @@
         "help": "Leave empty for sentry.io."
       }
     }
+  },
+  "taskHistory": {
+    "title": "History",
+    "empty": "Nothing recorded yet. Changes are recorded from now on.",
+    "created": "Created ({{status}})",
+    "createdFor": "Created for {{name}} ({{status}})",
+    "assigned": "Given to {{name}}",
+    "unassigned": "Unassigned",
+    "status": "Moved from {{from}} to {{to}}",
+    "asked": "Asked you a question",
+    "answered": "You answered",
+    "dismissed": "You dismissed a question",
+    "result": "Result written",
+    "removed": "Removed from the board",
+    "message": "Message from {{from}} to {{to}}",
+    "status_todo": "to do",
+    "status_doing": "doing",
+    "status_blocked": "blocked",
+    "status_done": "done"
   }
 }
