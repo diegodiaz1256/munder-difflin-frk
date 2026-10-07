@@ -2566,6 +2566,5 @@
     "renewTip": "Re-issue the key before it expires",
     "signOut": "Sign out",
     "needsUvWindows": "Signing in needs uv for Windows itself (Fortress runs beside the app, not inside WSL): powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\""
-  },
-  "workers": {}
+  }
 }

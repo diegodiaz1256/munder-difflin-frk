@@ -2566,6 +2566,5 @@
     "renewTip": "Vuelve a emitir la clave antes de que caduque",
     "signOut": "Cerrar sesión",
     "needsUvWindows": "Para iniciar sesión hace falta uv en el propio Windows (Fortress se ejecuta junto a la app, no dentro de WSL): powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\""
-  },
-  "workers": {}
+  }
 }
