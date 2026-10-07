@@ -148,6 +148,7 @@ button.pro-card:hover { border-color: var(--pro-line-strong); }
 @media (max-width: 900px) {
   .pro-board { grid-template-columns: repeat(2, minmax(160px, 1fr)); }
   .pro-side { width: 168px; }
+  .pro-page { padding: 12px 12px; }
 }
 
 /* A task card's deliverable: one quiet line that lights up on hover. */
@@ -159,6 +160,15 @@ button.pro-card:hover { border-color: var(--pro-line-strong); }
 .pro-deliv-chip:hover, .pro-deliv-chip:focus-visible { background: var(--cth-lemon-light); border-style: solid; outline: none; }
 .pro-deliv-chip svg { flex-shrink: 0; opacity: .7; }
 .pro-deliv-chip > span:nth-of-type(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+
+/* Fold the sidebar away (small windows), and bring it back. */
+.pro-side-toggle {
+  margin-inline-start: auto; border: 1px solid var(--pro-line); border-radius: 6px;
+  background: transparent; color: var(--pro-muted); font: 600 12px var(--cth-font-ui);
+  padding: 2px 7px; cursor: pointer;
+}
+.pro-side-toggle:hover { background: var(--cth-cream-200); color: var(--pro-text); }
+.pro-side-show { align-self: flex-start; margin: 8px 12px 0; }
 
 /* Factories floor: a working desk's avatar bobs as it types; a newly hired
    desk fades in. */

@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const loadTs = require('./load-ts.cjs');
-const { detectRemoteControl, isRemoteControlMenu } = loadTs('src/shared/remoteControl.ts');
+const { detectRemoteControl, isRemoteControlMenu, isRemoteControlConfirm } = loadTs('src/shared/remoteControl.ts');
 
 test('the session link means on', () => {
   const r = detectRemoteControl('\x1b[1mRemote Control\x1b[0m\r\nThis session is available in the Claude mobile app and at\r\nhttps://claude.ai/code/session_01Aryu8Xz5DmPoujZLjsbAE3.');
@@ -26,4 +26,10 @@ test('the newest notice wins; unrelated output says nothing', () => {
 test('Claude\'s Remote Control menu is recognised', () => {
   assert.equal(isRemoteControlMenu('Remote Control\nThis session is available…\n  Disconnect this session\n  Show QR code\n> Continue\nEnter to select · Esc to continue'), true);
   assert.equal(isRemoteControlMenu('Remote Control disconnected'), false);
+});
+
+test('the first-time "Enable Remote Control? (y/n)" question is recognised', () => {
+  assert.equal(isRemoteControlConfirm('\x1b[1mEnable Remote Control? (y/n) \x1b[0m'), true);
+  assert.equal(isRemoteControlConfirm('Enable Remote Control for all sessions'), false, 'the settings label is not the question');
+  assert.equal(isRemoteControlMenu('Enable Remote Control? (y/n) '), false, 'the menu check never matched it');
 });

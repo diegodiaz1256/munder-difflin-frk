@@ -1,3 +1,4 @@
+import { terminalUsage } from '@/components/terminalPool';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentStep, exitedCode } from '@shared/officeActivity';
@@ -12,7 +13,7 @@ import { waitsOnHuman } from '@/components/TasksKanban';
 import { respawnAgent } from '@/hooks/useRestoreTeam';
 import { useProStore } from './proStore';
 import {
-  Avatar, Bar, StateBadge, agentState, fmtTokens, stripAnsi, useTerminalTail,
+  Avatar, Bar, StateBadge, agentState, fmtTokens, stripAnsi, usePoll, useTerminalTail,
   type AgentDirectoryEntry, type KeyedTask
 } from './data';
 
@@ -186,6 +187,7 @@ function AgentTile({ agent, ticket, dir, asksYou, onOpen }: {
   // terminal, so on its own the card fell back to `action` and read "idle" while
   // the agent was busy.
   const screen = useTerminalTail(agent.ptyId);
+  const usage = usePoll(() => Promise.resolve(terminalUsage(agent.ptyId)), 5000, null as ReturnType<typeof terminalUsage>);
   const lines = screen.length ? screen : (feed ?? []).slice(-3).map(stripAnsi);
   const tail = lines.length ? lines.join('\n') : stripAnsi(agent.recentAssistantText ?? agent.action ?? '').slice(-160);
   const ctxRatio = agent.contextTokens && agent.contextLimit ? agent.contextTokens / agent.contextLimit : 0;
@@ -205,6 +207,12 @@ function AgentTile({ agent, ticket, dir, asksYou, onOpen }: {
         </div>
         <StateBadge {...badge} />
       </div>
+      {usage && usage.percent >= 50 && (
+        <span className="pro-badge" title={t('pro.agents.usageTip', { percent: usage.percent, window: usage.window })}
+          style={{ alignSelf: 'flex-start', fontSize: 11, background: usage.percent >= 90 ? 'var(--cth-coral-light)' : 'var(--cth-lemon-light)' }}>
+          {t('pro.agents.usage', { percent: usage.percent, window: usage.window })}
+        </span>
+      )}
       {stoppedCode && <p className="pro-text" style={{ color: 'var(--cth-coral)' }}>{t('pro.now.stoppedCard', { code: stoppedCode })}</p>}
       {now && !stoppedCode && (
         <p className="pro-text" style={{ margin: 0 }}>

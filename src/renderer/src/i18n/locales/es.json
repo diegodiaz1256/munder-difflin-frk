@@ -519,7 +519,8 @@
     "remoteControlOnTitle": "Remote Control está activado. Haz clic para abrir esta sesión ({{url}}); también está en la app de Claude de tu móvil.",
     "remoteControlFailedTitle": "Remote Control está desactivado: {{reason}}. Haz clic para volver a intentarlo.",
     "remoteControlOnLabel": "remoto activo",
-    "remoteControlConnecting": "conectando…"
+    "remoteControlConnecting": "conectando…",
+    "allNotes": "Ver todas las notas"
   },
   "addAgent": {
     "title": "AÑADIR AGENTE",
@@ -1193,7 +1194,8 @@
     "deleted": "eliminado",
     "renamed": "renombrado",
     "unmerged": "sin fusionar",
-    "copyPath": "Copiar la ruta"
+    "copyPath": "Copiar la ruta",
+    "reposInside": "{{count}} repositorios en esta carpeta:"
   },
   "fullscreenTerminal": {
     "showAgentList": "Mostrar la lista de agentes",
@@ -1297,7 +1299,8 @@
     "uncapped": "sin límite",
     "preserved": "Worktrees conservados ({{count}})",
     "preservedIntro": "Trabajadores terminados cuyo worktree tenía trabajo sin integrar: se conservan (nunca se descartan solos) y se recuperan automáticamente cuando el trabajo llega a su rama base.",
-    "keptAgo": "conservado hace {{age}}"
+    "keptAgo": "conservado hace {{age}}",
+    "enabled": "{{name}} puede lanzar trabajadores temporales (desmarca para desactivarlo y ocultar esta pestaña)"
   },
   "memoryGraph": {
     "topics": "temas",
@@ -1601,7 +1604,10 @@
       "deliverables": "Entregables",
       "now": "Ahora",
       "group_office": "Oficina",
-      "group_setup": "Configuración"
+      "group_setup": "Configuración",
+      "hideMenu": "Ocultar el menú",
+      "showMenu": "Mostrar el menú",
+      "menu": "Menú"
     },
     "state": {
       "needsYou": "Te necesita",
@@ -1636,7 +1642,9 @@
       "waitingForWork": "Esperando trabajo",
       "terminal": "Terminal",
       "unread": "{{count}} sin leer",
-      "prompt": "Escribir"
+      "prompt": "Escribir",
+      "usage": "{{percent}}% del límite de {{window}}",
+      "usageTip": "El motor dice que esta cuenta ha usado el {{percent}}% de su límite de {{window}}."
     },
     "agent": {
       "goal": "Objetivo",
@@ -2424,7 +2432,12 @@
       "crashed": "{{who}} se detuvo con un error (código {{code}})",
       "degraded": "{{who}} funciona sin eventos de la oficina",
       "nowLabel": "Ahora:",
-      "stoppedCard": "Su terminal terminó (código {{code}}). Reinícialo desde su página."
+      "stoppedCard": "Su terminal terminó (código {{code}}). Reinícialo desde su página.",
+      "rightNow": "Ahora mismo",
+      "noTask": "sin tarea en curso",
+      "restartedList": "Reiniciados: {{names}}",
+      "joinedList": "Entraron: {{names}}",
+      "leftList": "Salieron: {{names}}"
     }
   },
   "hivePicker": {

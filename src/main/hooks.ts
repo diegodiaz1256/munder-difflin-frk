@@ -114,6 +114,8 @@ export class HookServer {
   private server: Server | null = null;
   /** Each agent's last submitted prompt (redacted), for keepHumanPrompt. */
   private lastPrompts = new Map<string, { text: string; ts: number }>();
+  /** An agent's name and face for its desktop notifications (set by main). */
+  notifyAs: ((agentId: string) => { name?: string; icon?: Electron.NativeImage }) | null = null;
   /** The last prompt an agent received, if recent. */
   lastPrompt(agentId: string, withinMs = 300_000): { text: string; ts: number } | null {
     const p = this.lastPrompts.get(agentId);
@@ -534,7 +536,7 @@ export class HookServer {
       // path bypassed terminal-draft/HITL safety and could spend credits while a
       // user was answering a question. Inbox files remain durable; the renderer
       // wakes the agent later through its guarded idle-only delivery path.
-      this.notify(agentId ?? 'Agent', 'finished — idle');
+      this.notify(agentId ?? 'Agent', 'finished — idle', agentId);
       this.emit(agentId, event, p);
       return {};
     }
@@ -642,7 +644,7 @@ export class HookServer {
       (p.notification_type === 'idle' ||
         (p.message ?? '').toLowerCase().includes('waiting for your input'))
     ) {
-      this.notify(agentId ?? 'Agent', p.message ?? 'needs your attention');
+      this.notify(agentId ?? 'Agent', p.message ?? 'needs your attention', agentId);
     }
 
     // Forward everything else to the renderer so avatars reflect real activity.
@@ -653,11 +655,13 @@ export class HookServer {
   /** Fire a native desktop notification — gated on the user's `notifications`
    *  setting. Only the OS toast is gated; the hive:hookEvent emit is always sent
    *  so avatars/UI stay live regardless. Best-effort: never throw into the hook. */
-  private notify(title: string, body: string): void {
+  private notify(title: string, body: string, agentId?: string): void {
     if (!this.getConfig().notifications) return;
     try {
       if (!Notification.isSupported()) return;
-      new Notification({ title, body }).show();
+      // The agent's name rather than its id, and its face as the icon.
+      const who = agentId ? this.notifyAs?.(agentId) : undefined;
+      new Notification({ title: who?.name ?? title, body, ...(who?.icon ? { icon: who.icon } : {}) }).show();
     } catch { /* notifications unsupported on this platform — ignore */ }
   }
 

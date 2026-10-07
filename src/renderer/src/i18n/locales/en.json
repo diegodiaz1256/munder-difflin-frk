@@ -519,7 +519,8 @@
     "remoteControlOnTitle": "Remote Control is on. Click to open this session ({{url}}); it is also in the Claude app on your phone.",
     "remoteControlFailedTitle": "Remote Control is off: {{reason}}. Click to try again.",
     "remoteControlOnLabel": "remote on",
-    "remoteControlConnecting": "connecting…"
+    "remoteControlConnecting": "connecting…",
+    "allNotes": "Show all notes"
   },
   "addAgent": {
     "title": "ADD AGENT",
@@ -1193,7 +1194,8 @@
     "deleted": "deleted",
     "renamed": "renamed",
     "unmerged": "unmerged",
-    "copyPath": "Copy path"
+    "copyPath": "Copy path",
+    "reposInside": "{{count}} repositories in this folder:"
   },
   "fullscreenTerminal": {
     "showAgentList": "Show the agent list",
@@ -1297,7 +1299,8 @@
     "uncapped": "uncapped",
     "preserved": "Preserved worktrees ({{count}})",
     "preservedIntro": "Finished workers whose worktree held un-integrated work — kept (never auto-discarded) and auto-reclaimed once the work lands in its base branch.",
-    "keptAgo": "kept {{age}} ago"
+    "keptAgo": "kept {{age}} ago",
+    "enabled": "{{name}} may start temporary workers (untick to turn this off and hide this tab)"
   },
   "memoryGraph": {
     "topics": "topics",
@@ -1601,7 +1604,10 @@
       "deliverables": "Deliverables",
       "now": "Now",
       "group_office": "Office",
-      "group_setup": "Setup"
+      "group_setup": "Setup",
+      "hideMenu": "Hide the menu",
+      "showMenu": "Show the menu",
+      "menu": "Menu"
     },
     "state": {
       "needsYou": "Needs you",
@@ -1636,7 +1642,9 @@
       "waitingForWork": "Waiting for work",
       "terminal": "Terminal",
       "unread": "{{count}} unread",
-      "prompt": "Prompt"
+      "prompt": "Prompt",
+      "usage": "{{percent}}% of {{window}} limit",
+      "usageTip": "The engine says this account has used {{percent}}% of its {{window}} limit."
     },
     "agent": {
       "goal": "Goal",
@@ -2424,7 +2432,12 @@
       "crashed": "{{who}} stopped with an error (code {{code}})",
       "degraded": "{{who}} is running without office events",
       "nowLabel": "Now:",
-      "stoppedCard": "Its terminal ended (code {{code}}). Restart it from its page."
+      "stoppedCard": "Its terminal ended (code {{code}}). Restart it from its page.",
+      "rightNow": "Right now",
+      "noTask": "no task in progress",
+      "restartedList": "Restarted: {{names}}",
+      "joinedList": "Joined: {{names}}",
+      "leftList": "Left: {{names}}"
     }
   },
   "hivePicker": {

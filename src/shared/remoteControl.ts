@@ -29,6 +29,13 @@ export function detectRemoteControl(text: string): RemoteControlState | null {
   return null;
 }
 
+/** The first-time confirmation Claude Code asks before turning Remote Control
+ *  on: "Enable Remote Control? (y/n)". The menu check below does not match it
+ *  (no "Enter to …"), so the cloud button left it waiting for the human. */
+export function isRemoteControlConfirm(text: string): boolean {
+  return /Enable Remote Control\?\s*\(y\/n\)/i.test(text.replace(ANSI, ''));
+}
+
 /** Claude's Remote Control menu (shown when /remote-control runs while it is
  *  already on): Disconnect / Show QR code / Continue. */
 export function isRemoteControlMenu(text: string): boolean {
