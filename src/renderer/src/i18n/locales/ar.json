@@ -1300,7 +1300,8 @@
     "uncapped": "بلا سقف",
     "preserved": "أشجار العمل المحفوظة ({{count}})",
     "preservedIntro": "عمّال منتهون بقيت في أشجار عملهم أعمال لم تُدمَج — تُحفَظ (ولا تُحذَف تلقائيًا أبدًا) وتُستَعاد تلقائيًا بمجرد وصول العمل إلى فرعه الأساس.",
-    "keptAgo": "حُفظت منذ {{age}}"
+    "keptAgo": "حُفظت منذ {{age}}",
+    "enabled": "{{name}} may start temporary workers (untick to turn this off and hide this tab)"
   },
   "memoryGraph": {
     "topics": "المواضيع",
@@ -1404,7 +1405,9 @@
     "priority": "الأولوية {{level}}/5",
     "deliverable": "المُخرَج",
     "openDeliverable": "فتح",
-    "linkedFiles": "ملفات مرتبطة: {{count}}"
+    "linkedFiles": "ملفات مرتبطة: {{count}}",
+    "partOf": "Part of",
+    "subtasks": "Subtasks · {{done}}/{{total}} done"
   },
   "queueComposer": {
     "recording": "● يسجّل — انقر إيقاف للتفريغ النصي",
@@ -1599,7 +1602,10 @@
       "deliverables": "المُخرَجات",
       "now": "الآن",
       "group_office": "المكتب",
-      "group_setup": "الإعداد"
+      "group_setup": "الإعداد",
+      "hideMenu": "إخفاء القائمة",
+      "showMenu": "إظهار القائمة",
+      "menu": "القائمة"
     },
     "state": {
       "needsYou": "يحتاجك",
@@ -1634,7 +1640,9 @@
       "waitingForWork": "بانتظار العمل",
       "terminal": "الطرفية",
       "unread": "{{count}} غير مقروءة",
-      "prompt": "اكتب"
+      "prompt": "اكتب",
+      "usage": "{{percent}}% of {{window}} limit",
+      "usageTip": "The engine says this account has used {{percent}}% of its {{window}} limit."
     },
     "agent": {
       "goal": "الهدف",
@@ -1650,7 +1658,12 @@
       "view": "العرض",
       "view_terminal": "الطرفية",
       "view_steps": "الخطوات",
-      "view_both": "كلاهما"
+      "view_both": "كلاهما",
+      "restart": "إعادة تشغيل",
+      "restartTip": "يعيد تشغيل عملية هذا الوكيل فقط. يستمر باقي المكتب في العمل.",
+      "restartConfirm": "إعادة تشغيل {{name}}؟",
+      "restartDetailResume": "تتوقف عمليته ثم تبدأ من جديد، مكملةً المحادثة نفسها. تُطبَّق متغيرات البيئة المعدّلة من الآن.",
+      "restartDetailFresh": "تتوقف عمليته ثم تبدأ من جديد. لا تستطيع واجهته متابعة محادثة، لذا يبدأ محادثة جديدة. تُطبَّق متغيرات البيئة المعدّلة من الآن."
     },
     "tasks": {
       "summary": "{{doing}} قيد التنفيذ · {{blocked}} متوقفة",
@@ -1666,7 +1679,16 @@
       "col_blocked": "متوقفة",
       "col_done": "منجزة",
       "asksYou": "يسألك",
-      "unassigned": "غير مسندة"
+      "unassigned": "غير مسندة",
+      "recent": "النشاط الأخير",
+      "since": "منذ {{time}}",
+      "fewerDone": "عرض أقل",
+      "allDone": "عرض الكل ({{count}})",
+      "subtaskOf": "Subtask of",
+      "subtasks": "Subtasks {{done}}/{{total}}",
+      "layout": "Layout",
+      "layout_board": "Board",
+      "layout_tree": "By request"
     },
     "automations": {
       "rules": "الجداول والسياق والويب هوك",
@@ -1677,16 +1699,38 @@
       "nothing": "لا شيء هنا بعد.",
       "needsReply": "يحتاج ردًا",
       "forYou": "لك",
-      "yourTeam": "فريقك",
       "everyone": "الجميع",
       "outside": "من الخارج",
       "addressedToYou": "موجّه إليك",
-      "allAgents": "كل الوكلاء",
       "noMessages": "لا رسائل بعد",
       "slackWaiting": "Slack، بانتظار في طابور",
       "queuedFor": "إلى {{name}} · في الطابور منذ {{time}}",
       "webhookMail": "بريد الويب هوك",
-      "requests": "الطلبات والموافقات"
+      "requests": "الطلبات والموافقات",
+      "conversations": "المحادثات",
+      "pickAgent": "اختر وكيلًا لقراءة محادثته.",
+      "questionForYou": "سؤال لك",
+      "dismissedQ": "تجاهلت هذا السؤال.",
+      "today": "اليوم",
+      "yesterday": "أمس",
+      "threadEmpty": "لا شيء مع {{name}} بعد.",
+      "composePh": "اكتب إلى {{name}}… (Enter للإرسال، Shift+Enter لسطر جديد)",
+      "composeViaGod": "اكتب عن عمل {{name}}… تمر الرسالة عبر {{god}} الذي يوجّهها",
+      "sending": "جارٍ الإرسال…",
+      "send": "إرسال",
+      "notSent": "لم تُرسل. حاول مرة أخرى.",
+      "yourAnswer": "إجابتك",
+      "replyTo": "ردًا على: {{subject}}",
+      "showMore": "عرض المزيد",
+      "showLess": "عرض أقل",
+      "answerPh": "إجابتك…",
+      "answer": "أجب",
+      "answerFailed": "لم تُحفظ: تغيّر السؤال. انظر مجددًا.",
+      "waitingTip": "أسئلة تنتظر إجابتك",
+      "jumpToQuestion": "Show the question",
+      "showInternal": "Show messages between agents ({{count}})",
+      "runSummary": "{{count}} messages between {{people}}",
+      "hideRun": "Hide these messages"
     },
     "temps": {
       "couldNotHire": "تعذّر توظيف المؤقت.",
@@ -1990,7 +2034,12 @@
       "kindHelp_secret": "مشفّرة ولا تُعرض مجددًا ولا تُعطى لأي وكيل. يمكن لمشغّل (أدناه) استخدامها.",
       "kindHelp_op": "مرجع 1Password. يُقرأ لحظة حاجة المشغّل إليه ولا يراه الوكلاء.",
       "usedBy": "يستخدمه",
-      "agentsAlso": "يُخبَر الوكلاء بوجود هذه الأسماء لا بالقيم السرية."
+      "agentsAlso": "يُخبَر الوكلاء بوجود هذه الأسماء لا بالقيم السرية.",
+      "restartNeeded": "لا يحصل الوكيل العامل على متغير معدّل إلا بعد إعادة تشغيل عمليته: {{names}}.",
+      "restartNow": "أعد تشغيلهم ({{count}})",
+      "restartLater": "لاحقًا",
+      "unused": "لا يستخدمه أي مشغّل بعد",
+      "unusedTip": "لا يستطيع الوكلاء استخدام سرّ إلا عبر مشغّل. أضف واحدًا أدناه، أو دع وكيلًا يقترح واحدًا (توافق أنت على الأمر بالضبط)."
     },
     "mcp": {
       "step1": "خوادم تستخدمها بالفعل",
@@ -2287,7 +2336,34 @@
       "openOutsideNo": "للأمان يُعرض هذا النوع من الملفات في مجلده فقط: قد يشغّل شيئًا.",
       "openFailed": "تعذّر فتحه.",
       "showAll": "عرض الكل",
-      "noneForTask": "لا شيء لهذه المهمة بعد."
+      "noneForTask": "لا شيء لهذه المهمة بعد.",
+      "showHidden": "إظهار المخفي ({{count}})",
+      "hideHidden": "إخفاء المخفي",
+      "hiddenTag": "مخفي",
+      "hide": "إخفاء",
+      "unhide": "إظهار",
+      "hideTip": "يزيله من هذه القائمة. لا يُمسّ الملف.",
+      "delete": "حذف",
+      "deleteConfirm": "حذف {{name}}؟",
+      "deleteDetail": "ينتقل إلى سلة المهملات، لذا يمكنك استعادته.",
+      "deleteNoTrash": "لا توجد سلة مهملات لـ {{name}} هنا. حذفه نهائيًا؟",
+      "deleteForGood": "حذف نهائي",
+      "actionFailed": "لم ينجح ذلك.",
+      "createdBy": "created by {{name}}",
+      "editedBy": "edited by {{name}}",
+      "filterType": "File type",
+      "filterBy": "Written by",
+      "allTypes": "All types",
+      "everyone": "Everyone",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all",
+      "history": "History",
+      "noHistory": "No saved versions yet. Agents' changes are saved from now on.",
+      "app": "App",
+      "current": "current",
+      "viewingVersion": "Viewing the version {{who}} saved on {{when}}.",
+      "backToCurrent": "Back to current",
+      "openTask": "Open this task"
     },
     "engines": {
       "title": "المحرّكات",
@@ -2441,5 +2517,47 @@
         "help": "اتركه فارغًا لـ sentry.io."
       }
     }
-  }
+  },
+  "taskHistory": {
+    "title": "السجل",
+    "empty": "لم يُسجَّل شيء بعد. تُسجَّل التغييرات من الآن.",
+    "created": "أُنشئت ({{status}})",
+    "createdFor": "أُنشئت لـ {{name}} ({{status}})",
+    "assigned": "أُسندت إلى {{name}}",
+    "unassigned": "غير مُسندة",
+    "status": "نُقلت من {{from}} إلى {{to}}",
+    "asked": "طرح عليك سؤالًا",
+    "answered": "أجبت",
+    "dismissed": "تجاهلت سؤالًا",
+    "result": "كُتبت النتيجة",
+    "removed": "أُزيلت من اللوحة",
+    "message": "رسالة من {{from}} إلى {{to}}",
+    "status_todo": "للتنفيذ",
+    "status_doing": "قيد التنفيذ",
+    "status_blocked": "متوقفة",
+    "status_done": "منجزة"
+  },
+  "fortress": {
+    "unsupported": "Fortress ships no build for this computer.",
+    "install": "Download and install",
+    "installNote": "About 250 MB, checked against the release's SHA-256 list before it runs.",
+    "state_downloading": "Downloading… {{percent}}%",
+    "state_verifying": "Checking the download…",
+    "state_extracting": "Unpacking…",
+    "licensed": "Signed in: v3 engine.",
+    "notLicensed": "Not signed in: runs the older v1 engine.",
+    "signIn": "Sign in with your account",
+    "needsUv": "Signing in needs uv (above).",
+    "check": "Check again",
+    "approveHint": "Finish signing in in your browser, including approving this device:",
+    "useIt": "Use Fortress for the office browser",
+    "v1Note": "Until you sign in, Fortress runs its first-generation engine.",
+    "manual": "Prefer a terminal? Run",
+    "remove": "Remove ({{size}})",
+    "renew": "Renew key",
+    "renewTip": "Re-issue the key before it expires",
+    "signOut": "Sign out",
+    "needsUvWindows": "Signing in needs uv for Windows itself (Fortress runs beside the app, not inside WSL): powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\""
+  },
+  "workers": {}
 }

@@ -65,8 +65,21 @@ export interface HireManifest {
   capabilities?: string[];
   /** Spawn in an isolated git worktree. */
   isolate?: boolean;
-  /** Per-agent total-token ceiling, applied to agentTokenCaps after spawn. */
+  /** Per-agent total-token ceiling, applied to agentTokenCaps after spawn.
+   *  0 means no cap (the same as leaving it out). */
   tokenCap?: number;
+  /** Absolute path of the folder the agent works in. Pre-fills WORKS IN. Only
+   *  honoured for a manifest from this machine (research/hires/ or a file the
+   *  human imported); a deep-link manifest has it dropped in main, so a remote
+   *  page can never choose a folder on your disk. */
+  cwd?: string;
+  /** A Claude session id to continue (`--resume`). Pre-fills the resume field,
+   *  which also looks up the folder that session ran in. Local manifests only,
+   *  like `cwd`. */
+  sessionId?: string;
+  /** Set by main on a research/hires/ manifest so the renderer can hand back
+   *  the ones the human closed without deciding. Never read from the JSON. */
+  reviewToken?: string;
   /** Attribution shown in the import preview. */
   author?: string;
   /** Manifest home (gallery page). https only. */
@@ -93,6 +106,11 @@ export interface HireValidation {
 
 const PROVIDERS: readonly string[] = ['claude', 'antigravity', 'codex', 'cursor'];
 const MAX_BYTES = 64 * 1024;
+
+/** An absolute folder: `/x`, `~/x`, `C:\x` or `C:/x`, or a UNC `\\host\share`. */
+const ABS_DIR_RE = /^(?:\/|~(?:[\/]|$)|[A-Za-z]:[\\/]|\\\\[^\\])/;
+/** Session ids are uuids in practice; letters, digits and dashes cover every CLI. */
+const SESSION_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
 /** A flag ("-x", "--flag", "--flag=value") or a bare value token that may follow
  *  a flag. Letters/digits plus a conservative punctuation set; no quotes,
@@ -259,8 +277,19 @@ export function validateHireManifest(raw: unknown): HireValidation {
 
   let tokenCap: number | undefined;
   if (o.tokenCap !== undefined) {
-    if (typeof o.tokenCap === 'number' && Number.isInteger(o.tokenCap) && o.tokenCap > 0 && o.tokenCap <= MAX_AGENT_TOKEN_CAP) tokenCap = o.tokenCap;
-    else errors.push('"tokenCap" must be a positive integer (max 1e10)');
+    // 0 is "no cap", the value the orchestrator's own protocol example shows.
+    if (o.tokenCap === 0) tokenCap = undefined;
+    else if (typeof o.tokenCap === 'number' && Number.isInteger(o.tokenCap) && o.tokenCap > 0 && o.tokenCap <= MAX_AGENT_TOKEN_CAP) tokenCap = o.tokenCap;
+    else errors.push('"tokenCap" must be 0 (no cap) or a positive integer (max 1e10)');
+  }
+
+  const cwd = capped(o.cwd, 1024, 'cwd', errors);
+  if (cwd !== undefined && (!ABS_DIR_RE.test(cwd) || cwd.includes('\0'))) {
+    errors.push('"cwd" must be an absolute folder path (e.g. /home/me/project or C:\\code\\project)');
+  }
+  const sessionId = capped(o.sessionId, 128, 'sessionId', errors);
+  if (sessionId !== undefined && !SESSION_ID_RE.test(sessionId)) {
+    errors.push('"sessionId" must be a session id (letters, digits, - and _ only)');
   }
 
   // skills — allowlist: references into BUNDLED_SKILL_IDS only; max 8
@@ -313,7 +342,7 @@ export function validateHireManifest(raw: unknown): HireValidation {
     ok: true,
     errors: [],
     consentRequired: consentRequired.length > 0 ? consentRequired : undefined,
-    manifest: { spec: HIRE_SPEC_V1, name, description, goal, character, accent, provider, model, commandFlags, capabilities, isolate, tokenCap, author, homepage, skills, mcpServers }
+    manifest: { spec: HIRE_SPEC_V1, name, description, goal, character, accent, provider, model, commandFlags, capabilities, isolate, tokenCap, cwd, sessionId, author, homepage, skills, mcpServers }
   };
 }
 

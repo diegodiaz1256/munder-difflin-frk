@@ -108,6 +108,8 @@ export interface VoiceMessage {
   /** REDACTED message body. */
   body: string;
   requires_reply: boolean;
+  /** The message this one answers, if any (an id, never content). */
+  in_reply_to?: string | null;
   /** Which mailbox folder this copy was read from, relative to `owner`. */
   direction: 'inbox' | 'outbox';
   /** The agent whose mailbox this copy lives in. */
@@ -143,6 +145,8 @@ export interface HiveTask {
   /** Outcome summary, surfaced by the Slack done-notifier when this card reaches
    *  'done'. Optional; the notifier falls back to description/title. */
   result?: string;
+  /** The task this card is a piece of (a subtask), by id. */
+  parent?: string;
   /** Set when this task originated from a Slack message — the thread the
    *  done-summary reply is posted back into. Consumed OUTBOUND only; populating
    *  it is the inbound/kanban side's job and does not affect routing. */
@@ -2004,7 +2008,7 @@ export class HiveManager {
       : '';
     const godLine = meta.isGod
       ? 'You are the GOD / ORCHESTRATOR of this hive — your job is to ORCHESTRATE, not to implement: maintain live situational awareness and delegate the work. (1) AWARENESS — always know what is going on: keep an accurate picture of every agent (active vs archived/idle), the task board, and all in-flight work; drain your inbox continually and triage every other agent\'s requests, answering clarifications so the team runs autonomously. (2) DELEGATE — decompose work and fan it out to the hive agents via their inboxes (route messages and assign owners; do not do their jobs); your own sub-agent tool is switched off — a helper started inside your session is invisible to the office, so "put an agent on it" always means an agent on the floor (an existing one, or a worker through spawn-requests); do NOT take on grunt implementation yourself. Stay aware of who is already on the floor and delegate OPPORTUNISTICALLY: BEFORE you spawn anything, CHECK THE LIVE ROSTER (active agents in registry.json + their state in fleet.json) and prefer routing to an EXISTING agent that fits — above all when the request names one ("ask Pam to…", "have Jim…"), route to that agent instead of reflexively creating a new one. Reuse an idle or already-running agent whose role matches; only spawn a fresh agent when no existing one is a sensible fit, and say that you checked. One capable owner beats a duplicate. (3) OWN ONLY THE IMPORTANT, high-leverage things — task decomposition, dispatch decisions, sign-offs, conflict resolution, branch integration, and final QA — and remain the sole scribe of board.md. You are otherwise fully autonomous — there is NO separate approval queue. For the genuinely critical (destructive actions, spending real money, scope changes, unresolvable conflicts), ask the human directly in your own session and let the tool-permission prompt gate the action; the human approves natively, including remotely from their phone via /remote-control. Keep the team unblocked. When you DISPATCH a task, write it as a 4-part contract so the agent can run autonomously: (1) OBJECTIVE — the concrete goal; (2) OUTPUT — the expected deliverable/format; (3) TOOLS — what to use or avoid, and any references to read instead of re-deriving; (4) BOUNDARIES — scope limits + the definition of done. Pass references (file paths, message ids, board sections), not pasted content — keep dispatches short.'
-        + ` MONITOR the floor by reading ${inRoot('fleet.json')} (live per-agent tokens, cost, status, last tool, breaker level, inbox backlog) and ${inRoot('registry.json')} — note that running 'claude agents' will NOT list your hive's sibling agents. A full Claude Code command reference is at ${inRoot('COMMANDS.md')} (slash commands act ONLY on your own session; CLI commands run in your shell and can target the fleet). You periodically receive scheduler / "Heartbeat" standup requests — on each, review every agent via fleet.json, re-engage anyone stalled, over-budget, or breaker-armed, and keep board.md and tasks.json accurate. In tasks.json, ALWAYS set each task's "assignee" to the worker's agent id the moment you dispatch it, and NEVER clear it on status changes — a done card must still say who did the work (the human reads the board by who-did-what). HUMAN FEEDBACK is first-class in the ledger: when a task can only proceed with the human's input — a QUESTION to answer OR an ACTION only the human can perform (create an account, approve a purchase, provide credentials/screenshots, test on their device) — set its status to "blocked" and append the concrete ask to the card's "humanQA" array (push {"q":"...","askedAt":"<iso>"}; phrase actions as clear to-dos; keep every past entry — the history documents the card's decisions). WRITE THE ASK SHORT AND IN MARKDOWN. The human reads it on a CARD, not in a terminal, so an ask longer than a short paragraph plus its options (roughly 700 characters) is a report, not a question — cut the narrative, keep the decision. Open with ONE **bold** sentence saying exactly what you need from them; put paths, commands, values and identifiers in \`backticks\`; give each option or step its own "-" bullet or "1." number; leave a blank line between paragraphs (a single newline is a line break, so each option stays on its own line). When the ask originates in another agent's report, REWRITE it into that shape — never paste the report body in as the question, and never make the human read the investigation to find the decision. The harness surfaces open questions on the office floor's ASK ME board; the human's answer lands in the same entry ("a") AND arrives as an inbox message to you — read it, act on it, and unblock the card so work continues. Do NOT park human questions in separate files (no HumanQuestion.md) and never sit waiting on the human in your own session. Steward the token budget.`
+        + ` MONITOR the floor by reading ${inRoot('fleet.json')} (live per-agent tokens, cost, status, last tool, breaker level, inbox backlog) and ${inRoot('registry.json')} — note that running 'claude agents' will NOT list your hive's sibling agents. A full Claude Code command reference is at ${inRoot('COMMANDS.md')} (slash commands act ONLY on your own session; CLI commands run in your shell and can target the fleet). You periodically receive scheduler / "Heartbeat" standup requests — on each, review every agent via fleet.json, re-engage anyone stalled, over-budget, or breaker-armed, and keep board.md and tasks.json accurate. In tasks.json, ALWAYS set each task's "assignee" to the worker's agent id the moment you dispatch it, and NEVER clear it on status changes — a done card must still say who did the work (the human reads the board by who-did-what). SUBTASKS: when a request needs several pieces of work, keep ONE card for the request (the parent) and give each piece its own card with "parent": "<the parent card's id>"; the human follows where work comes from by that link. Close the parent only when its subtasks are done, and put the overall result on the parent. HUMAN FEEDBACK is first-class in the ledger: when a task can only proceed with the human's input — a QUESTION to answer OR an ACTION only the human can perform (create an account, approve a purchase, provide credentials/screenshots, test on their device) — set its status to "blocked" and append the concrete ask to the card's "humanQA" array (push {"q":"...","askedAt":"<iso>"}; phrase actions as clear to-dos; keep every past entry — the history documents the card's decisions). WRITE THE ASK SHORT AND IN MARKDOWN. The human reads it on a CARD, not in a terminal, so an ask longer than a short paragraph plus its options (roughly 700 characters) is a report, not a question — cut the narrative, keep the decision. Open with ONE **bold** sentence saying exactly what you need from them; put paths, commands, values and identifiers in \`backticks\`; give each option or step its own "-" bullet or "1." number; leave a blank line between paragraphs (a single newline is a line break, so each option stays on its own line). When the ask originates in another agent's report, REWRITE it into that shape — never paste the report body in as the question, and never make the human read the investigation to find the decision. The harness surfaces open questions on the office floor's ASK ME board; the human's answer lands in the same entry ("a") AND arrives as an inbox message to you — read it, act on it, and unblock the card so work continues. Do NOT park human questions in separate files (no HumanQuestion.md) and never sit waiting on the human in your own session. Steward the token budget.`
       : meta.isAssistant
       ? `You are ${godNameForPrompt}'s PREP ASSISTANT. You will be handed short, possibly vague instructions (each begins with "ENRICH TASK:"). For each one: (1) figure out which project it concerns and cd into the most relevant repo — you start in ${godNameForPrompt}'s home directory; (2) gather concrete context READ-ONLY (exact file paths, current state, relevant code, conventions, active branch, gotchas) — NEVER modify, create, or delete files; (3) rewrite the instruction into ONE clear, self-contained prompt that ${godNameForPrompt} can execute autonomously, preserving the user's original intent without inventing scope. Then deliver it: write ONE message JSON into your outbox with "to":"god", "act":"request", a short subject, and the finished prompt as the body. Do NOT perform the task yourself — your only output is the improved prompt sent to ${godNameForPrompt}.`
       : 'For anything ambiguous, cross-cutting, or needing sign-off, address a message to "god".';
@@ -2015,8 +2019,8 @@ export class HiveManager {
     const apiCli = inRoot('bin', 'md-api.cjs');
     const runCli = inRoot('bin', 'md-run.cjs');
     const runnersLine = runners && runners.length
-      ? `SECRETS: the human keeps secrets (API keys, passwords, database URLs) out of your reach — you will never see their values, and you must not try to read, print or exfiltrate them. Commands that need them are RUNNERS the app executes for you, in your worktree, with the secrets set; you get the output with every secret masked as ***. Available: ${runners.map((r) => `${r.id}${r.description ? ` (${r.description})` : ''}${r.secrets.length ? ` [uses ${r.secrets.join(', ')}]` : ''}`).join('; ')}. Run one with \`"${hiveNode}" "${runCli}" <runner>\` (\`"${hiveNode}" "${runCli}"\` lists them). The human may be asked to approve a run, especially after you changed files. If a task needs a secret no runner provides, ask the human for a runner — never ask for the value.`
-      : `RUNNERS: commands the human sets up to run with secrets you never see. None exist yet; one added later works at once: \`"${hiveNode}" "${runCli}"\` lists them, \`"${hiveNode}" "${runCli}" <runner>\` runs one (output masked). Never ask for a secret's value.`;
+      ? `SECRETS: the human keeps secrets (API keys, passwords, database URLs) out of your reach — you will never see their values, and you must not try to read, print or exfiltrate them. Commands that need them are RUNNERS the app executes for you, in your worktree, with the secrets set; you get the output with every secret masked as ***. Available: ${runners.map((r) => `${r.id}${r.description ? ` (${r.description})` : ''}${r.secrets.length ? ` [uses ${r.secrets.join(', ')}]` : ''}`).join('; ')}. Run one with \`"${hiveNode}" "${runCli}" <runner>\` (\`"${hiveNode}" "${runCli}"\` lists them and the names of the stored secrets). The human may be asked to approve a run, especially after you changed files. If a task needs a secret no runner provides, PROPOSE one: \`"${hiveNode}" "${runCli}" --propose <name> --secrets NAME[,NAME] --why "<reason>" -- <command>\` (the human approves the exact command once; it then runs like any runner). Never ask for the value.`
+      : `RUNNERS: commands that run with secrets you never see. None exist yet; one added later works at once: \`"${hiveNode}" "${runCli}"\` lists them and the names of the stored secrets, \`"${hiveNode}" "${runCli}" <runner>\` runs one (output masked). When a task needs a secret (a migration, a script, a check against a service), propose a runner: \`"${hiveNode}" "${runCli}" --propose <name> --secrets NAME[,NAME] --why "<reason>" -- <command>\`; the human approves the exact command once. Never ask for a secret's value.`;
     // The lists that exist now, so an agent uses them instead of inventing
     // its own place for the human's things.
     let existingLists: ReturnType<typeof parseList>[] = [];
@@ -2054,7 +2058,7 @@ export class HiveManager {
     // hooks.ts), not up front; other CLIs have no such moment, so they read it here.
     const browserLine = webOff || hasOfficeMcp ? '' : `BROWSER: for a page that is empty, needs JavaScript or refuses a plain fetch (403, "enable JavaScript", a bot wall for non-browsers), use the office browser — the app's own Chromium${hasOfficeMcp ? ': the munder-browser tools browse_page and web_search, or' : ':'} \`"${hiveNode}" "${browseCli}" <url>\` (add --links for the page's links) and \`"${hiveNode}" "${browseCli}" --search "<query>"\`. It does not solve captchas or bot challenges; if a page asks for one, say so instead of trying to get around it.`;
     const hireLine = meta.isGod
-      ? `HIRING A PERMANENT EMPLOYEE (not a temp): write a manifest to ${inRoot('research', 'hires')}/<name>.json — {"spec":"munder-difflin/hire@1","name":"…","description":"one-line role","goal":"standing mission","provider":"claude|codex|cursor|antigravity","model":"…","character":"…","isolate":false,"tokenCap":0} (only spec and name are required). The app opens the Add-Agent review prefilled and the human confirms; then the agent appears in registry.json and you dispatch to its inbox. An invalid file comes back to your inbox as "[hire manifest rejected]" with the reason.`
+      ? `HIRING A PERMANENT EMPLOYEE (not a temp): write a manifest to ${inRoot('research', 'hires')}/<name>.json — {"spec":"munder-difflin/hire@1","name":"…","description":"one-line role","goal":"standing mission","provider":"claude|codex|cursor|antigravity","model":"…","character":"…","cwd":"/absolute/folder/it/works/in","isolate":false,"tokenCap":0} (only spec and name are required; tokenCap 0 = no cap; cwd defaults to the first project, and "sessionId" continues an existing Claude session). The app opens the Add-Agent review prefilled and the human confirms; then the agent appears in registry.json and you dispatch to its inbox. An invalid file comes back to your inbox as "[hire manifest rejected]" with the reason.`
       : '';
     return [
       `You are "${meta.name}" (${meta.id}), an autonomous agent in a collaborating hive of agents.`,
@@ -2521,7 +2525,7 @@ export class HiveManager {
    * in both the sender's outbox/.sent and the recipient's inbox/.done; we dedup
    * by message id so each appears once.
    */
-  voiceMessages(opts: { agentId?: string; id?: string; limit?: number; includeArchived?: boolean } = {}): VoiceMessage[] {
+  voiceMessages(opts: { agentId?: string; id?: string; limit?: number; includeArchived?: boolean; history?: boolean } = {}): VoiceMessage[] {
     const root = this.root();
     if (!root) return [];
     const agentsDir = join(root, 'agents');
@@ -2566,6 +2570,7 @@ export class HiveManager {
             subject: redactSecrets(m.subject),
             body: redactSecrets(m.body),
             requires_reply: !!m.requires_reply,
+            in_reply_to: typeof m.in_reply_to === 'string' ? m.in_reply_to : null,
             direction: f.direction,
             owner,
             archived: f.archived,
@@ -2578,8 +2583,12 @@ export class HiveManager {
     // Newest first by ISO created_at (lexicographic == chronological for ISO-8601).
     out.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
     if (wantId) return out.slice(0, 1);
+    // 40 keeps a voice briefing short. The Inbox reads the conversation
+    // history (`history`), which a cap of 40 across the whole floor cut to the
+    // last few minutes of a busy office.
+    const cap = opts.history === true ? 2000 : 40;
     const lim = typeof opts.limit === 'number' && isFinite(opts.limit)
-      ? Math.max(1, Math.min(40, Math.round(opts.limit)))
+      ? Math.max(1, Math.min(cap, Math.round(opts.limit)))
       : 12;
     return out.slice(0, lim);
   }
@@ -3451,6 +3460,77 @@ export class HiveManager {
     console.warn('[hive] commit gave up after 5 attempts');
   }
 
+  /**
+   * Commit some deliverables as the agent that wrote them, so the history of
+   * research/ says who changed what (every other hive commit is authored
+   * "Hive"). Only these paths: whatever else is pending waits for the next
+   * ordinary commit. `rels` are relative to the hive root, with '/'.
+   */
+  commitDeliverables(rels: string[], author: { id: string; name: string }): void {
+    const root = this.root();
+    if (!root || !existsSync(join(root, '.git')) || !rels.length) return;
+    const clean = (x: string) => x.replace(/[<>\n\r]/g, '').trim().slice(0, 60) || 'agent';
+    const who = `${clean(author.name)} <${clean(author.id).replace(/[^A-Za-z0-9._-]/g, '-')}@hive.local>`;
+    const msg = `deliverable: ${rels.join(', ').slice(0, 300)} (${clean(author.name)})`;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      this.clearStaleLock(root);
+      const add = this.git(['add', '-A', '--', ...rels], root);
+      const commit = this.git(['commit', '-q', `--author=${who}`, '-m', msg, '--', ...rels], root);
+      if (commit.ok || /nothing (added )?to commit|no changes added/i.test(commit.out + commit.err)) return;
+      if (!add.ok || /index\.lock/i.test(commit.err)) { sleepSync(50 * (attempt + 1)); continue; }
+      console.warn('[hive] deliverable commit failed:', commit.err || commit.out);
+      return;
+    }
+  }
+
+  /** Every committed version of one hive file, newest first: hash, time,
+   *  author ("Hive" for the app's own batched commits) and message. */
+  fileHistory(rel: string, limit = 100): Array<{ hash: string; ts: string; author: string; subject: string }> {
+    const root = this.root();
+    if (!root || !existsSync(join(root, '.git'))) return [];
+    const r = this.git(['log', `-n${Math.max(1, Math.min(500, limit))}`, '--follow', '--format=%H%x1f%aI%x1f%an%x1f%s', '--', rel], root);
+    if (!r.ok) return [];
+    return r.out.split('\n').filter(Boolean).map((l) => {
+      const [hash, ts, author, subject] = l.split('\x1f');
+      return { hash, ts, author, subject: subject ?? '' };
+    }).filter((v) => /^[0-9a-f]{40}$/.test(v.hash));
+  }
+
+  /** A hive file as it was in one commit (text, capped), or null. */
+  fileAt(rel: string, hash: string): string | null {
+    const root = this.root();
+    if (!root || !/^[0-9a-f]{7,40}$/.test(hash) || rel.includes('..')) return null;
+    const r = this.git(['show', `${hash}:${rel}`], root);
+    return r.ok ? r.out.slice(0, 2_000_000) : null;
+  }
+
+  private authorsCache: { head: string; map: Record<string, { authors: string[]; last: string; lastTs: string }> } | null = null;
+  /** Who has changed each file under `dir` (agents only, not the app's own
+   *  "Hive" commits), most recent first, from one pass over the log; cached
+   *  until HEAD moves. Keys are hive-relative paths with '/'. */
+  fileAuthors(dir: string): Record<string, { authors: string[]; last: string; lastTs: string }> {
+    const root = this.root();
+    if (!root || !existsSync(join(root, '.git'))) return {};
+    const head = this.git(['rev-parse', 'HEAD'], root);
+    if (!head.ok) return {};
+    if (this.authorsCache?.head === head.out.trim()) return this.authorsCache.map;
+    const r = this.git(['log', '-n2000', '--no-merges', '--format=%x1e%an%x1f%aI', '--name-only', '--', dir], root);
+    const map: Record<string, { authors: string[]; last: string; lastTs: string }> = {};
+    if (r.ok) {
+      for (const chunk of r.out.split('\x1e').filter(Boolean)) {
+        const [headLine, ...files] = chunk.split('\n');
+        const [author, ts] = headLine.split('\x1f');
+        if (!author || author === 'Hive') continue;
+        for (const f of files.map((x) => x.trim()).filter(Boolean)) {
+          const e = map[f] ?? (map[f] = { authors: [], last: author, lastTs: ts });
+          if (!e.authors.includes(author)) e.authors.push(author);
+        }
+      }
+    }
+    this.authorsCache = { head: head.out.trim(), map };
+    return map;
+  }
+
   private clearStaleLock(root: string): void {
     const STALE_THRESHOLD_MS = 10_000;
     try {
@@ -3542,25 +3622,55 @@ const MD_RUN_CLI = `#!/usr/bin/env node
 'use strict';
 // Ask the app to run a runner: a command the human defined, executed with
 // secrets you never see; its output comes back with them masked.
-const id = process.argv[2];
+//   md-run                      list runners and the secrets that exist (names only)
+//   md-run <runner>             run one
+//   md-run --propose <name> --secrets A,B [--why "<reason>"] -- <command…>
+//                               ask the human to add a runner (they see the command)
+const argv = process.argv.slice(2);
 const base = process.env.MD_BROKER_URL, token = process.env.MD_BROKER_TOKEN;
 if (!base || !token) { console.error('md-run: no runners are available to this agent.'); process.exit(2); }
-const headers = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
-const url = base.replace(/\\/+$/, '') + '/run' + (id ? '/' + encodeURIComponent(id) : '');
-fetch(url, { method: id ? 'POST' : 'GET', headers })
-  .then(async (res) => {
-    const body = await res.json().catch(() => ({}));
-    if (!id) {
-      if (!(body.runners || []).length) console.log('No runners are set up for you yet (the human adds them in Environment; they work at once). usage: md-run <runner>');
-      for (const r of body.runners || []) console.log(r.id + (r.description ? '  — ' + r.description : '') + (r.secrets && r.secrets.length ? '  [uses ' + r.secrets.join(', ') + ']' : ''));
-      process.exit(0);
-    }
-    if (!body.ok) { console.error('md-run: ' + (body.error || ('HTTP ' + res.status))); process.exit(1); }
-    if (body.output) process.stdout.write(body.output.endsWith('\\n') ? body.output : body.output + '\\n');
-    console.log('[exit ' + body.exitCode + ']');
-    process.exit(body.exitCode === 0 ? 0 : 1);
-  })
-  .catch((e) => { console.error('md-run: ' + (e && e.message || e)); process.exit(1); });
+const headers = { Authorization: 'Bearer ' + token, Accept: 'application/json', 'Content-Type': 'application/json' };
+const root = base.replace(/\\/+$/, '') + '/run';
+const fail = (e) => { console.error('md-run: ' + (e && e.message || e)); process.exit(1); };
+if (argv[0] === '--propose') {
+  const sep = argv.indexOf('--');
+  const opts = sep === -1 ? argv.slice(1) : argv.slice(1, sep);
+  const command = sep === -1 ? '' : argv.slice(sep + 1).join(' ');
+  const name = opts[0] && !opts[0].startsWith('--') ? opts[0] : '';
+  const val = (flag) => { const i = opts.indexOf(flag); return i === -1 ? '' : (opts[i + 1] || ''); };
+  if (!name || !command) {
+    console.error('usage: md-run --propose <name> --secrets A,B [--why "<reason>"] -- <command…>');
+    process.exit(2);
+  }
+  const secrets = val('--secrets').split(',').map((x) => x.trim()).filter(Boolean);
+  console.log('Waiting for the human to approve runner "' + name + '"…');
+  fetch(root, { method: 'POST', headers, body: JSON.stringify({ name, command, secrets, description: val('--why') }) })
+    .then(async (res) => {
+      const body = await res.json().catch(() => ({}));
+      if (!body.ok) { console.error('md-run: ' + (body.error || ('HTTP ' + res.status))); process.exit(1); }
+      console.log('Added runner ' + body.id + '. Run it with: md-run ' + body.id);
+    })
+    .catch(fail);
+} else {
+  const id = argv[0];
+  fetch(root + (id ? '/' + encodeURIComponent(id) : ''), { method: id ? 'POST' : 'GET', headers })
+    .then(async (res) => {
+      const body = await res.json().catch(() => ({}));
+      if (!id) {
+        if (!(body.runners || []).length) console.log('No runners are set up for you yet (the human adds them in Environment, or you propose one below; they work at once).');
+        for (const r of body.runners || []) console.log(r.id + (r.description ? '  — ' + r.description : '') + (r.secrets && r.secrets.length ? '  [uses ' + r.secrets.join(', ') + ']' : ''));
+        console.log('');
+        console.log('Secrets stored (names only, never values): ' + ((body.secrets || []).join(', ') || 'none yet'));
+        console.log('Need a command with one of them? md-run --propose <name> --secrets NAME[,NAME] --why "<reason>" -- <command>');
+        process.exit(0);
+      }
+      if (!body.ok) { console.error('md-run: ' + (body.error || ('HTTP ' + res.status))); process.exit(1); }
+      if (body.output) process.stdout.write(body.output.endsWith('\\n') ? body.output : body.output + '\\n');
+      console.log('[exit ' + body.exitCode + ']');
+      process.exit(body.exitCode === 0 ? 0 : 1);
+    })
+    .catch(fail);
+}
 `;
 
 const GENERATED_HIVE_DOCS = [

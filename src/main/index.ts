@@ -13,12 +13,12 @@ import * as https from 'node:https';
 import { rootCertificates as tlsRootCertificates } from 'node:tls';
 import { buildCaBundle, tlsActive, tlsEnv, WINDOWS_STORE_SCRIPT } from './caBundle';
 import {
-  rmSync, existsSync, readFileSync, readdirSync, statSync, cpSync, writeFileSync,
+  rmSync, existsSync, readFileSync, appendFileSync, readdirSync, statSync, cpSync, writeFileSync,
   unlinkSync, mkdirSync, renameSync, createWriteStream, copyFileSync, lstatSync,
   readlinkSync, symlinkSync
 } from 'node:fs';
-import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
-import { join, resolve, sep, basename, dirname, isAbsolute } from 'node:path';
+import { randomBytes, randomUUID, createHash, timingSafeEqual } from 'node:crypto';
+import { join, resolve, relative, sep, basename, dirname, isAbsolute } from 'node:path';
 import { homedir, hostname } from 'node:os';
 import { request as httpsRequest } from 'node:https';
 import { PtyManager, type SpawnOptions } from './pty';
@@ -90,13 +90,15 @@ import { effectiveApiAccess, explainConnection, isAccess, type Access } from '..
 import { blockedMcpServers, cleanToolBlocks } from '../shared/nativeTools';
 import { browseChars, formatBrowsed, formatSearch } from '../shared/browsePage';
 import { floorActiveSince } from '../shared/tokenDiet';
-import { browsePage, searchWeb } from './browser';
+import { browsePage, searchWeb, setExternalEngine } from './browser';
+import { Fortress } from './fortress';
 import { TeamNode, type TeamInbound } from './teamNode';
 import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, relayToken, saveTeamState, setRelayToken, teamEnabled, teamPublicStatus } from './team';
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
 import type { PromptConnection } from '../shared/agentConnections';
 import { PROVIDER_BACKENDS, backendForModel, providerKeyEnv } from '../shared/providerBackends';
 import { LIST_MODELS, SIGN_IN, authProviders, piOwnModels, cleanCustomProviders, effectiveModel, keyScope, piSettingsWithModel, customKeyEnv, modelsFromListing, opencodeProviders, parseModelList, piModelsJson, type ManagedEngine } from '../shared/engineModels';
+import { diffTasks, snapshotOf, type TaskEvent, type TaskSnapshot } from '../shared/taskHistory';
 import { DELIVERABLES_DIR, addLink, canOpenExternally, currentTaskOf, isInside, linkFor, writtenFiles, type DeliverableLink } from '../shared/deliverables';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES, hasPlaceholderHost, probeSpecFor } from '../shared/integrations';
 import { RosterStore } from './roster';
@@ -106,7 +108,7 @@ import { ControlRegistry } from './control';
 import { WorkerWakeWatchdog, WORKER_WAKE_REPORT_MS, activityEvidenceAt, type WorkerWakeFacts } from './workerWake';
 import { inboxNudgeText } from '../shared/hiveNudge';
 import { resolveGodName } from '../shared/godIdentity';
-import { collectHireManifests, fetchHireManifest, readHireManifestFiles } from './hire';
+import { collectHireManifests, fetchHireManifest, readHireManifestFiles, restoreOfferedHire } from './hire';
 import { parseHireDeepLink, type HireManifest } from '../shared/hire';
 import { ClosingTimeController } from './closingTime';
 import {
@@ -510,6 +512,50 @@ const mcpServers = new McpServers({
   }
 });
 
+// Fortress as the office browser's engine (fortress.ts), opt-in. Off, missing
+// or failing, the office browser uses the built-in Chromium.
+const fortress = new Fortress({
+  baseDir: join(app.getPath('userData'), 'fortress'),
+  uvPath: () => {
+    try { const r = resolveCliCommand('uv'); return r !== 'uv' && existsSync(r) ? r : null; } catch { return null; }
+  },
+  tilionPath: () => {
+    try { const r = resolveCliCommand('tilion'); return r !== 'tilion' && existsSync(r) ? r : null; } catch { return null; }
+  },
+  env: () => ({ ...process.env, PATH: process.platform === 'win32' ? (process.env.PATH ?? '') : userShellPath() }),
+  log: (m) => console.log('[fortress]', m)
+});
+function applyOfficeBrowserEngine(): void {
+  const on = readConfig().officeBrowserEngine === 'fortress';
+  if (!on) { setExternalEngine(null); fortress.stop(); return; }
+  setExternalEngine(
+    () => (fortress.launcherPath() ? fortress.ensureEngine() : null),
+    (e) => console.warn('[fortress] fell back to the built-in engine:', e instanceof Error ? e.message : e)
+  );
+}
+applyOfficeBrowserEngine();
+ipcMain.handle('fortress:status', async () => ({ ...(await fortress.status()), enabled: readConfig().officeBrowserEngine === 'fortress', bytes: fortress.diskUsage() }));
+ipcMain.handle('fortress:install', () => fortress.install());
+ipcMain.handle('fortress:activate', async () => {
+  const r = await fortress.activate();
+  // The link is the user's own sign-in: open it in their browser.
+  if (r.ok && r.url) void shell.openExternal(r.url);
+  return r;
+});
+ipcMain.handle('fortress:refreshLicense', () => fortress.license(true));
+ipcMain.handle('fortress:license', (_evt, which: unknown) => (which === 'refresh' || which === 'logout' ? fortress.licenseCommand(which) : { ok: false, error: 'bad request' }));
+ipcMain.handle('fortress:setEnabled', (_evt, on: unknown) => {
+  writeConfig({ officeBrowserEngine: on === true ? 'fortress' : 'builtin' });
+  applyOfficeBrowserEngine();
+  return { ok: true };
+});
+ipcMain.handle('fortress:uninstall', () => {
+  writeConfig({ officeBrowserEngine: 'builtin' });
+  applyOfficeBrowserEngine();
+  fortress.uninstall();
+  return { ok: true };
+});
+
 // Environment & secrets (envVault.ts): agents use secrets, never see them.
 const envVault = new EnvVault({
   readVars: () => readConfig().envVars ?? [],
@@ -533,6 +579,20 @@ const envVault = new EnvVault({
     refocusAfterDialog(win);
     return response === 0 ? 'once' : response === 1 ? 'always' : 'deny';
   },
+  approveProposal: async ({ proposal, agentName }) => {
+    const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    const opts = {
+      type: 'question' as const,
+      buttons: ['Add runner', 'Decline'],
+      defaultId: 1, cancelId: 1, noLink: true,
+      title: 'Add a runner?',
+      message: `${agentName} asks for a runner "${proposal.name}"`,
+      detail: `${proposal.command}\n\nWith secrets: ${proposal.secrets.join(', ') || 'none'}${proposal.description ? `\nWhy: ${proposal.description}` : ''}\n\nIt runs in the asking agent's own folder. The agent gets only the output, with every secret masked, and you are asked again before a run whenever its files changed. You can edit or remove it in Environment.`
+    };
+    const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
+    refocusAfterDialog(win);
+    return response === 0;
+  },
   log: (m) => console.log('[env]', m)
 });
 
@@ -546,6 +606,12 @@ const integrationBroker = new IntegrationBroker({
   whyNot: (agentId, id) => apiDenyReason(agentId, id),
   runners: {
     describe: () => envVault.describeRunners(),
+    secretNames: () => envVault.secretNames(),
+    propose: (workerId, proposal) => {
+      const agentId = ptyToAgent.get(workerId);
+      const name = (agentId && hive.registry().agents?.[agentId]?.name) || agentId || workerId;
+      return envVault.proposeRunner(proposal, { agentName: name });
+    },
     run: async (workerId, runnerId) => {
       // The worktree is the one the app started this agent in — never a path
       // the agent names.
@@ -2718,14 +2784,87 @@ function deliverHire(manifest: HireManifest): void {
  * the human confirms it in the UI, but nothing looked there, so the
  * proposal sat unseen. Each one now opens the Add-Agent review, prefilled.
  */
+// Task history (shared/taskHistory.ts): the orchestrator rewrites tasks.json
+// whole, so who moved which card, and when, was never kept. Each tick compares
+// the ledger with the last read and appends the difference to
+// taskHistory.jsonl. The last read is kept on disk too, so a change made while
+// the app was closed is still recorded (dated when the app sees it).
+const TASK_HISTORY_EVERY_MS = 5000;
+let taskHistoryAt = 0;
+let taskHistoryState: { root: string; snapshot: TaskSnapshot[] | null; raw: string } | null = null;
+function recordTaskHistory(): void {
+  const now = Date.now();
+  if (now - taskHistoryAt < TASK_HISTORY_EVERY_MS) return;
+  taskHistoryAt = now;
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root) return;
+  let raw = '';
+  try { raw = readFileSync(join(root, 'tasks.json'), 'utf8'); } catch { return; }
+  const snapPath = join(root, 'taskHistory.snapshot.json');
+  if (!taskHistoryState || taskHistoryState.root !== root) {
+    let snapshot: TaskSnapshot[] | null = null;
+    try { snapshot = JSON.parse(readFileSync(snapPath, 'utf8')) as TaskSnapshot[]; } catch { /* first run */ }
+    taskHistoryState = { root, snapshot: Array.isArray(snapshot) ? snapshot : null, raw: '' };
+  }
+  if (raw === taskHistoryState.raw) return;
+  let list: unknown[] = [];
+  try {
+    const parsed = JSON.parse(raw) as { tasks?: unknown } | unknown[];
+    list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.tasks) ? parsed.tasks : [];
+  } catch { return; } // mid-write: try again next tick
+  const next = list.map(snapshotOf).filter((t): t is TaskSnapshot => !!t);
+  const events = diffTasks(taskHistoryState.snapshot, next, new Date(now).toISOString());
+  try {
+    if (events.length) appendFileSync(join(root, 'taskHistory.jsonl'), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
+    writeFileSync(snapPath, JSON.stringify(next));
+    taskHistoryState = { root, snapshot: next, raw };
+  } catch (e) { console.error('[tasks] could not record history:', e); }
+}
+ipcMain.handle('hive:taskHistory', (_evt, taskId: unknown, limit: unknown) => {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root) return [];
+  let lines: string[] = [];
+  try { lines = readFileSync(join(root, 'taskHistory.jsonl'), 'utf8').split('\n').filter(Boolean); } catch { return []; }
+  const max = typeof limit === 'number' && limit > 0 ? Math.min(5000, Math.round(limit)) : 500;
+  const out: TaskEvent[] = [];
+  for (let i = lines.length - 1; i >= 0 && out.length < max; i--) {
+    try {
+      const e = JSON.parse(lines[i]) as TaskEvent;
+      if (typeof taskId !== 'string' || e.taskId === taskId) out.push(e);
+    } catch { /* torn line */ }
+  }
+  return out.reverse();
+});
+
+/** A local manifest's folder as this machine opens it, the same way a worker
+ *  request's is (spawn-requests): a WSL floor's orchestrator writes Linux
+ *  paths, so they go through \\wsl.localhost; a network path is dropped (even
+ *  checking that it exists makes Windows offer the user's NTLM hash). */
+function localHireCwd(m: HireManifest): HireManifest {
+  if (!m.cwd) return m;
+  const floorWsl = hive.wslRoot();
+  const cwd = floorWsl ? fromLinuxPath(m.cwd, floorWsl.distro, () => distroHomeUnc(floorWsl.distro)) : m.cwd;
+  if (!uncAllowed(cwd)) return { ...m, cwd: undefined };
+  return { ...m, cwd };
+}
+
+/** reviewToken → the research/hires/ file an offered manifest came from. */
+const offeredHireSources = new Map<string, { dir: string; file: string }>();
+/** Manifests the human closed without deciding: back in research/hires/, not
+ *  offered again until the next launch (or the review would pop right back). */
+const deferredHireFiles = new Set<string>();
 function offerOrchestratorHires(): void {
   const root = hive.root();
   const home = readConfig().harnessHome;
   const dirs = [root ? join(root, 'research', 'hires') : null, home ? join(home, 'research', 'hires') : null]
     .filter((d): d is string => !!d && existsSync(d));
   if (!dirs.length) return;
-  const { offered, invalid } = collectHireManifests(dirs);
-  for (const m of offered) deliverHire(m);
+  const { offered, sources, invalid } = collectHireManifests(dirs, deferredHireFiles);
+  offered.forEach((m, i) => {
+    const reviewToken = randomUUID();
+    offeredHireSources.set(reviewToken, sources[i]);
+    deliverHire({ ...localHireCwd(m), reviewToken });
+  });
   for (const bad of invalid) {
     informGod('[hire manifest rejected]', `research/hires/${bad.file} is not a valid hire manifest: ${bad.error}`);
   }
@@ -2742,7 +2881,8 @@ async function handleHireLink(link: string): Promise<void> {
     }
     return;
   }
-  deliverHire(res.manifest);
+  // A remote manifest never picks a folder on this disk or a session to resume.
+  deliverHire({ ...res.manifest, cwd: undefined, sessionId: undefined });
   analytics.trackFeature('hire_install');
 }
 
@@ -2788,6 +2928,25 @@ ipcMain.handle('hire:drainPending', () => {
   return out;
 });
 
+// IPC: the human closed the review with research/hires/ manifests still
+// unreviewed. Put them back, so they are offered again on the next launch
+// instead of sitting in .offered/ where nobody looks.
+ipcMain.handle('hire:defer', (_evt, tokens: unknown) => {
+  if (!Array.isArray(tokens)) return;
+  for (const t of tokens) {
+    if (typeof t !== 'string') continue;
+    const src = offeredHireSources.get(t);
+    if (!src) continue;
+    offeredHireSources.delete(t);
+    const restored = restoreOfferedHire(src.dir, src.file);
+    if (restored) deferredHireFiles.add(restored);
+  }
+});
+// IPC: a research/hires/ manifest was spawned or skipped: forget its token.
+ipcMain.handle('hire:reviewed', (_evt, token: unknown) => {
+  if (typeof token === 'string') offeredHireSources.delete(token);
+});
+
 // IPC: "import hires…" file picker in the Add-Agent modal. Every selected file
 // is validated independently; valid neighbours survive an invalid manifest.
 ipcMain.handle('hire:openFile', async () => {
@@ -2804,6 +2963,7 @@ ipcMain.handle('hire:openFile', async () => {
   return {
     ok: batch.manifests.length > 0,
     ...batch,
+    manifests: batch.manifests.map(localHireCwd),
     error: batch.manifests.length === 0 ? 'no valid hire manifests selected' : undefined
   };
 });
@@ -4170,7 +4330,9 @@ const mcpErr = (e: unknown) => ({ ok: false as const, error: e instanceof Error 
 ipcMain.handle('mcp:overview', () => {
   if (!hive.enabled()) return [];
   const cfg = readConfig();
-  return Object.values(hive.registry().agents).filter((a) => a.status !== 'gone' && !a.isAssistant).map((a) => ({
+  // Archived agents (earlier hires since replaced) keep their registry entry
+  // but get nothing: listing them showed every re-hire as a duplicate.
+  return Object.values(hive.registry().agents).filter((a) => a.status !== 'gone' && !a.isAssistant && !(a as { archived?: boolean }).archived).map((a) => ({
     agentId: a.id, name: a.name, provider: a.provider ?? 'claude',
     servers: hive.managedMcpFor(a.id, a.cwd, cfg.mcpDefaults, cfg.agentMcpGrants?.[a.id], cfg.connectionScopes, cfg.agentToolBlocks?.[a.id])
   }));
@@ -4418,10 +4580,52 @@ ipcMain.handle('fs:revealPath', async (_evt, p: unknown) => {
   }
   const st = await statAbs(p);
   if (!st.exists) return { ok: false, error: 'not found' };
-  if (st.isFile) { shell.showItemInFolder(st.path); return { ok: true }; }
-  const err = await shell.openPath(st.path);
+  const err = st.isFile ? await revealFile(st.path) : await openFolder(st.path);
   return err ? { ok: false, error: err } : { ok: true };
 });
+
+/** The app itself running inside WSL (WSLg), where xdg-open often has no file
+ *  browser to hand a folder to, but Windows Explorer is one call away. */
+const RUNNING_IN_WSL = process.platform === 'linux'
+  && (!!process.env.WSL_DISTRO_NAME || (() => { try { return /microsoft/i.test(readFileSync('/proc/version', 'utf8')); } catch { return false; } })());
+
+/** Open a folder in the OS file browser. Resolves an error message, or ''. */
+async function openFolder(dir: string): Promise<string> {
+  if (RUNNING_IN_WSL) {
+    const win = await new Promise<string>((res) => {
+      execFile('wslpath', ['-w', dir], { timeout: 5000 }, (e, out) => res(e ? '' : String(out).trim()));
+    });
+    if (win) {
+      // explorer.exe exits 1 even when it opened the window, so only a spawn failure counts.
+      return new Promise((res) => {
+        const c = spawn('explorer.exe', [win], { detached: true, stdio: 'ignore' });
+        c.once('error', (e) => res(e.message));
+        c.once('spawn', () => { c.unref(); res(''); });
+      });
+    }
+  }
+  const err = await shell.openPath(dir);
+  if (err && process.platform === 'linux') return `${err} (no file browser is set for folders: try \`xdg-mime default <your-file-manager>.desktop inode/directory\`)`;
+  return err;
+}
+
+/** Show a file in its folder. Electron's showItemInFolder reports nothing: on
+ *  a Linux desktop with no FileManager1 D-Bus service (most tiling setups) it
+ *  silently does nothing, and Explorer can refuse a \\wsl.localhost path the
+ *  same way. So: Explorer's own /select on Windows, the parent folder on Linux
+ *  (a file browser opened there, with an error if there is none). */
+async function revealFile(file: string): Promise<string> {
+  if (process.platform === 'darwin') { shell.showItemInFolder(file); return ''; }
+  if (process.platform === 'win32') {
+    return new Promise((res) => {
+      // A Windows path cannot contain '"', so quoting it verbatim is safe.
+      const c = spawn('explorer.exe', [`/select,"${file}"`], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true });
+      c.once('error', (e) => res(e.message));
+      c.once('spawn', () => { c.unref(); res(''); });
+    });
+  }
+  return openFolder(dirname(file));
+}
 
 // ─── IPC: git ───────────────────────────────────────────────────────────────
 ipcMain.handle('git:isRepo', (_evt, cwd: unknown) => {
@@ -4575,6 +4779,26 @@ function readDeliverableLinks(): DeliverableLink[] {
     return Array.isArray(raw.links) ? raw.links.filter((l): l is DeliverableLink => !!l && typeof l.path === 'string' && typeof l.taskId === 'string') : [];
   } catch { return []; }
 }
+// Deliverables keep a history with an author: what an agent writes in
+// research/ is committed as that agent a few seconds later (several writes in
+// a row become one commit), so `git log` says who changed each file and when.
+const pendingDeliverableCommits = new Map<string, { rels: Set<string>; timer: ReturnType<typeof setTimeout> }>();
+function hiveRel(root: string, abs: string): string {
+  return relative(root, abs).split(sep).join('/').replace(/\\/g, '/');
+}
+function queueDeliverableCommit(agentId: string, root: string, abs: string[]): void {
+  const entry = pendingDeliverableCommits.get(agentId) ?? { rels: new Set<string>(), timer: undefined as unknown as ReturnType<typeof setTimeout> };
+  for (const p of abs) entry.rels.add(hiveRel(root, p));
+  clearTimeout(entry.timer);
+  entry.timer = setTimeout(() => {
+    pendingDeliverableCommits.delete(agentId);
+    const name = hive.registry().agents?.[agentId]?.name ?? agentId;
+    try { hive.commitDeliverables([...entry.rels], { id: agentId, name }); }
+    catch (err) { console.error('[deliverables] could not commit:', err); }
+  }, 3000);
+  pendingDeliverableCommits.set(agentId, entry);
+}
+
 hookServer.onStep = (agentId, e) => {
   // Any CLI: the files main worked out for this call (Write, apply_patch, write_to_file…).
   const written = writtenFiles([e]).map((f) => f.path);
@@ -4585,6 +4809,7 @@ hookServer.onStep = (agentId, e) => {
   const research = join(root, DELIVERABLES_DIR);
   const paths = written.map((p) => (wsl ? fromLinuxPath(p, wsl.distro, () => distroHomeUnc(wsl.distro)) : p)).filter((p) => isInside(p, research));
   if (!paths.length) return;
+  queueDeliverableCommit(agentId, root, paths);
   const taskId = currentTaskOf((hive.tasks() as { tasks?: Array<{ id: string; assignee?: string; status?: string; createdAt?: string }> }).tasks ?? [], agentId);
   if (!taskId) return;
   let links = readDeliverableLinks();
@@ -4630,7 +4855,64 @@ ipcMain.handle('deliverables:list', async () => {
       .filter((f) => !norm(f.path).startsWith(norm(agentsDir) + '/'))
       .map((f) => ({ ...f, agentId: a.id, name: a.name }))
   ).sort((x, y) => y.ts - x.ts).slice(0, 200);
-  return { root, dir, distro: wsl?.distro ?? null, files, written, links: readDeliverableLinks() };
+  // Who changed each research/ file, from its git history (agents only).
+  let authors: Record<string, { authors: string[]; last: string; lastTs: string }> = {};
+  try { authors = hive.fileAuthors(DELIVERABLES_DIR); } catch { /* no history yet */ }
+  return { root, dir, distro: wsl?.distro ?? null, files, written, links: readDeliverableLinks(), hidden: readHiddenDeliverables(), authors };
+});
+/** A deliverable path as the hive repo names it, or null when outside research/. */
+function deliverableRel(p: unknown): string | null {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root || typeof p !== 'string' || !p.length || p.length > 4096 || p.includes('\0')) return null;
+  const abs = resolve(p);
+  return isInside(abs, resolve(root, DELIVERABLES_DIR)) ? hiveRel(root, abs) : null;
+}
+ipcMain.handle('deliverables:history', (_evt, p: unknown) => {
+  const rel = deliverableRel(p);
+  return rel ? hive.fileHistory(rel) : [];
+});
+ipcMain.handle('deliverables:version', (_evt, p: unknown, hash: unknown) => {
+  const rel = deliverableRel(p);
+  if (!rel || typeof hash !== 'string') return { ok: false, error: 'bad request' };
+  const text = hive.fileAt(rel, hash);
+  return text === null ? { ok: false, error: 'that version is not in the history' } : { ok: true, text };
+});
+
+// Hidden deliverables: paths the human put out of sight. Only the listing
+// changes; the file stays. Kept in the hive beside deliverableLinks.json.
+function readHiddenDeliverables(): string[] {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root) return [];
+  try {
+    const raw = JSON.parse(readFileSync(join(root, 'deliverableHidden.json'), 'utf8')) as { paths?: unknown };
+    return Array.isArray(raw.paths) ? raw.paths.filter((x): x is string => typeof x === 'string') : [];
+  } catch { return []; }
+}
+ipcMain.handle('deliverables:setHidden', (_evt, p: unknown, hidden: unknown) => {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root || typeof p !== 'string' || !p.length || p.length > 4096 || p.includes('\0')) return { ok: false, error: 'bad request' };
+  const key = (x: string) => x.replace(/\\/g, '/').toLowerCase();
+  const next = readHiddenDeliverables().filter((x) => key(x) !== key(p));
+  if (hidden === true) next.push(p);
+  try { writeFileSync(join(root, 'deliverableHidden.json'), JSON.stringify({ paths: next.slice(-5000) }, null, 2)); }
+  catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+  return { ok: true };
+});
+// Delete a deliverable: only a file in the office's research/ folder (what an
+// agent wrote into a project is the project's, so that can only be hidden).
+// To the trash first; `permanent` only after the human confirmed that the
+// trash is not available here (common on a WSL path or a bare Linux desktop).
+ipcMain.handle('deliverables:delete', async (_evt, p: unknown, permanent: unknown) => {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root || typeof p !== 'string' || !p.length || p.length > 4096 || p.includes('\0')) return { ok: false, error: 'bad request' };
+  const target = resolve(p);
+  if (!isInside(target, resolve(root, DELIVERABLES_DIR))) return { ok: false, error: 'only files in the office deliverables folder can be deleted' };
+  try { if (!lstatSync(target).isFile()) return { ok: false, error: 'not a file' }; } catch { return { ok: false, error: 'not found' }; }
+  if (permanent === true) {
+    try { unlinkSync(target); return { ok: true }; } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+  }
+  try { await shell.trashItem(target); return { ok: true }; }
+  catch (e) { return { ok: false, noTrash: true, error: e instanceof Error ? e.message : String(e) }; }
 });
 // Open a deliverable in its default program. Only document types (see
 // canOpenExternally): the path comes from an agent, and fs:revealPath's rule
@@ -4642,6 +4924,27 @@ ipcMain.handle('deliverables:openExternal', async (_evt, p: unknown) => {
   if (!st.exists || !st.isFile) return { ok: false, error: 'not found' };
   const err = await shell.openPath(st.path);
   return err ? { ok: false, error: err } : { ok: true };
+});
+// What the human typed straight into an agent's terminal, kept for the Inbox
+// (the renderer knows which prompts were typed by a person). Main-only file.
+ipcMain.handle('hive:keepHumanPrompt', (_evt, agentId: unknown) => {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root || typeof agentId !== 'string') return { ok: false };
+  const p = hookServer.lastPrompt(agentId);
+  if (!p) return { ok: false };
+  try {
+    appendFileSync(join(root, 'humanPrompts.jsonl'), JSON.stringify({ id: `hp-${agentId}-${p.ts}`, agentId, ts: new Date(p.ts).toISOString(), text: p.text }) + '\n');
+    return { ok: true };
+  } catch { return { ok: false }; }
+});
+ipcMain.handle('hive:humanPrompts', () => {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root) return [];
+  try {
+    return readFileSync(join(root, 'humanPrompts.jsonl'), 'utf8').split('\n').filter(Boolean).slice(-2000)
+      .map((l) => { try { return JSON.parse(l) as { id: string; agentId: string; ts: string; text: string }; } catch { return null; } })
+      .filter((x): x is { id: string; agentId: string; ts: string; text: string } => !!x);
+  } catch { return []; }
 });
 ipcMain.handle('hive:steps', (_evt, agentId: unknown) => (typeof agentId === 'string' ? hookServer.stepsFor(agentId) : []));
 ipcMain.handle('hive:log', (_evt, n: unknown) => hive.logTail(typeof n === 'number' ? n : 200));
@@ -4889,6 +5192,11 @@ ipcMain.handle('tools:status', async (): Promise<ToolStatus[]> => {
             : `not installed inside WSL (${wslLoc.distro}); mempalace on Windows does not count for a WSL floor`
         };
       }
+      // Fortress runs beside the app, not inside the distro.
+      if (spec.managed === 'fortress') {
+        const launcher = fortress.launcherPath();
+        return { ...spec, installCommand: '', found: !!launcher, path: launcher };
+      }
       const installCommand = WSL_INSTALL[spec.id] ?? spec.install.posix.replace(/^xcode-select --install\s+# macOS · or: /, '');
       const path = spec.bin ? found[spec.bin] ?? null : null;
       return { ...spec, installCommand, found: !!path, path, detail: probeError ? `could not check inside WSL (${wslLoc.distro}): ${probeError}` : `inside WSL (${wslLoc.distro})` };
@@ -4906,6 +5214,10 @@ ipcMain.handle('tools:status', async (): Promise<ToolStatus[]> => {
           ? (mem.initialized ? 'palace initialised' : 'installed — palace not built yet')
           : undefined
       };
+    }
+    if (spec.managed === 'fortress') {
+      const launcher = fortress.launcherPath();
+      return { ...spec, installCommand, found: !!launcher, path: launcher };
     }
     if (!spec.bin) return { ...spec, installCommand, found: false, path: null };
     let path: string | null = null;
@@ -6440,6 +6752,7 @@ async function ephemeralWorkerTick(): Promise<void> {
   try {
     const cfg = readConfig();
     offerOrchestratorHires();
+    recordTaskHistory();
     const maxWorkers = Math.max(1, cfg.maxConcurrentWorkers ?? 4);
     const idleTimeoutMs = Math.max(1, cfg.workerIdleTimeoutMinutes ?? 20) * 60_000;
     // Per-worker token cap. 0 = UNLIMITED (the default — wired but never throttles
@@ -7165,6 +7478,7 @@ app.on('window-all-closed', () => {
 // exactly what's left to do.
 let analyticsFlushed = false;
 app.on('will-quit', (e) => {
+  fortress.stop();
   if (analyticsFlushed) return;
   analyticsFlushed = true;
   e.preventDefault();

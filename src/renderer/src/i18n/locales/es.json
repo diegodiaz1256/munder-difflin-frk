@@ -1300,7 +1300,8 @@
     "uncapped": "sin límite",
     "preserved": "Worktrees conservados ({{count}})",
     "preservedIntro": "Trabajadores terminados cuyo worktree tenía trabajo sin integrar: se conservan (nunca se descartan solos) y se recuperan automáticamente cuando el trabajo llega a su rama base.",
-    "keptAgo": "conservado hace {{age}}"
+    "keptAgo": "conservado hace {{age}}",
+    "enabled": "{{name}} puede lanzar trabajadores temporales (desmarca para desactivarlo y ocultar esta pestaña)"
   },
   "memoryGraph": {
     "topics": "temas",
@@ -1404,7 +1405,9 @@
     "priority": "Prioridad {{level}}/5",
     "deliverable": "ENTREGABLE",
     "openDeliverable": "Abrir",
-    "linkedFiles": "archivos enlazados: {{count}}"
+    "linkedFiles": "archivos enlazados: {{count}}",
+    "partOf": "Parte de",
+    "subtasks": "Subtareas · {{done}}/{{total}} hechas"
   },
   "queueComposer": {
     "recording": "● grabando: pulsa parar para transcribir",
@@ -1599,7 +1602,10 @@
       "deliverables": "Entregables",
       "now": "Ahora",
       "group_office": "Oficina",
-      "group_setup": "Configuración"
+      "group_setup": "Configuración",
+      "hideMenu": "Ocultar el menú",
+      "showMenu": "Mostrar el menú",
+      "menu": "Menú"
     },
     "state": {
       "needsYou": "Te necesita",
@@ -1634,7 +1640,9 @@
       "waitingForWork": "Esperando trabajo",
       "terminal": "Terminal",
       "unread": "{{count}} sin leer",
-      "prompt": "Escribir"
+      "prompt": "Escribir",
+      "usage": "{{percent}}% del límite de {{window}}",
+      "usageTip": "El motor dice que esta cuenta ha usado el {{percent}}% de su límite de {{window}}."
     },
     "agent": {
       "goal": "Objetivo",
@@ -1650,7 +1658,12 @@
       "view": "Vista",
       "view_terminal": "Terminal",
       "view_steps": "Pasos",
-      "view_both": "Ambas"
+      "view_both": "Ambas",
+      "restart": "Reiniciar",
+      "restartTip": "Reinicia solo el proceso de este agente. El resto de la oficina sigue funcionando.",
+      "restartConfirm": "¿Reiniciar a {{name}}?",
+      "restartDetailResume": "Su proceso se detiene y vuelve a arrancar, continuando la misma conversación. Las variables de entorno cambiadas se aplican desde ahora.",
+      "restartDetailFresh": "Su proceso se detiene y vuelve a arrancar. Su CLI no puede continuar una conversación, así que empieza una nueva. Las variables de entorno cambiadas se aplican desde ahora."
     },
     "tasks": {
       "summary": "{{doing}} en curso · {{blocked}} bloqueadas",
@@ -1666,7 +1679,16 @@
       "col_blocked": "Bloqueada",
       "col_done": "Hecha",
       "asksYou": "Te pregunta",
-      "unassigned": "sin asignar"
+      "unassigned": "sin asignar",
+      "recent": "Actividad reciente",
+      "since": "desde hace {{time}}",
+      "fewerDone": "Ver menos",
+      "allDone": "Ver las {{count}}",
+      "subtaskOf": "Subtarea de",
+      "subtasks": "Subtareas {{done}}/{{total}}",
+      "layout": "Vista",
+      "layout_board": "Tablero",
+      "layout_tree": "Por petición"
     },
     "automations": {
       "rules": "Programaciones, contexto y webhooks",
@@ -1677,16 +1699,38 @@
       "nothing": "Aquí aún no hay nada.",
       "needsReply": "necesita respuesta",
       "forYou": "Para ti",
-      "yourTeam": "Tu equipo",
       "everyone": "Todos",
       "outside": "De fuera",
       "addressedToYou": "Dirigido a ti",
-      "allAgents": "Todos los agentes",
       "noMessages": "Aún no hay mensajes",
       "slackWaiting": "Slack, esperando en una cola",
       "queuedFor": "para {{name}} · en cola desde las {{time}}",
       "webhookMail": "Correo de webhooks",
-      "requests": "Peticiones y aprobaciones"
+      "requests": "Peticiones y aprobaciones",
+      "conversations": "Conversaciones",
+      "pickAgent": "Elige un agente para leer su conversación.",
+      "questionForYou": "pregunta para ti",
+      "dismissedQ": "Descartaste esta pregunta.",
+      "today": "Hoy",
+      "yesterday": "Ayer",
+      "threadEmpty": "Aún nada con {{name}}.",
+      "composePh": "Escribe a {{name}}… (Enter envía, Shift+Enter para nueva línea)",
+      "composeViaGod": "Escribe sobre el trabajo de {{name}}… pasa por {{god}}, que lo reparte",
+      "sending": "Enviando…",
+      "send": "Enviar",
+      "notSent": "No se envió. Inténtalo de nuevo.",
+      "yourAnswer": "tu respuesta",
+      "replyTo": "respuesta a: {{subject}}",
+      "showMore": "Ver más",
+      "showLess": "Ver menos",
+      "answerPh": "Tu respuesta…",
+      "answer": "Responder",
+      "answerFailed": "No se guardó: la pregunta cambió. Vuelve a mirarla.",
+      "waitingTip": "Preguntas que esperan tu respuesta",
+      "jumpToQuestion": "Ver la pregunta",
+      "showInternal": "Ver mensajes entre agentes ({{count}})",
+      "runSummary": "{{count}} mensajes entre {{people}}",
+      "hideRun": "Ocultar estos mensajes"
     },
     "temps": {
       "couldNotHire": "No se pudo contratar al temporal.",
@@ -1990,7 +2034,12 @@
       "kindHelp_secret": "Cifrada, nunca se vuelve a mostrar y nunca se da a un agente. Un runner (abajo) puede usarla.",
       "kindHelp_op": "Una referencia de 1Password. Se lee en el momento en que un runner la necesita; los agentes nunca la ven.",
       "usedBy": "Usada por",
-      "agentsAlso": "A los agentes se les dice que estos nombres existen, no los valores secretos."
+      "agentsAlso": "A los agentes se les dice que estos nombres existen, no los valores secretos.",
+      "restartNeeded": "Un agente en marcha solo recibe una variable cambiada cuando su proceso se reinicia: {{names}}.",
+      "restartNow": "Reiniciarlos ({{count}})",
+      "restartLater": "Más tarde",
+      "unused": "ningún runner lo usa aún",
+      "unusedTip": "Los agentes solo pueden usar un secreto a través de un runner. Añade uno abajo, o deja que un agente lo proponga (tú apruebas el comando exacto)."
     },
     "mcp": {
       "step1": "Servidores que ya usas",
@@ -2287,7 +2336,34 @@
       "openOutsideNo": "Por seguridad este tipo de archivo solo se muestra en su carpeta: podría ejecutar algo.",
       "openFailed": "No se pudo abrir.",
       "showAll": "Ver todo",
-      "noneForTask": "Aún no hay nada para esta tarea."
+      "noneForTask": "Aún no hay nada para esta tarea.",
+      "showHidden": "Mostrar ocultos ({{count}})",
+      "hideHidden": "Ocultar ocultos",
+      "hiddenTag": "oculto",
+      "hide": "Ocultar",
+      "unhide": "Mostrar",
+      "hideTip": "Lo quita de esta lista. El archivo no se toca.",
+      "delete": "Eliminar",
+      "deleteConfirm": "¿Eliminar {{name}}?",
+      "deleteDetail": "Va a la papelera, así que aún puedes recuperarlo.",
+      "deleteNoTrash": "Aquí no hay papelera para {{name}}. ¿Eliminarlo definitivamente?",
+      "deleteForGood": "Eliminar definitivamente",
+      "actionFailed": "No funcionó.",
+      "createdBy": "creado por {{name}}",
+      "editedBy": "editado por {{name}}",
+      "filterType": "Tipo de archivo",
+      "filterBy": "Escrito por",
+      "allTypes": "Todos los tipos",
+      "everyone": "Todos",
+      "expandAll": "Abrir todo",
+      "collapseAll": "Cerrar todo",
+      "history": "Historial",
+      "noHistory": "Aún no hay versiones guardadas. Los cambios de los agentes se guardan desde ahora.",
+      "app": "App",
+      "current": "actual",
+      "viewingVersion": "Viendo la versión que guardó {{who}} el {{when}}.",
+      "backToCurrent": "Volver a la actual",
+      "openTask": "Abrir esta tarea"
     },
     "engines": {
       "title": "Motores",
@@ -2441,5 +2517,47 @@
         "help": "Déjalo vacío para sentry.io."
       }
     }
-  }
+  },
+  "taskHistory": {
+    "title": "Historial",
+    "empty": "Aún no hay nada registrado. Los cambios se registran desde ahora.",
+    "created": "Creada ({{status}})",
+    "createdFor": "Creada para {{name}} ({{status}})",
+    "assigned": "Asignada a {{name}}",
+    "unassigned": "Sin asignar",
+    "status": "Movida de {{from}} a {{to}}",
+    "asked": "Te hizo una pregunta",
+    "answered": "Respondiste",
+    "dismissed": "Descartaste una pregunta",
+    "result": "Resultado escrito",
+    "removed": "Quitada del tablero",
+    "message": "Mensaje de {{from}} a {{to}}",
+    "status_todo": "por hacer",
+    "status_doing": "en curso",
+    "status_blocked": "bloqueada",
+    "status_done": "hecha"
+  },
+  "fortress": {
+    "unsupported": "Fortress no publica una versión para este equipo.",
+    "install": "Descargar e instalar",
+    "installNote": "Unos 250 MB, comprobados con la lista SHA-256 de la versión antes de ejecutarse.",
+    "state_downloading": "Descargando… {{percent}}%",
+    "state_verifying": "Comprobando la descarga…",
+    "state_extracting": "Descomprimiendo…",
+    "licensed": "Sesión iniciada: motor v3.",
+    "notLicensed": "Sin sesión: usa el motor v1, más antiguo.",
+    "signIn": "Inicia sesión con tu cuenta",
+    "needsUv": "Para iniciar sesión hace falta uv (arriba).",
+    "check": "Comprobar de nuevo",
+    "approveHint": "Termina de iniciar sesión en tu navegador, incluida la aprobación de este dispositivo:",
+    "useIt": "Usar Fortress en el navegador de la oficina",
+    "v1Note": "Hasta que inicies sesión, Fortress usa su motor de primera generación.",
+    "manual": "¿Prefieres la terminal? Ejecuta",
+    "remove": "Quitar ({{size}})",
+    "renew": "Renovar clave",
+    "renewTip": "Vuelve a emitir la clave antes de que caduque",
+    "signOut": "Cerrar sesión",
+    "needsUvWindows": "Para iniciar sesión hace falta uv en el propio Windows (Fortress se ejecuta junto a la app, no dentro de WSL): powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\""
+  },
+  "workers": {}
 }

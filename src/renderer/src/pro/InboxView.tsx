@@ -6,8 +6,9 @@ import { TriggerHistoryTab } from '@/components/triggers/TriggerHistoryTab';
 import { MarkdownPreview } from '@/markdown/MarkdownPreview';
 import { waitsOnHuman } from '@/components/TasksKanban';
 import { Avatar, usePoll, type KeyedTask } from './data';
+import { ConversationsView } from './ConversationsView';
 
-type Tab = 'you' | 'team' | 'everyone' | 'outside';
+type Tab = 'chats' | 'you' | 'everyone' | 'outside';
 type Message = Awaited<ReturnType<typeof window.cth.hiveMessages>>[number];
 
 /** Senders that are the outside world rather than an agent on the floor. */
@@ -16,19 +17,27 @@ const OUTSIDE = new Set(['webhook', 'slack', 'org', 'github', 'linear', 'telegra
 const SYSTEM = new Set(['heartbeat', 'scheduler', 'breaker', 'system']);
 
 /**
- * Inbox — every conversation in one place. For you: the questions waiting on
- * you (the Ask me board) and what the orchestrator addressed to you. Your
- * team: one row per agent. Everyone: every routed message. Outside: Slack
+ * Inbox — every conversation in one place. Conversations: one chat per agent
+ * (its messages and the questions on its cards, with your answers). For you:
+ * the questions waiting on you (the Ask me board) and what the orchestrator
+ * addressed to you. Everyone: every routed message. Outside: Slack
  * threads waiting in the queue, webhook mail, and held webhook requests to
  * approve or reject (the trigger history, which owns that decision).
  */
 export function InboxView({ tasks }: { tasks: KeyedTask[] }) {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<Tab>('you');
-  const [openAgent, setOpenAgent] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>('chats');
   const agents = useStore((s) => s.agents);
   const queues = useStore((s) => s.messageQueues);
-  const messages = usePoll(() => window.cth.hiveMessages({ limit: 300 }), 5000, [] as Message[]);
+  // The whole history (main caps an ordinary read at 40, for voice briefings).
+  const messages = usePoll(() => window.cth.hiveMessages({ limit: 2000, history: true }), 5000, [] as Message[]);
+  // What you typed straight into an agent's terminal, as your messages to it.
+  const prompts = usePoll(() => window.cth.hiveHumanPrompts(), 5000, [] as Array<{ id: string; agentId: string; ts: string; text: string }>);
+  const typed = useMemo(() => prompts.map((p) => ({
+    id: p.id, conversation: p.id, from: 'human', to: p.agentId, act: 'request' as Message['act'],
+    subject: '', body: p.text, requires_reply: false, in_reply_to: null,
+    direction: 'outbox' as const, owner: p.agentId, archived: true, created_at: p.ts
+  })), [prompts]);
   const byId = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
   const asks = tasks.filter(waitsOnHuman).length;
 
@@ -55,20 +64,13 @@ export function InboxView({ tasks }: { tasks: KeyedTask[] }) {
       </article>
     ));
 
-  // Your team: one row per agent, with its latest message either way.
-  const team = agents.filter((a) => !a.isAssistant).map((a) => {
-    const mine = real.filter((m) => m.from === a.id || m.to === a.id);
-    const last = mine.reduce<Message | undefined>((acc, m) => (!acc || m.created_at > acc.created_at ? m : acc), undefined);
-    return { agent: a, count: mine.length, last, mine };
-  });
-
   return (
     <div className="pro-page">
       <div className="pro-head">
         <h2>{t('pro.nav.inbox')}</h2>
         <div className="pro-tabs" role="tablist" style={{ marginInlineStart: 8 }}>
+          <button role="tab" aria-selected={tab === 'chats'} onClick={() => setTab('chats')}>{t('pro.inbox.conversations')}</button>
           <button role="tab" aria-selected={tab === 'you'} onClick={() => setTab('you')}>{t('pro.inbox.forYou')}{asks ? ` · ${asks}` : ''}</button>
-          <button role="tab" aria-selected={tab === 'team'} onClick={() => setTab('team')}>{t('pro.inbox.yourTeam')}</button>
           <button role="tab" aria-selected={tab === 'everyone'} onClick={() => setTab('everyone')}>{t('pro.inbox.everyone')}</button>
           <button role="tab" aria-selected={tab === 'outside'} onClick={() => setTab('outside')}>{t('pro.inbox.outside')}</button>
         </div>
@@ -82,23 +84,7 @@ export function InboxView({ tasks }: { tasks: KeyedTask[] }) {
         </>
       )}
 
-      {tab === 'team' && (openAgent ? (
-        <>
-          <button className="pro-btn" style={{ alignSelf: 'flex-start' }} onClick={() => setOpenAgent(null)}>← {t('pro.inbox.allAgents')}</button>
-          {list(team.find((r) => r.agent.id === openAgent)?.mine ?? [])}
-        </>
-      ) : team.map(({ agent, count, last }) => (
-        <button key={agent.id} className="pro-card pro-row" onClick={() => setOpenAgent(agent.id)}>
-          <Avatar agent={agent} />
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <p className="pro-title">{agent.name}</p>
-            <p className="pro-text" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {last ? `${name(last.from)}: ${last.subject}` : t('pro.inbox.noMessages')}
-            </p>
-          </div>
-          <span className="pro-chip">{count}</span>
-        </button>
-      )))}
+      {tab === 'chats' && <ConversationsView agents={agents.filter((a) => !a.isAssistant && !a.archived)} messages={[...messages, ...typed]} tasks={tasks} />}
 
       {tab === 'everyone' && list(real)}
 

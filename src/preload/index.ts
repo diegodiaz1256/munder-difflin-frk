@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import type { AgentProvider } from '../shared/agentProvider';
 import type { HireManifest } from '../shared/hire';
+import type { TaskEvent } from '../shared/taskHistory';
+import type { FortressStatus } from '../main/fortress';
+export type FortressStatusView = FortressStatus & { enabled: boolean; bytes: number };
 import type { RateLimits } from '../shared/rateLimits';
 export type { HireManifest } from '../shared/hire';
 import type { IntegrationRecord, IntegrationTemplate } from '../shared/integrations';
@@ -168,6 +171,7 @@ export interface VoiceMessage {
   subject: string;
   body: string;
   requires_reply: boolean;
+  in_reply_to?: string | null;
   direction: 'inbox' | 'outbox';
   owner: string;
   archived: boolean;
@@ -378,6 +382,8 @@ export interface HarnessConfig {
   /** Anonymous product analytics (default ON, opt-out; see TELEMETRY.md).
    *  Mirrors main + renderer HarnessConfig. */
   telemetryEnabled?: boolean;
+  /** The orchestrator may start temporary workers (spawn-requests). Mirrors main. */
+  orchestratorMaySpawn?: boolean;
   slackEnabled?: boolean;
   slackSigningSecret?: string;
   slackBotToken?: string;
@@ -890,7 +896,15 @@ const api = {
    *  main. Pass { id } for one message, { agentId } to scope to one mailbox, or
    *  {} for the whole floor. Backs Realtime Michael's get_messages. The renderer
    *  never sees a raw body or a secret — stripping happens main-side. */
-  hiveMessages: (opts?: { agentId?: string; id?: string; limit?: number; includeArchived?: boolean }): Promise<VoiceMessage[]> =>
+  /** What happened to the tasks (created, assigned, moved, asked, answered…),
+   *  oldest first; one task's when `taskId` is given. */
+  hiveTaskHistory: (taskId?: string, limit?: number): Promise<TaskEvent[]> =>
+    ipcRenderer.invoke('hive:taskHistory', taskId ?? null, limit),
+  /** Keep the prompt just submitted to `agentId` as the human's (Inbox). */
+  keepHumanPrompt: (agentId: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('hive:keepHumanPrompt', agentId),
+  /** Prompts the human typed into agents' terminals, oldest first. */
+  hiveHumanPrompts: (): Promise<Array<{ id: string; agentId: string; ts: string; text: string }>> => ipcRenderer.invoke('hive:humanPrompts'),
+  hiveMessages: (opts?: { agentId?: string; id?: string; limit?: number; includeArchived?: boolean; history?: boolean }): Promise<VoiceMessage[]> =>
     ipcRenderer.invoke('hive:messages', opts ?? {}),
   /** Consolidated per-agent directory (registry + telemetry + context), incl.
    *  archived agents. Backs Realtime Michael's get_agent_detail / list_agents. */
@@ -1009,10 +1023,20 @@ const api = {
 
   /** What an agent has done lately (hook events with what each tool was asked), oldest first. */
   /** Deliverables: the office's research/ folder (newest first) and what each agent wrote this session. */
-  deliverablesList: (): Promise<{ root: string | null; dir: string | null; distro: string | null; files: Array<{ rel: string; abs: string; size: number; mtime: number }>; written: Array<{ path: string; ts: number; created: boolean; agentId: string; name: string }>; links: Array<{ path: string; taskId: string; agentId: string; ts: number }> }> =>
+  deliverablesList: (): Promise<{ root: string | null; dir: string | null; distro: string | null; files: Array<{ rel: string; abs: string; size: number; mtime: number }>; written: Array<{ path: string; ts: number; created: boolean; agentId: string; name: string }>; links: Array<{ path: string; taskId: string; agentId: string; ts: number }>; hidden?: string[]; authors?: Record<string, { authors: string[]; last: string; lastTs: string }> }> =>
     ipcRenderer.invoke('deliverables:list'),
   /** Open a deliverable in its default program (document types only). */
   deliverablesOpenExternal: (path: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('deliverables:openExternal', path),
+  /** A deliverable's committed versions, newest first (author = the agent). */
+  deliverablesHistory: (path: string): Promise<Array<{ hash: string; ts: string; author: string; subject: string }>> => ipcRenderer.invoke('deliverables:history', path),
+  /** A deliverable's text as it was in one of those versions. */
+  deliverablesVersion: (path: string, hash: string): Promise<{ ok: boolean; text?: string; error?: string }> => ipcRenderer.invoke('deliverables:version', path, hash),
+  /** Hide a deliverable from the listing (or show it again). The file stays. */
+  deliverablesSetHidden: (path: string, hidden: boolean): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('deliverables:setHidden', path, hidden),
+  /** Delete a file in the office's research/ folder: to the trash, or for good
+   *  with `permanent` once `noTrash` said the trash is not available. */
+  deliverablesDelete: (path: string, permanent?: boolean): Promise<{ ok: boolean; noTrash?: boolean; error?: string }> =>
+    ipcRenderer.invoke('deliverables:delete', path, permanent === true),
   hiveSteps: (agentId: string): Promise<HookEvent[]> => ipcRenderer.invoke('hive:steps', agentId),
   onHiveHookEvent: (
     cb: (e: HookEvent) => void
@@ -1098,6 +1122,13 @@ const api = {
    *  links, links that arrived during load). Resolves the queued list. */
   drainPendingHires: (): Promise<HireManifest[]> =>
     ipcRenderer.invoke('hire:drainPending'),
+  /** Hand back research/hires/ manifests the human closed without deciding
+   *  (by reviewToken), so they are offered again on the next launch. */
+  deferHires: (tokens: string[]): Promise<void> =>
+    ipcRenderer.invoke('hire:defer', tokens),
+  /** A research/hires/ manifest was spawned or skipped. */
+  markHireReviewed: (token: string): Promise<void> =>
+    ipcRenderer.invoke('hire:reviewed', token),
   /** Open a multi-file picker and validate every selected hire manifest. */
   importHireFiles: (): Promise<{
     ok: boolean;
@@ -1458,6 +1489,16 @@ const api = {
   wslDistros: (): Promise<{ ok: boolean; distros: string[]; mirrored?: boolean; error?: string }> => ipcRenderer.invoke('wsl:distros'),
   wslCreateOffice: (distro: string, name: string): Promise<{ ok: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke('wsl:createOffice', distro, name),
+  // Fortress as the office browser's engine (main/fortress.ts). The license
+  // key never crosses here: activation is the user's own sign-in in their browser.
+  fortressStatus: (): Promise<FortressStatusView> => ipcRenderer.invoke('fortress:status'),
+  fortressInstall: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('fortress:install'),
+  fortressActivate: (): Promise<{ ok: boolean; url?: string; error?: string }> => ipcRenderer.invoke('fortress:activate'),
+  fortressRefreshLicense: (): Promise<FortressStatusView['license']> => ipcRenderer.invoke('fortress:refreshLicense'),
+  /** `license refresh` / `license logout` with Fortress's own CLI. */
+  fortressLicense: (which: 'refresh' | 'logout'): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('fortress:license', which),
+  fortressSetEnabled: (on: boolean): Promise<{ ok: boolean }> => ipcRenderer.invoke('fortress:setEnabled', on),
+  fortressUninstall: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('fortress:uninstall'),
   // Environment & secrets (main/envVault.ts). Secret values are write-only.
   envList: (): Promise<{ vars: EnvVarView[]; runners: RunnerView[] }> => ipcRenderer.invoke('env:list'),
   envSetVar: (v: { name: string; kind: 'plain' | 'secret' | 'op'; value?: string; agents?: string[] | null; note?: string }, secret?: string): Promise<{ ok: boolean; error?: string }> =>

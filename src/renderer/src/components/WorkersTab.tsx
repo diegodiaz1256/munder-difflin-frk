@@ -91,8 +91,16 @@ export function WorkersTab() {
   const preserved = data?.preserved ?? [];
   const max = data?.maxWorkers ?? 4;
 
+  const turnOff = () => { void window.cth.updateConfig({ orchestratorMaySpawn: false }); };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '12px 14px 16px', overflow: 'auto' }}>
+      {/* The switch behind this tab: off hides it and stops new workers
+          (running ones finish). Also in Settings → Autonomy & Budgets. */}
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--cth-ink-700)', cursor: 'pointer' }}>
+        <input type="checkbox" checked onChange={turnOff} />
+        {t('workersTab.enabled', { name: godName })}
+      </label>
       <div>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
           <span style={sectionHead}>{t('workersTab.liveWorkers')}</span>

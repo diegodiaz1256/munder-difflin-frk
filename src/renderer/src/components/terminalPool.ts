@@ -40,6 +40,7 @@ import {
 } from './terminalAutomation';
 import { sanitizeTerminalSelection } from './terminalSelection';
 import { detectRemoteControl, isRemoteControlMenu } from '@shared/remoteControl';
+import { isChromeLine, usageNotice } from '@shared/terminalChrome';
 import { detectMenu } from '@shared/terminalMenu';
 import { useStore } from '@/store/store';
 import { terminalKeySequence } from './terminalKeys';
@@ -82,6 +83,8 @@ export interface TerminalEntry {
    * prompt (Ctrl-U, a respawn reset) has to clear both or the next keystroke
    * resurrects the deleted text as a phantom draft. */
   lineBuf: string;
+  /** When the human last typed into this terminal (not the app). */
+  humanAt?: number;
   /** Bumped every time this pty is respawned under the same id. Late events from
    * the OLD process carry the generation they were registered under, so they can
    * be recognised and dropped instead of corrupting the replacement. */
@@ -401,6 +404,8 @@ export function acquireTerminal(ptyId: string, theme?: ThemeMap, fontSize = 14):
   term.onData((data) => {
     if (entry.exited) return;
     window.cth.writePty(ptyId, data);
+    // Keystrokes here are the human's own: the next prompt is theirs (Inbox).
+    if (/[^\x00-\x1f\x7f]|\r/.test(data.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, ''))) entry.humanAt = Date.now();
     // A lone Escape or Ctrl-C closes interactive pickers. Arrow-key escape
     // sequences must NOT clear the block while the user navigates a picker.
     if (data === '\x1b' || data === '\x03') {
@@ -480,12 +485,38 @@ export function terminalTail(ptyId: string | undefined, max = 3): string[] {
     const last = buf.baseY + buf.cursorY;
     for (let y = last; y >= 0 && y > last - 200 && out.length < max; y--) {
       const text = buf.getLine(y)?.translateToString(true).trimEnd() ?? '';
-      if (text.trim() && !/^[\s─-╿▀-▟>›❯]*$/.test(text)) out.unshift(text);
+      // Skip box drawing and the CLI's own footer (usage warnings, mode hints).
+      if (text.trim() && !/^[\s─-╿▀-▟>›❯]*$/.test(text) && !isChromeLine(text)) out.unshift(text);
     }
     return out;
   } catch {
     return [];
   }
+}
+
+/** The plan-usage warning a CLI is showing at the bottom of its terminal
+ *  ("91% of your session limit"), if any. */
+export function terminalUsage(ptyId: string | undefined): { percent: number; window: string } | null {
+  const entry = ptyId ? pool.get(ptyId) : undefined;
+  if (!entry) return null;
+  try {
+    const buf = entry.term.buffer.active;
+    const last = buf.baseY + buf.cursorY;
+    const lines: string[] = [];
+    for (let y = Math.max(0, last - 30); y <= last + 5; y++) lines.push(buf.getLine(y)?.translateToString(true) ?? '');
+    return usageNotice(lines);
+  } catch {
+    return null;
+  }
+}
+
+/** True (once) when the human typed into this terminal in the last
+ *  `withinMs`: the prompt just submitted was theirs, not the app's. */
+export function takeHumanInput(ptyId: string | undefined, withinMs = 120_000): boolean {
+  const entry = ptyId ? pool.get(ptyId) : undefined;
+  if (!entry?.humanAt || Date.now() - entry.humanAt > withinMs) return false;
+  entry.humanAt = undefined;
+  return true;
 }
 
 export function isTerminalAutomationSafe(ptyId: string, now = Date.now()): boolean {

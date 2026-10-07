@@ -104,3 +104,38 @@ export function exitedCode(tail: string): string | null {
   const m = /process exited \((?:code )?([^),]+)/i.exec(tail);
   return m ? m[1].trim() : null;
 }
+
+/** A feed row: one item, or several folded into one line. */
+export type ActivityRow =
+  | { kind: 'item'; item: ActivityItem; repeat: number }
+  | { kind: 'roster'; ts: number; joined: string[]; left: string[] };
+
+/**
+ * The Now feed without the noise: agents joining or leaving within a minute of
+ * each other become one "restarted" line (a relaunch made a dozen), and the
+ * same sentence from the same agent in a row becomes one line with a count
+ * (thirty "[hire manifest rejected]" did). `items` are newest first.
+ */
+export function groupActivity(items: readonly ActivityItem[], windowMs = 60_000): ActivityRow[] {
+  const out: ActivityRow[] = [];
+  const label = (i: ActivityItem) => i.params.name ?? i.params.who ?? i.agentId ?? '?';
+  for (const i of items) {
+    const prev = out[out.length - 1];
+    if (i.kind === 'join' || i.kind === 'leave') {
+      if (prev?.kind === 'roster' && prev.ts - i.ts <= windowMs) {
+        const list = i.kind === 'join' ? prev.joined : prev.left;
+        if (!list.includes(label(i))) list.push(label(i));
+        continue;
+      }
+      out.push({ kind: 'roster', ts: i.ts, joined: i.kind === 'join' ? [label(i)] : [], left: i.kind === 'leave' ? [label(i)] : [] });
+      continue;
+    }
+    if (prev?.kind === 'item' && prev.item.kind === i.kind && prev.item.key === i.key && prev.item.agentId === i.agentId
+      && JSON.stringify(prev.item.params) === JSON.stringify(i.params)) {
+      prev.repeat++;
+      continue;
+    }
+    out.push({ kind: 'item', item: i, repeat: 1 });
+  }
+  return out;
+}

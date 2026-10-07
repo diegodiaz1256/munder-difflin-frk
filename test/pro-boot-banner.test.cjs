@@ -17,7 +17,8 @@ test('starting while the orchestrator spawns or its terminal has printed nothing
 
 test('every Manager page carries the banner', () => {
   const shell = fs.readFileSync(path.join(__dirname, '..', 'src/renderer/src/pro/ProShell.tsx'), 'utf8');
-  assert.match(shell, /<main className="pro-main"><BootBanner \/>\{page\}<\/main>/);
+  // The sidebar toggle may sit above it; the banner still leads every page.
+  assert.match(shell, /<main className="pro-main">[\s\S]*?<BootBanner \/>\{page\}\s*<\/main>/);
   const banner = fs.readFileSync(path.join(__dirname, '..', 'src/renderer/src/pro/BootBanner.tsx'), 'utf8');
   assert.match(banner, /godStatus === 'failed' && godError/, 'the failure is shown in Manager too');
 });

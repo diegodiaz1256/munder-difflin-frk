@@ -1,8 +1,27 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore, type Agent } from '@/store/store';
-import { waitsOnHuman } from '@/components/TasksKanban';
-import { Avatar, type KeyedTask } from './data';
+import { openQuestion, waitsOnHuman } from '@/components/TasksKanban';
+import { describeTaskEvent, useAgentName } from '@/components/TaskTimeline';
+import { statusSince, type TaskEvent } from '@shared/taskHistory';
+import { deliverablePaths, splitPath } from '@shared/deliverables';
+import { FileTypeBadge } from '@/components/FileTypeBadge';
+import { ProIcon } from './ProIcon';
+import { useProStore } from './proStore';
+import { Avatar, usePoll, type KeyedTask } from './data';
+
+const LS_LAYOUT = 'cth.tasks.layout';
+const LS_RECENT = 'cth.tasks.recentOpen';
+
+/** "5m", "3h", "2d": how long ago, short. */
+function ago(iso: string | undefined, now: number): string {
+  if (!iso) return '';
+  const s = Math.max(0, (now - new Date(iso).getTime()) / 1000);
+  if (s < 60) return '<1m';
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
+}
 
 type Filter = 'all' | 'asks' | 'unassigned';
 
@@ -27,6 +46,110 @@ export function TasksView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agent
   const [draft, setDraft] = useState<string | null>(null);
   const god = roster.find((a) => a.isGod);
   const byId = new Map(roster.map((a) => [a.id, a]));
+  const name = useAgentName();
+  // What happened lately, and since when each card is in its column.
+  const history = usePoll(() => window.cth.hiveTaskHistory?.(undefined, 400) ?? Promise.resolve([] as TaskEvent[]), 5000, [] as TaskEvent[]);
+  const since = useMemo(() => statusSince(history), [history]);
+  const recent = history.slice(-12).reverse();
+  const keyOf = new Map(tasks.map((x) => [x.id, x.key ?? x.id]));
+  const now = Date.now();
+  const [showDone, setShowDone] = useState(false);
+  // What each card produced: its deliverable field plus files linked to it.
+  const listing = usePoll(() => window.cth.deliverablesList(), 15_000, null as Awaited<ReturnType<typeof window.cth.deliverablesList>> | null);
+  const filesOf = (t: KeyedTask): string[] => {
+    if (!listing?.root) return [];
+    const seen = new Set<string>();
+    return [...deliverablePaths(t.deliverable, listing.root, listing.distro), ...listing.links.filter((l) => l.taskId === t.id).map((l) => l.path)]
+      .filter((p) => { const k = p.replace(/\\/g, '/').toLowerCase(); return seen.has(k) ? false : (seen.add(k), true); });
+  };
+  // Subtasks: a card's "parent" links it to the request it is a piece of.
+  const byTask = new Map(tasks.map((x) => [x.id, x]));
+  const childrenOf = useMemo(() => {
+    const m = new Map<string, KeyedTask[]>();
+    for (const x of tasks) if (x.parent && x.parent !== x.id) m.set(x.parent, [...(m.get(x.parent) ?? []), x]);
+    return m;
+  }, [tasks]);
+  const [layout, setLayout] = useState<'board' | 'tree'>(() => {
+    try { return window.localStorage.getItem(LS_LAYOUT) === 'tree' ? 'tree' : 'board'; } catch { return 'board'; }
+  });
+  const pickLayout = (l: 'board' | 'tree') => { setLayout(l); try { window.localStorage.setItem(LS_LAYOUT, l); } catch { /* noop */ } };
+  const [recentOpen, setRecentOpen] = useState<boolean>(() => {
+    // Folded by default: one line with the latest event until opened.
+    try { return window.localStorage.getItem(LS_RECENT) === '1'; } catch { return false; }
+  });
+  const toggleRecent = () => setRecentOpen((v) => { try { window.localStorage.setItem(LS_RECENT, v ? '0' : '1'); } catch { /* noop */ } return !v; });
+
+  const openDeliverables = (taskId: string) => {
+    const pro = useProStore.getState();
+    pro.setFocusTask(taskId);
+    pro.setView({ kind: 'section', section: 'deliverables' });
+  };
+
+  /** One task card (the board and the request tree share it). */
+  const renderCard = (t: KeyedTask, nested = false) => {
+    const owner = t.assignee ? byId.get(t.assignee) : undefined;
+    return (
+      <button key={t.id} className="pro-card" style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6, ...(nested ? { width: '100%' } : {}) }}
+        onClick={() => useStore.getState().openTaskDetail(t.id)}>
+        <span className="pro-row" style={{ justifyContent: 'space-between', gap: 6 }}>
+          <span className="pro-ticket">{t.key ?? t.id}</span>
+          {since.get(t.id) && <span className="pro-sub" style={{ fontSize: 11 }} title={new Date(since.get(t.id)!).toLocaleString()}>{tr('pro.tasks.since', { time: ago(since.get(t.id), now) })}</span>}
+        </span>
+        {!nested && t.parent && byTask.get(t.parent) && (
+      <span className="pro-sub pro-row" style={{ fontSize: 11, gap: 4, minWidth: 0 }} title={tr('pro.tasks.subtaskOf')}>
+        ↳ <span className="pro-ticket">{byTask.get(t.parent)!.key ?? t.parent}</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{byTask.get(t.parent)!.title}</span>
+      </span>
+    )}
+    <span style={{ fontSize: 13, lineHeight: '18px' }}>{t.title}</span>
+    {(childrenOf.get(t.id)?.length ?? 0) > 0 && (() => {
+      const kids = childrenOf.get(t.id)!;
+      const done = kids.filter((k) => k.status === 'done').length;
+      return (
+        <span className="pro-row" style={{ gap: 6, fontSize: 11 }} title={kids.map((k) => `${k.key ?? k.id} ${k.title}`).join('\n')}>
+          <span className="pro-sub">{tr('pro.tasks.subtasks', { done, total: kids.length })}</span>
+          <span style={{ flex: 1, height: 4, borderRadius: 2, background: 'var(--cth-cream-200)', overflow: 'hidden' }}>
+            <span style={{ display: 'block', height: '100%', width: `${(done / kids.length) * 100}%`, background: 'var(--cth-mint)' }} />
+          </span>
+        </span>
+      );
+    })()}
+        {t.description && t.status !== 'done' && (
+          <span className="pro-sub" style={{ fontSize: 12, lineHeight: '16px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.description}</span>
+        )}
+        {waitsOnHuman(t) && openQuestion(t) && (
+          <span style={{ fontSize: 12, lineHeight: '16px', padding: '4px 6px', borderRadius: 6, background: 'var(--cth-peach-light)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{openQuestion(t)!.q}</span>
+        )}
+        {(() => {
+          const files = filesOf(t);
+          if (!files.length) return null;
+          const first = splitPath(files[0]).name;
+          return (
+            // A span, not a nested button: the card itself is a button.
+            <span role="link" tabIndex={0} title={files.map((f) => splitPath(f).name).join('\n')}
+              onClick={(e) => { e.stopPropagation(); openDeliverables(t.id); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); openDeliverables(t.id); } }}
+              className="pro-row" style={{ gap: 6, fontSize: 12, padding: '3px 6px', borderRadius: 6, background: 'var(--cth-cream-100)', boxShadow: 'inset 0 0 0 1px var(--pro-line)', cursor: 'pointer', minWidth: 0 }}>
+              <ProIcon name="deliverables" />
+              <FileTypeBadge name={first} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>{first}</span>
+              {files.length > 1 && <span className="pro-sub" style={{ fontSize: 11 }}>+{files.length - 1}</span>}
+            </span>
+          );
+        })()}
+        {t.status === 'done' && t.result && (
+          <span className="pro-sub" style={{ fontSize: 12, lineHeight: '16px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.result}</span>
+        )}
+        <span className="pro-row" style={{ justifyContent: 'space-between' }}>
+          {waitsOnHuman(t)
+            ? <span className="pro-badge" style={{ background: 'var(--cth-peach-light)' }}>{tr('pro.tasks.asksYou')}</span>
+            : t.status === 'done' ? <span className="pro-badge" style={{ background: 'var(--cth-mint-light)' }}>{tr('pro.state.done')}</span> : <span />}
+          {owner ? <span className="pro-row" style={{ gap: 4, fontSize: 11 }} title={owner.name}><Avatar agent={owner} />{owner.name}</span>
+            : <span className="pro-sub" style={{ fontSize: 11 }}>{t.assignee ?? tr('pro.tasks.unassigned')}</span>}
+        </span>
+      </button>
+    );
+  };
 
   const needle = q.trim().toLowerCase();
   const shown = tasks.filter((t) =>
@@ -56,6 +179,10 @@ export function TasksView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agent
               </button>
             ))}
           </div>
+          <div className="pro-switch" role="group" aria-label={tr('pro.tasks.layout')}>
+            <button aria-pressed={layout === 'board'} onClick={() => pickLayout('board')}>{tr('pro.tasks.layout_board')}</button>
+            <button aria-pressed={layout === 'tree'} onClick={() => pickLayout('tree')}>{tr('pro.tasks.layout_tree')}</button>
+          </div>
           <input className="pro-input" placeholder={tr('pro.tasks.search')} value={q} onChange={(e) => setQ(e.target.value)} />
           <button className="pro-btn pro-btn-primary" disabled={!god} onClick={() => setDraft('')}>{tr('pro.tasks.new')}</button>
         </div>
@@ -74,34 +201,68 @@ export function TasksView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agent
         </div>
       )}
 
+      {recent.length > 0 && (
+        <section className="pro-card" style={{ padding: '6px 12px', display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
+          <button onClick={toggleRecent} aria-expanded={recentOpen}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'transparent', padding: '2px 0', font: 'inherit', color: 'var(--pro-muted)', cursor: 'pointer', textAlign: 'start' }}>
+            <span style={{ width: 10, fontSize: 10 }}>{recentOpen ? '▾' : '▸'}</span>
+            <span style={{ fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase' }}>{tr('pro.tasks.recent')}</span>
+            {!recentOpen && recent[0] && (
+              <span style={{ fontSize: 12, textTransform: 'none', letterSpacing: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                · {ago(recent[0].ts, now)} {keyOf.get(recent[0].taskId) ?? recent[0].taskId} {describeTaskEvent(recent[0], name, tr)}
+              </span>
+            )}
+          </button>
+          {recentOpen && recent.map((e, i) => (
+            <button key={i} onClick={() => useStore.getState().openTaskDetail(e.taskId)}
+              style={{ display: 'flex', gap: 8, alignItems: 'baseline', border: 'none', background: 'transparent', padding: '2px 0', font: 'inherit', fontSize: 12.5, color: 'inherit', cursor: 'pointer', textAlign: 'start', minWidth: 0 }}>
+              <span className="pro-sub" style={{ fontSize: 11, width: 34, flexShrink: 0 }}>{ago(e.ts, now)}</span>
+              <span className="pro-ticket" style={{ flexShrink: 0 }}>{keyOf.get(e.taskId) ?? e.taskId}</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                <strong style={{ fontWeight: 600 }}>{e.title}</strong> · {describeTaskEvent(e, name, tr)}
+              </span>
+            </button>
+          ))}
+        </section>
+      )}
+
+      {layout === 'tree' ? (
+        // By request: each top-level card with its subtasks under it, newest first.
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {shown.filter((t) => !t.parent || !byTask.has(t.parent))
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+            .map((t) => (
+              <div key={t.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {renderCard(t, true)}
+                {(childrenOf.get(t.id) ?? []).length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingInlineStart: 22, borderInlineStart: '2px solid var(--pro-line)', marginInlineStart: 10 }}>
+                    {(childrenOf.get(t.id) ?? []).map((k) => renderCard(k, true))}
+                  </div>
+                )}
+              </div>
+            ))}
+        </div>
+      ) : (
       <div className="pro-board">
         {COLUMNS.map((col) => {
-          const cards = shown.filter((t) => t.status === col.status)
+          const all = shown.filter((t) => t.status === col.status)
             .sort((a, b) => a.priority - b.priority || b.createdAt.localeCompare(a.createdAt));
+          // Done piles up and buries the board: the latest few, the rest on demand.
+          const cards = col.status === 'done' && !showDone ? all.slice(0, 8) : all;
           return (
             <section key={col.status} className="pro-col" aria-label={tr(`pro.tasks.col_${col.status}`)}>
-              <div className="pro-col-head"><span className="pro-dot" style={{ background: col.color }} />{tr(`pro.tasks.col_${col.status}`)}<span className="pro-sub">{cards.length}</span></div>
-              {cards.map((t) => {
-                const owner = t.assignee ? byId.get(t.assignee) : undefined;
-                return (
-                  <button key={t.id} className="pro-card" style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}
-                    onClick={() => useStore.getState().openTaskDetail(t.id)}>
-                    <span className="pro-ticket">{t.key ?? t.id}</span>
-                    <span style={{ fontSize: 13, lineHeight: '18px' }}>{t.title}</span>
-                    <span className="pro-row" style={{ justifyContent: 'space-between' }}>
-                      {waitsOnHuman(t)
-                        ? <span className="pro-badge" style={{ background: 'var(--cth-peach-light)' }}>{tr('pro.tasks.asksYou')}</span>
-                        : t.status === 'done' ? <span className="pro-badge" style={{ background: 'var(--cth-mint-light)' }}>{tr('pro.state.done')}</span> : <span />}
-                      {owner ? <span title={owner.name}><Avatar agent={owner} /></span>
-                        : <span className="pro-sub" style={{ fontSize: 11 }}>{t.assignee ?? tr('pro.tasks.unassigned')}</span>}
-                    </span>
-                  </button>
-                );
-              })}
+              <div className="pro-col-head"><span className="pro-dot" style={{ background: col.color }} />{tr(`pro.tasks.col_${col.status}`)}<span className="pro-sub">{all.length}</span></div>
+              {cards.map((t) => renderCard(t))}
+              {col.status === 'done' && all.length > 8 && (
+                <button className="pro-btn" style={{ alignSelf: 'center' }} onClick={() => setShowDone((v) => !v)}>
+                  {showDone ? tr('pro.tasks.fewerDone') : tr('pro.tasks.allDone', { count: all.length })}
+                </button>
+              )}
             </section>
           );
         })}
       </div>
+      )}
     </div>
   );
 }

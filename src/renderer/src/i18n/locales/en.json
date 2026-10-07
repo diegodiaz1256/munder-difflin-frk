@@ -1300,7 +1300,8 @@
     "uncapped": "uncapped",
     "preserved": "Preserved worktrees ({{count}})",
     "preservedIntro": "Finished workers whose worktree held un-integrated work — kept (never auto-discarded) and auto-reclaimed once the work lands in its base branch.",
-    "keptAgo": "kept {{age}} ago"
+    "keptAgo": "kept {{age}} ago",
+    "enabled": "{{name}} may start temporary workers (untick to turn this off and hide this tab)"
   },
   "memoryGraph": {
     "topics": "topics",
@@ -1404,7 +1405,9 @@
     "priority": "Priority {{level}}/5",
     "deliverable": "DELIVERABLE",
     "openDeliverable": "Open",
-    "linkedFiles": "linked files: {{count}}"
+    "linkedFiles": "linked files: {{count}}",
+    "partOf": "Part of",
+    "subtasks": "Subtasks · {{done}}/{{total}} done"
   },
   "queueComposer": {
     "recording": "● recording — click stop to transcribe",
@@ -1599,7 +1602,10 @@
       "deliverables": "Deliverables",
       "now": "Now",
       "group_office": "Office",
-      "group_setup": "Setup"
+      "group_setup": "Setup",
+      "hideMenu": "Hide the menu",
+      "showMenu": "Show the menu",
+      "menu": "Menu"
     },
     "state": {
       "needsYou": "Needs you",
@@ -1634,7 +1640,9 @@
       "waitingForWork": "Waiting for work",
       "terminal": "Terminal",
       "unread": "{{count}} unread",
-      "prompt": "Prompt"
+      "prompt": "Prompt",
+      "usage": "{{percent}}% of {{window}} limit",
+      "usageTip": "The engine says this account has used {{percent}}% of its {{window}} limit."
     },
     "agent": {
       "goal": "Goal",
@@ -1650,7 +1658,12 @@
       "view": "View",
       "view_terminal": "Terminal",
       "view_steps": "Steps",
-      "view_both": "Both"
+      "view_both": "Both",
+      "restart": "Restart",
+      "restartTip": "Restart only this agent's process. The rest of the office keeps running.",
+      "restartConfirm": "Restart {{name}}?",
+      "restartDetailResume": "Its process is stopped and started again, continuing the same conversation. Changed environment variables apply from now on.",
+      "restartDetailFresh": "Its process is stopped and started again. Its CLI cannot continue a conversation, so it starts a fresh one. Changed environment variables apply from now on."
     },
     "tasks": {
       "summary": "{{doing}} in progress · {{blocked}} blocked",
@@ -1666,7 +1679,16 @@
       "col_blocked": "Blocked",
       "col_done": "Done",
       "asksYou": "Asks you",
-      "unassigned": "unassigned"
+      "unassigned": "unassigned",
+      "recent": "Recent activity",
+      "since": "for {{time}}",
+      "fewerDone": "Show fewer",
+      "allDone": "Show all {{count}}",
+      "subtaskOf": "Subtask of",
+      "subtasks": "Subtasks {{done}}/{{total}}",
+      "layout": "Layout",
+      "layout_board": "Board",
+      "layout_tree": "By request"
     },
     "automations": {
       "rules": "Schedules, context & webhooks",
@@ -1677,16 +1699,38 @@
       "nothing": "Nothing here yet.",
       "needsReply": "needs reply",
       "forYou": "For you",
-      "yourTeam": "Your team",
       "everyone": "Everyone",
       "outside": "Outside",
       "addressedToYou": "Addressed to you",
-      "allAgents": "All agents",
       "noMessages": "No messages yet",
       "slackWaiting": "Slack, waiting in a queue",
       "queuedFor": "for {{name}} · queued {{time}}",
       "webhookMail": "Webhook mail",
-      "requests": "Requests and approvals"
+      "requests": "Requests and approvals",
+      "conversations": "Conversations",
+      "pickAgent": "Pick an agent to read its conversation.",
+      "questionForYou": "question for you",
+      "dismissedQ": "You dismissed this question.",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "threadEmpty": "Nothing with {{name}} yet.",
+      "composePh": "Write to {{name}}… (Enter sends, Shift+Enter for a new line)",
+      "composeViaGod": "Write about {{name}}'s work… it goes through {{god}}, who routes it",
+      "sending": "Sending…",
+      "send": "Send",
+      "notSent": "Not sent. Try again.",
+      "yourAnswer": "your answer",
+      "replyTo": "reply to: {{subject}}",
+      "showMore": "Show more",
+      "showLess": "Show less",
+      "answerPh": "Your answer…",
+      "answer": "Answer",
+      "answerFailed": "Not saved: the question changed. Look again.",
+      "waitingTip": "Questions waiting for your answer",
+      "jumpToQuestion": "Show the question",
+      "showInternal": "Show messages between agents ({{count}})",
+      "runSummary": "{{count}} messages between {{people}}",
+      "hideRun": "Hide these messages"
     },
     "temps": {
       "couldNotHire": "Could not hire the temp.",
@@ -1990,7 +2034,12 @@
       "kindHelp_secret": "Encrypted, never shown again, never given to an agent. A runner (below) can use it.",
       "kindHelp_op": "A 1Password reference. Read at the moment a runner needs it; agents never see it.",
       "usedBy": "Used by",
-      "agentsAlso": "Agents are told these names exist, not secret values."
+      "agentsAlso": "Agents are told these names exist, not secret values.",
+      "restartNeeded": "A running agent only gets a changed variable when its process restarts: {{names}}.",
+      "restartNow": "Restart them ({{count}})",
+      "restartLater": "Later",
+      "unused": "no runner uses it yet",
+      "unusedTip": "Agents can only use a secret through a runner. Add one below, or let an agent propose one (you approve the exact command)."
     },
     "mcp": {
       "step1": "Servers you already use",
@@ -2287,7 +2336,34 @@
       "openOutsideNo": "For safety this kind of file is only shown in its folder: it could run something.",
       "openFailed": "Could not open it.",
       "showAll": "Show all",
-      "noneForTask": "Nothing for this task yet."
+      "noneForTask": "Nothing for this task yet.",
+      "showHidden": "Show hidden ({{count}})",
+      "hideHidden": "Hide hidden",
+      "hiddenTag": "hidden",
+      "hide": "Hide",
+      "unhide": "Unhide",
+      "hideTip": "Take it off this list. The file is not touched.",
+      "delete": "Delete",
+      "deleteConfirm": "Delete {{name}}?",
+      "deleteDetail": "It goes to the trash, so you can still get it back.",
+      "deleteNoTrash": "There is no trash for {{name}} here. Delete it for good?",
+      "deleteForGood": "Delete for good",
+      "actionFailed": "That did not work.",
+      "createdBy": "created by {{name}}",
+      "editedBy": "edited by {{name}}",
+      "filterType": "File type",
+      "filterBy": "Written by",
+      "allTypes": "All types",
+      "everyone": "Everyone",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all",
+      "history": "History",
+      "noHistory": "No saved versions yet. Agents' changes are saved from now on.",
+      "app": "App",
+      "current": "current",
+      "viewingVersion": "Viewing the version {{who}} saved on {{when}}.",
+      "backToCurrent": "Back to current",
+      "openTask": "Open this task"
     },
     "engines": {
       "title": "Engines",
@@ -2441,5 +2517,47 @@
         "help": "Leave empty for sentry.io."
       }
     }
-  }
+  },
+  "taskHistory": {
+    "title": "History",
+    "empty": "Nothing recorded yet. Changes are recorded from now on.",
+    "created": "Created ({{status}})",
+    "createdFor": "Created for {{name}} ({{status}})",
+    "assigned": "Given to {{name}}",
+    "unassigned": "Unassigned",
+    "status": "Moved from {{from}} to {{to}}",
+    "asked": "Asked you a question",
+    "answered": "You answered",
+    "dismissed": "You dismissed a question",
+    "result": "Result written",
+    "removed": "Removed from the board",
+    "message": "Message from {{from}} to {{to}}",
+    "status_todo": "to do",
+    "status_doing": "doing",
+    "status_blocked": "blocked",
+    "status_done": "done"
+  },
+  "fortress": {
+    "unsupported": "Fortress ships no build for this computer.",
+    "install": "Download and install",
+    "installNote": "About 250 MB, checked against the release's SHA-256 list before it runs.",
+    "state_downloading": "Downloading… {{percent}}%",
+    "state_verifying": "Checking the download…",
+    "state_extracting": "Unpacking…",
+    "licensed": "Signed in: v3 engine.",
+    "notLicensed": "Not signed in: runs the older v1 engine.",
+    "signIn": "Sign in with your account",
+    "needsUv": "Signing in needs uv (above).",
+    "check": "Check again",
+    "approveHint": "Finish signing in in your browser, including approving this device:",
+    "useIt": "Use Fortress for the office browser",
+    "v1Note": "Until you sign in, Fortress runs its first-generation engine.",
+    "manual": "Prefer a terminal? Run",
+    "remove": "Remove ({{size}})",
+    "renew": "Renew key",
+    "renewTip": "Re-issue the key before it expires",
+    "signOut": "Sign out",
+    "needsUvWindows": "Signing in needs uv for Windows itself (Fortress runs beside the app, not inside WSL): powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\""
+  },
+  "workers": {}
 }

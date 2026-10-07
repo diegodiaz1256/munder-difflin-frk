@@ -112,6 +112,13 @@ type PathOwner = 'nobody' | 'other' | 'self' | 'busy';
 
 export class HookServer {
   private server: Server | null = null;
+  /** Each agent's last submitted prompt (redacted), for keepHumanPrompt. */
+  private lastPrompts = new Map<string, { text: string; ts: number }>();
+  /** The last prompt an agent received, if recent. */
+  lastPrompt(agentId: string, withinMs = 300_000): { text: string; ts: number } | null {
+    const p = this.lastPrompts.get(agentId);
+    return p && Date.now() - p.ts <= withinMs ? p : null;
+  }
   /** This process's identity, echoed back by the ownership ping so a probe can
    *  tell "our listener" from "some other live instance" at the same path. */
   private readonly instanceId = randomUUID();
@@ -689,6 +696,7 @@ export class HookServer {
   private emit(agentId: string | undefined, event: string, p: HookPayload, blocked = false): void {
     // For the steps timeline: what the tool was asked to do (redacted, short), or
     // the words of a prompt. Kept in memory only, never written to disk.
+    if (event === 'UserPromptSubmit' && agentId && p.prompt) this.lastPrompts.set(agentId, { text: redact(p.prompt).slice(0, 8000), ts: Date.now() });
     const detail = event === 'UserPromptSubmit'
       ? (p.prompt ? redact(p.prompt).slice(0, 400) : undefined)
       : STEP_EVENTS.has(event) ? summarizeToolInput(p.tool_name, p.tool_input) || undefined : undefined;

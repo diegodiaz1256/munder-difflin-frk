@@ -197,7 +197,7 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
   const [accent, setAccent] = useState<AccentColorName>(knownAccent(pendingHire?.accent));
   // No project registered yet (a new office): the office folder itself, so a
   // hire is never stopped at "Pick a folder first" with nothing to pick.
-  const [cwd, setCwd] = useState<string>(config.registeredRepos[0] ?? config.harnessHome ?? '');
+  const [cwd, setCwd] = useState<string>(pendingHire?.cwd ?? config.registeredRepos[0] ?? config.harnessHome ?? '');
   // Local mirror of the registered projects so one added from here shows as a
   // quick-pick immediately (the `config` prop is a snapshot taken at open time).
   const [repos, setRepos] = useState<string[]>(config.registeredRepos);
@@ -346,7 +346,8 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
   const applyManifest = (m: HireManifest) => {
     setHireMeta(m);
     setCvMode(true);
-    setCwd((c) => c || config.harnessHome || '');
+    // A local manifest may name its folder; otherwise keep the current pick.
+    setCwd((c) => m.cwd || c || config.harnessHome || '');
     setName(m.name);
     // A manifest that names an agent but omits `character` should get the
     // matching avatar rather than the Jim default (issue #191).
@@ -358,9 +359,15 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
     setDescription(m.description ?? 'a fresh harness');
     setGoal(m.goal ?? '');
     setIsolate(m.isolate ?? false);
-    setResumeSessionId('');
+    setResumeSessionId(m.sessionId ?? '');
     setFolderNote(undefined);
     setSection('identity');
+    // A session to continue and no folder given: use the folder it ran in.
+    if (m.sessionId && !m.cwd) {
+      void window.cth.resolveSessionCwd(m.sessionId).then((resolved) => {
+        if (resolved) { setCwd(resolved); setFolderNote(tr('addAgent.folderFromSession', { path: resolved })); }
+      });
+    }
   };
 
   // Advancing a batch keeps this modal mounted. Re-seed every form field when

@@ -1300,7 +1300,8 @@
     "uncapped": "无上限",
     "preserved": "保留的工作树（{{count}}）",
     "preservedIntro": "已完成工人的工作树中保留着未整合的工作——保留（绝不自动丢弃），并在工作合入其基础分支后自动回收。",
-    "keptAgo": "{{age}} 前保留"
+    "keptAgo": "{{age}} 前保留",
+    "enabled": "{{name}} 可以启动临时工人（取消勾选可关闭并隐藏此标签）"
   },
   "memoryGraph": {
     "topics": "主题",
@@ -1404,7 +1405,9 @@
     "priority": "优先级 {{level}}/5",
     "deliverable": "交付物",
     "openDeliverable": "打开",
-    "linkedFiles": "已关联文件：{{count}}"
+    "linkedFiles": "已关联文件：{{count}}",
+    "partOf": "属于",
+    "subtasks": "子任务 · 已完成 {{done}}/{{total}}"
   },
   "queueComposer": {
     "recording": "● 录音中——点击停止转写",
@@ -1599,7 +1602,10 @@
       "deliverables": "交付物",
       "now": "现在",
       "group_office": "办公室",
-      "group_setup": "设置"
+      "group_setup": "设置",
+      "hideMenu": "隐藏菜单",
+      "showMenu": "显示菜单",
+      "menu": "菜单"
     },
     "state": {
       "needsYou": "需要你",
@@ -1634,7 +1640,9 @@
       "waitingForWork": "等待工作",
       "terminal": "终端",
       "unread": "{{count}} 条未读",
-      "prompt": "发消息"
+      "prompt": "发消息",
+      "usage": "已用{{window}}额度 {{percent}}%",
+      "usageTip": "引擎显示该账号已用掉 {{window}} 额度的 {{percent}}%。"
     },
     "agent": {
       "goal": "目标",
@@ -1650,7 +1658,12 @@
       "view": "视图",
       "view_terminal": "终端",
       "view_steps": "步骤",
-      "view_both": "两者"
+      "view_both": "两者",
+      "restart": "重启",
+      "restartTip": "只重启这个智能体的进程，办公室其他部分照常运行。",
+      "restartConfirm": "重启 {{name}}？",
+      "restartDetailResume": "它的进程会停止并重新启动，继续同一个对话。修改过的环境变量从现在起生效。",
+      "restartDetailFresh": "它的进程会停止并重新启动。它的 CLI 无法继续对话，因此会开始新对话。修改过的环境变量从现在起生效。"
     },
     "tasks": {
       "summary": "{{doing}} 个进行中 · {{blocked}} 个受阻",
@@ -1666,7 +1679,16 @@
       "col_blocked": "受阻",
       "col_done": "完成",
       "asksYou": "向你提问",
-      "unassigned": "未分配"
+      "unassigned": "未分配",
+      "recent": "最近动态",
+      "since": "已 {{time}}",
+      "fewerDone": "收起",
+      "allDone": "显示全部 {{count}} 个",
+      "subtaskOf": "子任务，属于",
+      "subtasks": "子任务 {{done}}/{{total}}",
+      "layout": "布局",
+      "layout_board": "看板",
+      "layout_tree": "按请求"
     },
     "automations": {
       "rules": "定时、上下文与 Webhook",
@@ -1677,16 +1699,38 @@
       "nothing": "这里还没有内容。",
       "needsReply": "需要回复",
       "forYou": "给你的",
-      "yourTeam": "你的团队",
       "everyone": "所有人",
       "outside": "外部",
       "addressedToYou": "发给你的",
-      "allAgents": "所有代理",
       "noMessages": "还没有消息",
       "slackWaiting": "Slack，排队中",
       "queuedFor": "给 {{name}} · {{time}} 排队",
       "webhookMail": "Webhook 邮件",
-      "requests": "请求与审批"
+      "requests": "请求与审批",
+      "conversations": "对话",
+      "pickAgent": "选择一个智能体查看它的对话。",
+      "questionForYou": "给你的问题",
+      "dismissedQ": "你忽略了这个问题。",
+      "today": "今天",
+      "yesterday": "昨天",
+      "threadEmpty": "还没有和 {{name}} 的记录。",
+      "composePh": "写给 {{name}}…（Enter 发送，Shift+Enter 换行）",
+      "composeViaGod": "关于 {{name}} 的工作写点什么…会经由 {{god}} 转达",
+      "sending": "发送中…",
+      "send": "发送",
+      "notSent": "未发送，请重试。",
+      "yourAnswer": "你的回答",
+      "replyTo": "回复：{{subject}}",
+      "showMore": "展开",
+      "showLess": "收起",
+      "answerPh": "你的回答…",
+      "answer": "回答",
+      "answerFailed": "未保存：问题已变化，请重新查看。",
+      "waitingTip": "等待你回答的问题",
+      "jumpToQuestion": "查看问题",
+      "showInternal": "Show messages between agents ({{count}})",
+      "runSummary": "{{count}} messages between {{people}}",
+      "hideRun": "Hide these messages"
     },
     "temps": {
       "couldNotHire": "无法雇用临时工。",
@@ -1990,7 +2034,12 @@
       "kindHelp_secret": "加密保存，不再显示，也不会交给智能体。运行器（下方）可以使用它。",
       "kindHelp_op": "1Password 引用。仅在运行器需要时读取；智能体永远看不到。",
       "usedBy": "使用者",
-      "agentsAlso": "智能体只会被告知这些名称存在，而非机密值。"
+      "agentsAlso": "智能体只会被告知这些名称存在，而非机密值。",
+      "restartNeeded": "运行中的智能体只有在进程重启后才会拿到修改过的变量：{{names}}。",
+      "restartNow": "重启它们（{{count}}）",
+      "restartLater": "稍后",
+      "unused": "还没有运行器使用它",
+      "unusedTip": "智能体只能通过运行器使用密钥。在下方添加一个，或让智能体提议一个（由你批准确切的命令）。"
     },
     "mcp": {
       "step1": "你已在使用的服务器",
@@ -2287,7 +2336,34 @@
       "openOutsideNo": "出于安全，此类文件只在文件夹中显示：它可能会运行某些内容。",
       "openFailed": "无法打开。",
       "showAll": "显示全部",
-      "noneForTask": "此任务暂无内容。"
+      "noneForTask": "此任务暂无内容。",
+      "showHidden": "显示已隐藏（{{count}}）",
+      "hideHidden": "不显示已隐藏",
+      "hiddenTag": "已隐藏",
+      "hide": "隐藏",
+      "unhide": "取消隐藏",
+      "hideTip": "从列表中移除，文件本身不变。",
+      "delete": "删除",
+      "deleteConfirm": "删除 {{name}}？",
+      "deleteDetail": "它会进入回收站，之后仍可恢复。",
+      "deleteNoTrash": "这里没有可用于 {{name}} 的回收站。要永久删除吗？",
+      "deleteForGood": "永久删除",
+      "actionFailed": "操作未成功。",
+      "createdBy": "由 {{name}} 创建",
+      "editedBy": "由 {{name}} 编辑",
+      "filterType": "文件类型",
+      "filterBy": "作者",
+      "allTypes": "全部类型",
+      "everyone": "所有人",
+      "expandAll": "全部展开",
+      "collapseAll": "全部收起",
+      "history": "历史",
+      "noHistory": "还没有保存的版本。从现在起会保存智能体的修改。",
+      "app": "应用",
+      "current": "当前",
+      "viewingVersion": "正在查看 {{who}} 于 {{when}} 保存的版本。",
+      "backToCurrent": "回到当前版本",
+      "openTask": "打开这个任务"
     },
     "engines": {
       "title": "引擎",
@@ -2441,5 +2517,47 @@
         "help": "使用 sentry.io 时留空。"
       }
     }
-  }
+  },
+  "taskHistory": {
+    "title": "历史",
+    "empty": "还没有记录。从现在起会记录变化。",
+    "created": "已创建（{{status}}）",
+    "createdFor": "为 {{name}} 创建（{{status}}）",
+    "assigned": "交给 {{name}}",
+    "unassigned": "未分配",
+    "status": "从{{from}}移到{{to}}",
+    "asked": "向你提了一个问题",
+    "answered": "你已回答",
+    "dismissed": "你忽略了一个问题",
+    "result": "已写入结果",
+    "removed": "已从看板移除",
+    "message": "{{from}} 发给 {{to}} 的消息",
+    "status_todo": "待办",
+    "status_doing": "进行中",
+    "status_blocked": "受阻",
+    "status_done": "已完成"
+  },
+  "fortress": {
+    "unsupported": "Fortress 没有适用于这台电脑的版本。",
+    "install": "下载并安装",
+    "installNote": "约 250 MB，运行前会用该版本的 SHA-256 列表校验。",
+    "state_downloading": "下载中… {{percent}}%",
+    "state_verifying": "正在校验下载…",
+    "state_extracting": "正在解压…",
+    "licensed": "已登录：v3 引擎。",
+    "notLicensed": "未登录：使用较旧的 v1 引擎。",
+    "signIn": "用你的账号登录",
+    "needsUv": "登录需要 uv（见上方）。",
+    "check": "重新检查",
+    "approveHint": "请在浏览器中完成登录，并批准这台设备：",
+    "useIt": "办公室浏览器使用 Fortress",
+    "v1Note": "登录之前，Fortress 使用第一代引擎。",
+    "manual": "想用终端？运行",
+    "remove": "移除（{{size}}）",
+    "renew": "续期密钥",
+    "renewTip": "在密钥过期前重新签发",
+    "signOut": "退出登录",
+    "needsUvWindows": "登录需要在 Windows 本身安装 uv（Fortress 与应用一起运行，而不是在 WSL 里）：powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\""
+  },
+  "workers": {}
 }

@@ -121,8 +121,21 @@ window.HireSpec = (function () {
       errors.push('"capabilities" must be an array of at most 12 items');
     }
     if (raw.isolate !== undefined && typeof raw.isolate !== 'boolean') errors.push('"isolate" must be a boolean');
-    if (raw.tokenCap !== undefined && !(Number.isInteger(raw.tokenCap) && raw.tokenCap > 0 && raw.tokenCap <= 1e10)) {
-      errors.push('"tokenCap" must be a positive integer (max 1e10)');
+    if (raw.tokenCap !== undefined && !(Number.isInteger(raw.tokenCap) && raw.tokenCap >= 0 && raw.tokenCap <= 1e10)) {
+      errors.push('"tokenCap" must be 0 (no cap) or a positive integer (max 1e10)');
+    }
+    // Local-only fields (the app drops them from a deep-linked manifest), kept
+    // here so the gallery accepts exactly what the app accepts.
+    if (raw.cwd !== undefined && raw.cwd !== null) {
+      const cwd = str(raw.cwd) ? raw.cwd.trim() : null;
+      if (cwd === null) errors.push('"cwd" must be a string');
+      else if (cwd.length > 1024) errors.push('"cwd" exceeds 1024 chars');
+      else if (cwd && (!/^(?:\/|~(?:[\/]|$)|[A-Za-z]:[\\/]|\\\\[^\\])/.test(cwd) || cwd.includes('\0'))) errors.push('"cwd" must be an absolute folder path');
+    }
+    if (raw.sessionId !== undefined && raw.sessionId !== null) {
+      const sid = str(raw.sessionId) ? raw.sessionId.trim() : null;
+      if (sid === null) errors.push('"sessionId" must be a string');
+      else if (sid && !/^[A-Za-z0-9_-]{1,128}$/.test(sid)) errors.push('"sessionId" must be a session id (letters, digits, - and _ only)');
     }
     if (str(raw.homepage) && raw.homepage.trim() && !raw.homepage.trim().startsWith('https://')) errors.push('"homepage" must be https');
     return { ok: errors.length === 0, errors };

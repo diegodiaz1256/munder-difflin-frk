@@ -76,7 +76,8 @@ The harness fills in \`id\`, \`from\`, \`hops\`, and timestamps.
     body: `Two shared surfaces, both in the hive root:
 - \`board.md\` — the freeform narrative plan. God is its sole scribe; others \`propose\` edits to god.
 - \`tasks.json\` — the task cards (a kanban: \`todo / doing / blocked / done\`, with title, assignee,
-  priority, deps, and \`deliverable\`). Keep the card you're working on in the right status.`
+  priority, deps, \`deliverable\`, and \`parent\` on a subtask: the id of the card it is a piece of).
+  Keep the card you're working on in the right status.`
   },
   {
     file: 'services.md',
@@ -91,8 +92,11 @@ The harness fills in \`id\`, \`from\`, \`hops\`, and timestamps.
   arguments to list the ones you may use right now, then \`md-api <api> GET /path\`. An API the
   human connects later works at once. A refusal says why (switched off, no key, not for you, read-only).
 - **Runners** run commands that need secrets: \`bin/md-run.cjs\` with no arguments lists the ones that
-  exist now (also ones added after you started), \`md-run <runner>\` runs one. The app executes it
-  and masks every secret in the output.
+  exist now (also ones added after you started) and the names of the stored secrets, \`md-run <runner>\`
+  runs one. The app executes it in your folder and masks every secret in the output. No runner for what
+  you need? Propose one: \`md-run --propose <name> --secrets NAME[,NAME] --why "<reason>" -- <command>\`.
+  The human sees the exact command and approves it once; a runner must finish (it is not for a server
+  that keeps running).
 - **The office browser** reads a page with the app's own Chromium when a plain fetch gets nothing
   (403, "enable JavaScript", an empty shell): \`bin/md-browse.cjs <url>\` (\`--links\` for its links),
   \`md-browse --search "<query>"\`; Claude Code agents also have it as the \`munder-browser\` tools. It is
@@ -217,10 +221,16 @@ its inbox. An invalid file comes back to your inbox as \`[hire manifest rejected
   "provider": "claude | codex | cursor | antigravity",
   "model": "model id (optional)",
   "character": "office cast sprite, e.g. dwight (optional)",
+  "cwd": "/absolute/path of the folder it works in (optional; defaults to the first project)",
+  "sessionId": "a Claude session id to continue with --resume (optional)",
   "isolate": false,
   "tokenCap": 0
 }
-\`\`\``
+\`\`\`
+
+\`tokenCap\` 0 means no cap. A \`cwd\` that is not a project yet is added as one when the human
+confirms. Write several manifests to propose several hires: the human reviews them one after another,
+and any they close without deciding are offered again on the next launch.`
   }
 ];
 

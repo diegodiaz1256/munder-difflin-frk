@@ -63,6 +63,8 @@ export interface EnvVaultDeps {
   deleteSecret: (ref: string) => void;
   /** Ask the human; resolves true to run. */
   approve: (req: { runner: Runner; agentName: string; cwd: string; changed: boolean }) => Promise<'once' | 'always' | 'deny'>;
+  /** Ask the human whether to add a runner an agent proposed. */
+  approveProposal?: (req: { proposal: Pick<Runner, 'name' | 'command' | 'secrets' | 'description'>; agentName: string }) => Promise<boolean>;
   /** `op read <ref>` (injected for tests). */
   opRead?: (ref: string) => Promise<string>;
   log?: (m: string) => void;
@@ -211,6 +213,45 @@ export class EnvVault {
     if (typeof id !== 'string') return { ok: false };
     this.deps.writeRunners(this.deps.readRunners().filter((x) => x.id !== id));
     return { ok: true };
+  }
+
+  /** Names of the secrets (secret and 1Password variables) — never values —
+   *  so an agent can say which one a runner it proposes needs. */
+  secretNames(): string[] {
+    return this.deps.readVars().filter((v) => v.kind !== 'plain').map((v) => v.name);
+  }
+
+  /**
+   * An agent proposes a runner: a command that needs secrets it will never
+   * see (a migration, a dev server check, a deploy script). Nothing is added
+   * until the human approves it in a prompt that shows the exact command and
+   * the secrets; then it is an ordinary runner (asked about again whenever
+   * the worktree changed, like any other). Only secrets that exist can be
+   * named, and an existing runner is never replaced from here.
+   */
+  async proposeRunner(input: unknown, ctx: { agentName: string }): Promise<{ ok: boolean; id?: string; error?: string }> {
+    const r = (input ?? {}) as Record<string, unknown>;
+    const name = typeof r.name === 'string' ? r.name.trim().slice(0, 40) : '';
+    const command = typeof r.command === 'string' ? r.command.trim() : '';
+    if (!name) return { ok: false, error: 'give the runner a name' };
+    if (!command) return { ok: false, error: 'give the runner a command' };
+    if (command.length > 1000) return { ok: false, error: 'the command is longer than 1000 characters' };
+    const secretsIn = Array.isArray(r.secrets) ? r.secrets.filter((x): x is string => typeof x === 'string').map((x) => x.trim()).filter(Boolean) : [];
+    const known = new Set(this.secretNames());
+    const unknown = secretsIn.filter((x) => !known.has(x));
+    if (unknown.length) {
+      return { ok: false, error: `no such secret: ${unknown.join(', ')}. Stored secrets: ${[...known].join(', ') || 'none yet (ask the human to add one in Environment)'}` };
+    }
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (!id) return { ok: false, error: 'the name needs a letter or a digit' };
+    if (this.deps.readRunners().some((x) => x.id === id)) return { ok: false, error: `a runner named ${id} already exists: run it, or propose another name` };
+    if (!this.deps.approveProposal) return { ok: false, error: 'proposals are not available here' };
+    const description = typeof r.description === 'string' && r.description.trim() ? r.description.trim().slice(0, 200) : undefined;
+    const proposal = { name, command, secrets: [...new Set(secretsIn)], ...(description ? { description } : {}) };
+    const yes = await this.deps.approveProposal({ proposal, agentName: ctx.agentName });
+    if (!yes) return { ok: false, error: 'the human declined this runner' };
+    this.deps.log?.(`runner ${id} added at ${ctx.agentName}'s request`);
+    return this.setRunner({ ...proposal, id, approval: 'on-change' });
   }
 
   /** What an agent may know about runners: names, descriptions and which
