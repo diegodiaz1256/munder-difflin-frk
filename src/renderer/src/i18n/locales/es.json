@@ -1652,7 +1652,12 @@
       "view": "Vista",
       "view_terminal": "Terminal",
       "view_steps": "Pasos",
-      "view_both": "Ambas"
+      "view_both": "Ambas",
+      "restart": "Reiniciar",
+      "restartTip": "Reinicia solo el proceso de este agente. El resto de la oficina sigue funcionando.",
+      "restartConfirm": "¿Reiniciar a {{name}}?",
+      "restartDetailResume": "Su proceso se detiene y vuelve a arrancar, continuando la misma conversación. Las variables de entorno cambiadas se aplican desde ahora.",
+      "restartDetailFresh": "Su proceso se detiene y vuelve a arrancar. Su CLI no puede continuar una conversación, así que empieza una nueva. Las variables de entorno cambiadas se aplican desde ahora."
     },
     "tasks": {
       "summary": "{{doing}} en curso · {{blocked}} bloqueadas",
@@ -2023,7 +2028,12 @@
       "kindHelp_secret": "Cifrada, nunca se vuelve a mostrar y nunca se da a un agente. Un runner (abajo) puede usarla.",
       "kindHelp_op": "Una referencia de 1Password. Se lee en el momento en que un runner la necesita; los agentes nunca la ven.",
       "usedBy": "Usada por",
-      "agentsAlso": "A los agentes se les dice que estos nombres existen, no los valores secretos."
+      "agentsAlso": "A los agentes se les dice que estos nombres existen, no los valores secretos.",
+      "restartNeeded": "Un agente en marcha solo recibe una variable cambiada cuando su proceso se reinicia: {{names}}.",
+      "restartNow": "Reiniciarlos ({{count}})",
+      "restartLater": "Más tarde",
+      "unused": "ningún runner lo usa aún",
+      "unusedTip": "Los agentes solo pueden usar un secreto a través de un runner. Añade uno abajo, o deja que un agente lo proponga (tú apruebas el comando exacto)."
     },
     "mcp": {
       "step1": "Servidores que ya usas",

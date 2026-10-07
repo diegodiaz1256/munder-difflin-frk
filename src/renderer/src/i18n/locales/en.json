@@ -1652,7 +1652,12 @@
       "view": "View",
       "view_terminal": "Terminal",
       "view_steps": "Steps",
-      "view_both": "Both"
+      "view_both": "Both",
+      "restart": "Restart",
+      "restartTip": "Restart only this agent's process. The rest of the office keeps running.",
+      "restartConfirm": "Restart {{name}}?",
+      "restartDetailResume": "Its process is stopped and started again, continuing the same conversation. Changed environment variables apply from now on.",
+      "restartDetailFresh": "Its process is stopped and started again. Its CLI cannot continue a conversation, so it starts a fresh one. Changed environment variables apply from now on."
     },
     "tasks": {
       "summary": "{{doing}} in progress · {{blocked}} blocked",
@@ -2023,7 +2028,12 @@
       "kindHelp_secret": "Encrypted, never shown again, never given to an agent. A runner (below) can use it.",
       "kindHelp_op": "A 1Password reference. Read at the moment a runner needs it; agents never see it.",
       "usedBy": "Used by",
-      "agentsAlso": "Agents are told these names exist, not secret values."
+      "agentsAlso": "Agents are told these names exist, not secret values.",
+      "restartNeeded": "A running agent only gets a changed variable when its process restarts: {{names}}.",
+      "restartNow": "Restart them ({{count}})",
+      "restartLater": "Later",
+      "unused": "no runner uses it yet",
+      "unusedTip": "Agents can only use a secret through a runner. Add one below, or let an agent propose one (you approve the exact command)."
     },
     "mcp": {
       "step1": "Servers you already use",

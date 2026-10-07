@@ -534,6 +534,20 @@ const envVault = new EnvVault({
     refocusAfterDialog(win);
     return response === 0 ? 'once' : response === 1 ? 'always' : 'deny';
   },
+  approveProposal: async ({ proposal, agentName }) => {
+    const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    const opts = {
+      type: 'question' as const,
+      buttons: ['Add runner', 'Decline'],
+      defaultId: 1, cancelId: 1, noLink: true,
+      title: 'Add a runner?',
+      message: `${agentName} asks for a runner "${proposal.name}"`,
+      detail: `${proposal.command}\n\nWith secrets: ${proposal.secrets.join(', ') || 'none'}${proposal.description ? `\nWhy: ${proposal.description}` : ''}\n\nIt runs in the asking agent's own folder. The agent gets only the output, with every secret masked, and you are asked again before a run whenever its files changed. You can edit or remove it in Environment.`
+    };
+    const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
+    refocusAfterDialog(win);
+    return response === 0;
+  },
   log: (m) => console.log('[env]', m)
 });
 
@@ -547,6 +561,12 @@ const integrationBroker = new IntegrationBroker({
   whyNot: (agentId, id) => apiDenyReason(agentId, id),
   runners: {
     describe: () => envVault.describeRunners(),
+    secretNames: () => envVault.secretNames(),
+    propose: (workerId, proposal) => {
+      const agentId = ptyToAgent.get(workerId);
+      const name = (agentId && hive.registry().agents?.[agentId]?.name) || agentId || workerId;
+      return envVault.proposeRunner(proposal, { agentName: name });
+    },
     run: async (workerId, runnerId) => {
       // The worktree is the one the app started this agent in — never a path
       // the agent names.
@@ -3615,7 +3635,10 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     // actually present (already or after the copy); otherwise fall back to a fresh
     // session rather than launching a `--resume` against a missing id.
     const explicitSid = typeof opts.resumeSessionId === 'string' ? opts.resumeSessionId.trim() : '';
-    const sid = explicitSid || (opts.resume === true ? hive.lastSession(opts.hive.id) : undefined);
+    // Restore: the newest of this agent's sessions that still has a transcript.
+    const sid = explicitSid || (opts.resume === true
+      ? (hive.recentSessions(opts.hive.id).find((x) => seedSessionTranscript(opts.cwd!, x)) ?? hive.lastSession(opts.hive.id))
+      : undefined);
     if (sid && !args.includes('--resume')) {
       if (seedSessionTranscript(opts.cwd, sid)) {
         args.push('--resume', sid);

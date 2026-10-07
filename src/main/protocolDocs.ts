@@ -92,8 +92,11 @@ The harness fills in \`id\`, \`from\`, \`hops\`, and timestamps.
   arguments to list the ones you may use right now, then \`md-api <api> GET /path\`. An API the
   human connects later works at once. A refusal says why (switched off, no key, not for you, read-only).
 - **Runners** run commands that need secrets: \`bin/md-run.cjs\` with no arguments lists the ones that
-  exist now (also ones added after you started), \`md-run <runner>\` runs one. The app executes it
-  and masks every secret in the output.
+  exist now (also ones added after you started) and the names of the stored secrets, \`md-run <runner>\`
+  runs one. The app executes it in your folder and masks every secret in the output. No runner for what
+  you need? Propose one: \`md-run --propose <name> --secrets NAME[,NAME] --why "<reason>" -- <command>\`.
+  The human sees the exact command and approves it once; a runner must finish (it is not for a server
+  that keeps running).
 - **The office browser** reads a page with the app's own Chromium when a plain fetch gets nothing
   (403, "enable JavaScript", an empty shell): \`bin/md-browse.cjs <url>\` (\`--links\` for its links),
   \`md-browse --search "<query>"\`; Claude Code agents also have it as the \`munder-browser\` tools. It is
