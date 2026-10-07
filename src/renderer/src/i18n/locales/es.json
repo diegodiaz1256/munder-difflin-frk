@@ -2365,7 +2365,8 @@
       "current": "actual",
       "viewingVersion": "Viendo la versión que guardó {{who}} el {{when}}.",
       "backToCurrent": "Volver a la actual",
-      "openTask": "Abrir esta tarea"
+      "openTask": "Abrir esta tarea",
+      "noAuthor": "Sin autor registrado: lo escribió algo que no es un agente, o es anterior a que la app guardara quién cambia cada archivo."
     },
     "engines": {
       "title": "Motores",

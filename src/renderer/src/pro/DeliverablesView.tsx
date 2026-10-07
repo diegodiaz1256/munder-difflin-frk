@@ -251,7 +251,9 @@ export function DeliverablesView({ tasks, roster }: { tasks: KeyedTask[]; roster
                             {[i.by && t(i.created ? 'pro.dlv.createdBy' : 'pro.dlv.editedBy', { name: i.by }), i.ts && fmtWhen(i.ts), i.size !== undefined && fmtSize(i.size)].filter(Boolean).join(' · ')}
                           </span>
                         </span>
-                        <AuthorAvatars names={i.authors} size={20} />
+                        {i.authors.length
+                          ? <AuthorAvatars names={i.authors} size={20} />
+                          : <span title={t('pro.dlv.noAuthor')} style={{ width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--pro-muted)', boxShadow: 'inset 0 0 0 1px var(--pro-line)' }}>?</span>}
                       </button>
                     ))}
                   </section>

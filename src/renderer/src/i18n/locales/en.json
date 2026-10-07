@@ -2365,7 +2365,8 @@
       "current": "current",
       "viewingVersion": "Viewing the version {{who}} saved on {{when}}.",
       "backToCurrent": "Back to current",
-      "openTask": "Open this task"
+      "openTask": "Open this task",
+      "noAuthor": "No recorded author: written outside an agent, or before the app kept who changed each file."
     },
     "engines": {
       "title": "Engines",
