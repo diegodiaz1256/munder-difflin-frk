@@ -199,26 +199,6 @@ canvas, img, svg { image-rendering: pixelated; image-rendering: crisp-edges; }
   font-feature-settings: "liga" 0, "clig" 0, "calt" 0 !important;
 }
 
-/* Arabic/RTL in terminals (see terminal/arabicJoiner.ts for the whole recipe).
-   `plaintext` gives each ROW its own base direction from its first strong
-   character — an Arabic row lays out right-to-left and right-aligned, a Latin
-   row is untouched. The span override matters just as much: xterm's DOM
-   renderer emits inline-block spans, which are ATOMIC to the bidi algorithm, so
-   the browser can never reorder them; plain inline text it can. !important is
-   load-bearing: the DOM renderer INJECTS a runtime stylesheet whose rules land
-   after this file and would otherwise win the cascade.
-
-   SCOPED to `.cth-bidi`, which terminalPool puts on a host only when the user
-   has switched Arabic terminals on. Unscoped, these rules would also reshape
-   the terminal of an English user who happened to fall back to the DOM renderer
-   after losing a WebGL lease — a layout change from a feature they never
-   enabled. The WebGL canvas ignores CSS entirely, so this is inert either way
-   for anyone on the GPU renderer. */
-.cth-bidi .xterm .xterm-rows > div,
-.cth-bidi.xterm .xterm-rows > div { unicode-bidi: plaintext !important; }
-.cth-bidi .xterm .xterm-rows > div > span,
-.cth-bidi.xterm .xterm-rows > div > span { display: inline !important; unicode-bidi: normal !important; }
-
 /* ─── RTL app language ───────────────────────────────────────────────────────
    Everything below is under `[dir="rtl"]`, which i18n/useDirection puts on
    <html> ONLY for a user who picked a right-to-left app language. For everyone

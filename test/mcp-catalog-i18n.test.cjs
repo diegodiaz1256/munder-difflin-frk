@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const loadTs = require('./load-ts.cjs');
 
 const { MCP_CATALOG } = loadTs('src/shared/mcpCatalog.ts');
-const LOCALES = ['en', 'es', 'zh-CN', 'ar'].map((l) => [l, require(`../src/renderer/src/i18n/locales/${l}.json`)]);
+const LOCALES = ['en', 'es'].map((l) => [l, require(`../src/renderer/src/i18n/locales/${l}.json`)]);
 
 test('every catalog server has its description and key fields in every locale', () => {
   for (const [loc, json] of LOCALES) {

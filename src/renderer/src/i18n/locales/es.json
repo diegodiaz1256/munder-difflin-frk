@@ -241,10 +241,7 @@
       "languageDesc": "Elige el idioma de la interfaz. El inglés es el predeterminado.",
       "dangerZone": "ZONA DE PELIGRO",
       "dangerDesc": "Borrar elimina los recuerdos de {{godName}}, toda la colmena (cada agente, mensaje, tarea y el tablero), el palacio de memoria semántica y todos los ajustes, y te devuelve a la configuración inicial.",
-      "resetStartOver": "borrar y empezar de nuevo",
-      "arabicTerminal": "Texto árabe / RTL en las terminales",
-      "arabicTerminalDesc": "Dibuja las terminales con el motor de texto del navegador para que el árabe se una y se lea de derecha a izquierda (xterm no tiene bidi propio). Desactivado es el renderizado por GPU: más rápido, pero no entiende RTL. Se aplica a las terminales abiertas y a las nuevas.",
-      "arabicTerminalFollowsLanguage": "Sigue el idioma de la app. Cámbialo aquí para forzarlo en un sentido u otro; la elección se mantiene aunque vuelvas a cambiar de idioma."
+      "resetStartOver": "borrar y empezar de nuevo"
     },
     "agentsModels": {
       "defaultModel": "Modelo predeterminado de los agentes",

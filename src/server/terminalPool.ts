@@ -77,7 +77,6 @@ export function useHasTerminalDraft(): boolean { return false; }
 export function clearTerminalDraft(): string { return ''; }
 export function dismissTerminalPicker(): void {}
 export function notifyThemeChangeAll(): void {}
-export function notifyArabicTerminalChangeAll(): void {}
 export function attachTerminal(): void {}
 export function detachTerminal(): void {}
 export function reflowTerminal(): void {}
