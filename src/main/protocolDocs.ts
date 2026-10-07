@@ -217,10 +217,16 @@ its inbox. An invalid file comes back to your inbox as \`[hire manifest rejected
   "provider": "claude | codex | cursor | antigravity",
   "model": "model id (optional)",
   "character": "office cast sprite, e.g. dwight (optional)",
+  "cwd": "/absolute/path of the folder it works in (optional; defaults to the first project)",
+  "sessionId": "a Claude session id to continue with --resume (optional)",
   "isolate": false,
   "tokenCap": 0
 }
-\`\`\``
+\`\`\`
+
+\`tokenCap\` 0 means no cap. A \`cwd\` that is not a project yet is added as one when the human
+confirms. Write several manifests to propose several hires: the human reviews them one after another,
+and any they close without deciding are offered again on the next launch.`
   }
 ];
 

@@ -17,7 +17,7 @@ import {
   unlinkSync, mkdirSync, renameSync, createWriteStream, copyFileSync, lstatSync,
   readlinkSync, symlinkSync
 } from 'node:fs';
-import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomUUID, createHash, timingSafeEqual } from 'node:crypto';
 import { join, resolve, sep, basename, dirname, isAbsolute } from 'node:path';
 import { homedir, hostname } from 'node:os';
 import { request as httpsRequest } from 'node:https';
@@ -106,7 +106,7 @@ import { ControlRegistry } from './control';
 import { WorkerWakeWatchdog, WORKER_WAKE_REPORT_MS, activityEvidenceAt, type WorkerWakeFacts } from './workerWake';
 import { inboxNudgeText } from '../shared/hiveNudge';
 import { resolveGodName } from '../shared/godIdentity';
-import { collectHireManifests, fetchHireManifest, readHireManifestFiles } from './hire';
+import { collectHireManifests, fetchHireManifest, readHireManifestFiles, restoreOfferedHire } from './hire';
 import { parseHireDeepLink, type HireManifest } from '../shared/hire';
 import { ClosingTimeController } from './closingTime';
 import {
@@ -2718,14 +2718,35 @@ function deliverHire(manifest: HireManifest): void {
  * the human confirms it in the UI, but nothing looked there, so the
  * proposal sat unseen. Each one now opens the Add-Agent review, prefilled.
  */
+/** A local manifest's folder as this machine opens it, the same way a worker
+ *  request's is (spawn-requests): a WSL floor's orchestrator writes Linux
+ *  paths, so they go through \\wsl.localhost; a network path is dropped (even
+ *  checking that it exists makes Windows offer the user's NTLM hash). */
+function localHireCwd(m: HireManifest): HireManifest {
+  if (!m.cwd) return m;
+  const floorWsl = hive.wslRoot();
+  const cwd = floorWsl ? fromLinuxPath(m.cwd, floorWsl.distro, () => distroHomeUnc(floorWsl.distro)) : m.cwd;
+  if (!uncAllowed(cwd)) return { ...m, cwd: undefined };
+  return { ...m, cwd };
+}
+
+/** reviewToken → the research/hires/ file an offered manifest came from. */
+const offeredHireSources = new Map<string, { dir: string; file: string }>();
+/** Manifests the human closed without deciding: back in research/hires/, not
+ *  offered again until the next launch (or the review would pop right back). */
+const deferredHireFiles = new Set<string>();
 function offerOrchestratorHires(): void {
   const root = hive.root();
   const home = readConfig().harnessHome;
   const dirs = [root ? join(root, 'research', 'hires') : null, home ? join(home, 'research', 'hires') : null]
     .filter((d): d is string => !!d && existsSync(d));
   if (!dirs.length) return;
-  const { offered, invalid } = collectHireManifests(dirs);
-  for (const m of offered) deliverHire(m);
+  const { offered, sources, invalid } = collectHireManifests(dirs, deferredHireFiles);
+  offered.forEach((m, i) => {
+    const reviewToken = randomUUID();
+    offeredHireSources.set(reviewToken, sources[i]);
+    deliverHire({ ...localHireCwd(m), reviewToken });
+  });
   for (const bad of invalid) {
     informGod('[hire manifest rejected]', `research/hires/${bad.file} is not a valid hire manifest: ${bad.error}`);
   }
@@ -2742,7 +2763,8 @@ async function handleHireLink(link: string): Promise<void> {
     }
     return;
   }
-  deliverHire(res.manifest);
+  // A remote manifest never picks a folder on this disk or a session to resume.
+  deliverHire({ ...res.manifest, cwd: undefined, sessionId: undefined });
   analytics.trackFeature('hire_install');
 }
 
@@ -2788,6 +2810,25 @@ ipcMain.handle('hire:drainPending', () => {
   return out;
 });
 
+// IPC: the human closed the review with research/hires/ manifests still
+// unreviewed. Put them back, so they are offered again on the next launch
+// instead of sitting in .offered/ where nobody looks.
+ipcMain.handle('hire:defer', (_evt, tokens: unknown) => {
+  if (!Array.isArray(tokens)) return;
+  for (const t of tokens) {
+    if (typeof t !== 'string') continue;
+    const src = offeredHireSources.get(t);
+    if (!src) continue;
+    offeredHireSources.delete(t);
+    const restored = restoreOfferedHire(src.dir, src.file);
+    if (restored) deferredHireFiles.add(restored);
+  }
+});
+// IPC: a research/hires/ manifest was spawned or skipped: forget its token.
+ipcMain.handle('hire:reviewed', (_evt, token: unknown) => {
+  if (typeof token === 'string') offeredHireSources.delete(token);
+});
+
 // IPC: "import hires…" file picker in the Add-Agent modal. Every selected file
 // is validated independently; valid neighbours survive an invalid manifest.
 ipcMain.handle('hire:openFile', async () => {
@@ -2804,6 +2845,7 @@ ipcMain.handle('hire:openFile', async () => {
   return {
     ok: batch.manifests.length > 0,
     ...batch,
+    manifests: batch.manifests.map(localHireCwd),
     error: batch.manifests.length === 0 ? 'no valid hire manifests selected' : undefined
   };
 });

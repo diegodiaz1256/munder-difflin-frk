@@ -1098,6 +1098,13 @@ const api = {
    *  links, links that arrived during load). Resolves the queued list. */
   drainPendingHires: (): Promise<HireManifest[]> =>
     ipcRenderer.invoke('hire:drainPending'),
+  /** Hand back research/hires/ manifests the human closed without deciding
+   *  (by reviewToken), so they are offered again on the next launch. */
+  deferHires: (tokens: string[]): Promise<void> =>
+    ipcRenderer.invoke('hire:defer', tokens),
+  /** A research/hires/ manifest was spawned or skipped. */
+  markHireReviewed: (token: string): Promise<void> =>
+    ipcRenderer.invoke('hire:reviewed', token),
   /** Open a multi-file picker and validate every selected hire manifest. */
   importHireFiles: (): Promise<{
     ok: boolean;
