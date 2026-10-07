@@ -1,3 +1,3 @@
-- Agents find the **office browser** when a page fails.
-- It opens two pages at most and frees memory at once.
-- About 0.8 GB peak for five heavy pages (was 1.4 GB).
+- **Now**: see what every agent is doing, in Manager.
+- A tidier sidebar, with folding groups.
+- Fewer tokens spent; safer engine installs.
