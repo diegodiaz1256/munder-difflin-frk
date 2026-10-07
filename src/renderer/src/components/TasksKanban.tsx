@@ -11,6 +11,7 @@ import { deliverablePaths, splitPath } from '@shared/deliverables';
 import { MarkdownPreview } from '@/markdown/MarkdownPreview';
 import { useRtl } from '@/i18n/useDirection';
 import { useProStore } from '@/pro/proStore';
+import { SpritePortrait } from './SpritePortrait';
 
 /** A card on the task kanban. Mirrors HiveTask in the main/preload process —
  *  re-declared locally so the renderer doesn't reach into the preload package
@@ -212,7 +213,7 @@ export function TasksKanban() {
               </div>
               <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {cards.length === 0 && (
-                  <div style={{ fontSize: 12, color: 'var(--cth-ink-300)', textAlign: 'center', padding: '8px 0' }}>—</div>
+                  <div style={{ fontSize: 12, color: 'var(--cth-ink-300)', textAlign: 'center', padding: '8px 0' }}>{t('kanban.emptyColumn')}</div>
                 )}
                 {cards.map((t) => (
                   <TaskCard
@@ -220,6 +221,7 @@ export function TasksKanban() {
                     task={t}
                     accent={col.accent}
                     assigneeName={nameFor(t.assignee)}
+                    all={tasks}
                     onOpen={() => openTaskDetail(t.id)}
                     onDismiss={() => dismissTask(t.id)}
                   />
@@ -239,14 +241,19 @@ export function TasksKanban() {
 // lives in the detail view a click away: a kanban card can carry little more
 // than a title.
 
-function TaskCard({ task, accent, assigneeName, onOpen, onDismiss }: {
+function TaskCard({ task, accent, assigneeName, all, onOpen, onDismiss }: {
   task: HiveTask;
   accent: string;
   assigneeName?: string;
+  all: HiveTask[];
   onOpen: () => void;
   onDismiss: () => void;
 }) {
   const { t } = useTranslation();
+  const owner = useStore((s) => (task.assignee ? s.agents.find((a) => a.id === task.assignee) : undefined));
+  const parent = task.parent ? all.find((x) => x.id === task.parent) : undefined;
+  const kids = all.filter((x) => x.parent === task.id);
+  const open = openQuestion(task);
   return (
     <div style={{ position: 'relative', display: 'flex' }}>
       <button
@@ -272,25 +279,44 @@ function TaskCard({ task, accent, assigneeName, onOpen, onDismiss }: {
             fontFamily: 'var(--cth-font-mono)', fontSize: 10,
             color: 'var(--cth-ink-500)'
           }}>{task.id}</span>
+          {parent && (
+            <span style={{ fontSize: 10.5, color: 'var(--cth-ink-500)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t('kanban.partOf')}>↳ {parent.title}</span>
+          )}
           <span style={{
             fontFamily: 'var(--cth-font-ui)', fontSize: 12, lineHeight: '16px',
             color: 'var(--cth-ink-900)',
             display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
           }}>{task.title}</span>
-          {assigneeName && (
-            <span style={{ fontSize: 10, color: 'var(--cth-ink-500)', fontFamily: 'var(--cth-font-display)' }}>
-              {assigneeName.toUpperCase()}
-            </span>
+          {/* What it waits on, in words: the open question for you. */}
+          {open && (
+            <span title={t('kanban.needsYouTitle')} style={{
+              fontSize: 11, lineHeight: '15px', padding: '3px 5px', marginTop: 2,
+              background: 'var(--cth-lilac-light)', color: 'var(--cth-ink-900)',
+              boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)',
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
+            }}><strong>{t('kanban.asksYou')}</strong> {open.q.replace(/[*_`#>]/g, '')}</span>
           )}
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+            {owner ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--cth-ink-700)' }}>
+                <SpritePortrait character={owner.character} scale={1} />{owner.name}
+              </span>
+            ) : assigneeName ? (
+              <span style={{ fontSize: 11, color: 'var(--cth-ink-700)' }}>{assigneeName}</span>
+            ) : (
+              <span style={{ fontSize: 11, color: 'var(--cth-ink-300)' }}>{t('kanban.unassigned')}</span>
+            )}
+            {kids.length > 0 && (
+              <span style={{ fontSize: 10.5, color: 'var(--cth-ink-500)' }}>
+                {t('kanban.subtasksShort', { done: kids.filter((k) => k.status === 'done').length, total: kids.length })}
+              </span>
+            )}
+            {task.deliverable && (() => {
+              const first = splitPath(task.deliverable.split(/[\n,;]/)[0].trim()).name;
+              return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: 'var(--cth-ink-500)', minWidth: 0 }} title={task.deliverable}><FileTypeBadge name={first} />{first}</span>;
+            })()}
+          </span>
         </span>
-        {waitsOnHuman(task) && (
-          <span title={t('kanban.needsYouTitle')} style={{
-            alignSelf: 'center', marginRight: 18, flexShrink: 0,
-            fontFamily: 'var(--cth-font-display)', fontSize: 10, padding: '2px 5px 1px',
-            background: 'var(--cth-lilac)', color: 'var(--cth-ink-900)',
-            boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)'
-          }}>?</span>
-        )}
       </button>
       {/* Dismiss — sibling button (not nested) so it never triggers onOpen. */}
       <button

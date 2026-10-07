@@ -1,3 +1,4 @@
+import { useNotifyFaces } from '@/hooks/useNotifyFaces';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
 import { useStore, selectedAgent } from '@/store/store';
@@ -42,6 +43,7 @@ declare const __APP_VERSION__: string;
 export function App() {
   // Point every {{godName}} string at the orchestrator's real, renameable name.
   useGodNameSync();
+  useNotifyFaces();
   // Mirror the document only for a user who has picked an RTL app language.
   useDirectionSync();
   // Let terminals that are ALREADY open follow a language switch too.

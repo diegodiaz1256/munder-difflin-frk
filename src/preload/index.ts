@@ -826,6 +826,8 @@ const api = {
     ipcRenderer.invoke('fs:revealPath', p),
 
   // ─── Git ─────────────────────────────────────────────────────────────────
+  /** Agents' faces (PNG data URLs keyed by agent id and lower-case name) for desktop notifications. */
+  setNotifyFaces: (faces: Record<string, string>): Promise<void> => ipcRenderer.invoke('notify:setFaces', faces),
   gitIsRepo: (cwd: string): Promise<boolean> => ipcRenderer.invoke('git:isRepo', cwd),
   /** Repositories one or two levels inside a folder that is not one itself. */
   gitNestedRepos: (cwd: string): Promise<string[]> => ipcRenderer.invoke('git:nestedRepos', cwd),

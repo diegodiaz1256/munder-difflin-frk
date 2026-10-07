@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PixelPanel } from './PixelPanel';
 import { PixelBadge } from './PixelBadge';
@@ -16,6 +16,9 @@ import { restartAgent, type RestartOptions } from './restartAgent';
 import { terminalInstanceKey } from './terminalRecovery';
 import { Icon } from './Icon';
 import { MemoryGraphPanel } from './MemoryGraphPanel';
+import { ConceptGraph } from '@/pro/ConceptGraph';
+import { buildMemoryGraph, type MemoryDoc } from '@shared/memoryGraph';
+import { MarkdownPreview } from '@/markdown/MarkdownPreview';
 import { useFleetTelemetry } from '@/hooks/useTelemetry';
 import { COMMAND_GROUPS } from '@shared/claudeCommands';
 import { useStore, triggerHistoryVisible, type Agent } from '@/store/store';
@@ -967,6 +970,13 @@ function ArchivedSection() {
 
 // ─── Memory tab ──────────────────────────────────────────────────────────────
 
+/** The memory lines that mention a concept (its words), keeping headings. */
+function focusNotes(mem: string, conceptId: string, graph: ReturnType<typeof buildMemoryGraph>): string {
+  const label = (graph.concepts.find((c) => c.id === conceptId)?.label ?? conceptId).toLowerCase();
+  const words = label.split(/\s+/).filter(Boolean);
+  return mem.split('\n').filter((l) => /^#/.test(l) || words.every((w) => l.toLowerCase().includes(w))).join('\n');
+}
+
 function MemoryTab({ godId, who: controlledWho, onWho }: { godId: string; who?: string; onWho?: (id: string) => void }) {
   const { t } = useTranslation();
   const agents = useStore((s) => s.agents);
@@ -985,8 +995,13 @@ function MemoryTab({ godId, who: controlledWho, onWho }: { godId: string; who?: 
   const [textBusy, setTextBusy] = useState(false);
 
   useEffect(() => {
+    setConcept(null);
     window.cth.hiveMemory(who).then(setMem).catch(() => setMem(''));
   }, [who]);
+  const [concept, setConcept] = useState<string | null>(null);
+  const whoName = agents.find((a) => a.id === who)?.name ?? who;
+  const docs: MemoryDoc[] = useMemo(() => (mem ? [{ id: `agent:${who}`, kind: 'agent' as const, label: whoName, agentId: who, text: mem }] : []), [mem, who, whoName]);
+  const graph = useMemo(() => buildMemoryGraph(docs), [docs]);
 
   const search = async () => {
     if (!query.trim()) return;
@@ -1053,9 +1068,19 @@ function MemoryTab({ godId, who: controlledWho, onWho }: { godId: string; who?: 
 
       <Section title={t('commandCenter.memoryFile')}>
         <Select value={who} onChange={setWho}>
-          {agents.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
+          {agents.filter((a) => !a.archived).map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
         </Select>
-        <Pre>{mem || t('commandCenter.noMemory')}</Pre>
+        {/* This agent's memory as a map of what it knows (concepts and how
+            they connect), with the notes themselves formatted below it. */}
+        {mem && graph.concepts.length > 0 && (
+          <div style={{ height: 320, display: 'flex', marginTop: 8, boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)' }}>
+            <ConceptGraph graph={graph} docs={docs} selected={concept} onSelect={setConcept} />
+          </div>
+        )}
+        {mem
+          ? <div style={{ marginTop: 8, fontSize: 13 }}><MarkdownPreview source={concept ? focusNotes(mem, concept, graph) : mem} variant="card" /></div>
+          : <Pre>{t('commandCenter.noMemory')}</Pre>}
+        {concept && <button onClick={() => setConcept(null)} style={{ marginTop: 4, fontSize: 11, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--cth-ink-500)' }}>{t('commandCenter.allNotes')}</button>}
       </Section>
     </Scroll>
   );

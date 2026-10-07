@@ -384,6 +384,10 @@ const hookServer = new HookServer(
   standingGoalFromRoster,
   (agentId, event, message) => workerWake.noteHook(agentId, event, message)
 );
+hookServer.notifyAs = (agentId) => ({
+  name: hive.registry().agents?.[agentId]?.name,
+  icon: agentFaces.get(agentId)
+});
 const memory = new MemoryManager(
   () => readConfig().harnessHome,
   () => { const c = readConfig(); return { enabled: c.semanticMemory !== false, model: c.embeddingModel ?? 'minilm' }; }
@@ -1741,11 +1745,23 @@ function reengageGod(digest: string): void {
 }
 
 /** A native toast for breaker constrain/stop, gated on the notifications setting. */
-function breakerToast(title: string, body: string): void {
+function breakerToast(title: string, body: string, agentId?: string): void {
   if (!readConfig().notifications) return;
-  try { if (Notification.isSupported()) new Notification({ title, body }).show(); }
+  const icon = agentId ? agentFaces.get(agentId) : undefined;
+  try { if (Notification.isSupported()) new Notification({ title, body, ...(icon ? { icon } : {}) }).show(); }
   catch { /* unsupported platform */ }
 }
+
+// Agents' faces for desktop notifications: the renderer paints each cast
+// portrait and sends it here (keyed by agent id and by lower-case name).
+const agentFaces = new Map<string, Electron.NativeImage>();
+ipcMain.handle('notify:setFaces', (_evt, faces: unknown) => {
+  if (!faces || typeof faces !== 'object') return;
+  for (const [key, url] of Object.entries(faces as Record<string, unknown>)) {
+    if (typeof url !== 'string' || !url.startsWith('data:image/png;base64,') || url.length > 200_000) continue;
+    try { agentFaces.set(key, nativeImage.createFromDataURL(url)); } catch { /* bad image */ }
+  }
+});
 
 /** One circuit-breaker beat: pull a fresh usage sample per active agent, append
  *  it to the durable cost ledger (the SOLE durable cost store), tick the breaker,
@@ -1823,11 +1839,11 @@ function runBreakerBeat(progressWindowMs: number): void {
     } else if (d.action === 'constrain') {
       hive.send({ to: d.state.agentId, act: 'request', subject: 'Circuit breaker: constrain',
         body: `Automated guardrail escalated: ${reason}. Stop active work now: switch to read-only/plan, write a short plan of your next step, and send it to god for sign-off BEFORE running more tools.` }, 'breaker');
-      breakerToast(`${name} constrained`, reason);
+      breakerToast(`${name} constrained`, reason, d.state.agentId);
     } else if (d.action === 'stop') {
       const ptyId = ptyForAgent(d.state.agentId);
       if (ptyId) { try { ptyManager.kill(ptyId); } catch { /* already gone */ } teardownPty(ptyId); }
-      breakerToast(`${name} stopped by circuit breaker`, reason);
+      breakerToast(`${name} stopped by circuit breaker`, reason, d.state.agentId);
     }
   }
 }
@@ -5835,7 +5851,8 @@ ipcMain.handle('app:notifyMenu', (_evt, agent: unknown, question: unknown) => {
   const win = BrowserWindow.getAllWindows()[0];
   if (win?.isFocused()) return;
   try {
-    const n = new Notification({ title: `${String(agent).slice(0, 60)} is asking you`, body: String(question).slice(0, 200) });
+    const icon = agentFaces.get(String(agent).trim().toLowerCase());
+    const n = new Notification({ title: `${String(agent).slice(0, 60)} is asking you`, body: String(question).slice(0, 200), ...(icon ? { icon } : {}) });
     n.on('click', () => { if (win) { win.show(); win.focus(); } });
     n.show();
   } catch { /* unsupported */ }
@@ -6259,7 +6276,8 @@ const completionWatcher = initCompletionWatcher({
       if (!Notification.isSupported()) return;
       const reg = hive.registry();
       const title = resolveGodName(reg.agents[reg.godId ?? 'god']?.name);
-      new Notification({ title, body: evt.summary }).show();
+      const icon = agentFaces.get(reg.godId ?? 'god');
+      new Notification({ title, body: evt.summary, ...(icon ? { icon } : {}) }).show();
     } catch { /* best-effort */ }
   }
 });

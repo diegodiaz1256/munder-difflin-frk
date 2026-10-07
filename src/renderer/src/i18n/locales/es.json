@@ -519,7 +519,8 @@
     "remoteControlOnTitle": "Remote Control está activado. Haz clic para abrir esta sesión ({{url}}); también está en la app de Claude de tu móvil.",
     "remoteControlFailedTitle": "Remote Control está desactivado: {{reason}}. Haz clic para volver a intentarlo.",
     "remoteControlOnLabel": "remoto activo",
-    "remoteControlConnecting": "conectando…"
+    "remoteControlConnecting": "conectando…",
+    "allNotes": "Ver todas las notas"
   },
   "addAgent": {
     "title": "AÑADIR AGENTE",
@@ -1405,7 +1406,10 @@
     "openDeliverable": "Abrir",
     "linkedFiles": "archivos enlazados: {{count}}",
     "partOf": "Parte de",
-    "subtasks": "Subtareas · {{done}}/{{total}} hechas"
+    "subtasks": "Subtareas · {{done}}/{{total}} hechas",
+    "asksYou": "Te pregunta:",
+    "emptyColumn": "Nada aquí",
+    "subtasksShort": "{{done}}/{{total}} subtareas"
   },
   "queueComposer": {
     "recording": "● grabando: pulsa parar para transcribir",
