@@ -1,3 +1,3 @@
-- **Now**: see what every agent is doing, in Manager.
-- A tidier sidebar, with folding groups.
-- Fewer tokens spent; safer engine installs.
+- **Inbox** as a chat per agent; **task** history and subtasks.
+- **Deliverables** with authors and history; agents keep their conversation on restart.
+- Faces in notifications, optional **Fortress** browser engine.
