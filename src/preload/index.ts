@@ -169,6 +169,7 @@ export interface VoiceMessage {
   subject: string;
   body: string;
   requires_reply: boolean;
+  in_reply_to?: string | null;
   direction: 'inbox' | 'outbox';
   owner: string;
   archived: boolean;
@@ -895,6 +896,10 @@ const api = {
    *  oldest first; one task's when `taskId` is given. */
   hiveTaskHistory: (taskId?: string, limit?: number): Promise<TaskEvent[]> =>
     ipcRenderer.invoke('hive:taskHistory', taskId ?? null, limit),
+  /** Keep the prompt just submitted to `agentId` as the human's (Inbox). */
+  keepHumanPrompt: (agentId: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('hive:keepHumanPrompt', agentId),
+  /** Prompts the human typed into agents' terminals, oldest first. */
+  hiveHumanPrompts: (): Promise<Array<{ id: string; agentId: string; ts: string; text: string }>> => ipcRenderer.invoke('hive:humanPrompts'),
   hiveMessages: (opts?: { agentId?: string; id?: string; limit?: number; includeArchived?: boolean; history?: boolean }): Promise<VoiceMessage[]> =>
     ipcRenderer.invoke('hive:messages', opts ?? {}),
   /** Consolidated per-agent directory (registry + telemetry + context), incl.

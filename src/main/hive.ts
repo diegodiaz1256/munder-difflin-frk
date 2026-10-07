@@ -108,6 +108,8 @@ export interface VoiceMessage {
   /** REDACTED message body. */
   body: string;
   requires_reply: boolean;
+  /** The message this one answers, if any (an id, never content). */
+  in_reply_to?: string | null;
   /** Which mailbox folder this copy was read from, relative to `owner`. */
   direction: 'inbox' | 'outbox';
   /** The agent whose mailbox this copy lives in. */
@@ -2568,6 +2570,7 @@ export class HiveManager {
             subject: redactSecrets(m.subject),
             body: redactSecrets(m.body),
             requires_reply: !!m.requires_reply,
+            in_reply_to: typeof m.in_reply_to === 'string' ? m.in_reply_to : null,
             direction: f.direction,
             owner,
             archived: f.archived,
