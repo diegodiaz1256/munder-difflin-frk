@@ -1472,6 +1472,26 @@ export class HiveManager {
     return this.registry().agents[agentId]?.sessionId;
   }
 
+  /**
+   * Every session this agent has had, newest first (the recorded one, then the
+   * log's earlier ones). A CLI writes a session's transcript only after its
+   * first message, so the newest id can be an empty session (a restart that
+   * started fresh and was closed again): resuming tries these in order and
+   * takes the newest that has a transcript, instead of starting fresh and
+   * recording yet another empty one, which lost the real conversation.
+   */
+  recentSessions(agentId: string, max = 10): string[] {
+    const out: string[] = [];
+    const add = (id: unknown) => { if (typeof id === 'string' && id && !out.includes(id)) out.push(id); };
+    add(this.lastSession(agentId));
+    const log = this.logTail(20_000) as Array<{ kind?: string; agentId?: string; sessionId?: string }>;
+    for (let i = log.length - 1; i >= 0 && out.length < max; i--) {
+      const e = log[i];
+      if (e?.kind === 'session' && e.agentId === agentId) add(e.sessionId);
+    }
+    return out;
+  }
+
   /** Claude Code settings that route every relevant hook through the shim.
    *  Claude-only — this is invoked solely on the Claude spawn path. (The MCP
    *  bundle is NOT here: see the --mcp-config note in ensureAgent.) */

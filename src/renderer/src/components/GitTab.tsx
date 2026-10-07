@@ -40,7 +40,7 @@ function statusColor(code: string): string {
   return 'var(--cth-ink-500)';
 }
 
-export function GitTab({ cwd }: GitTabProps) {
+function GitRepoView({ cwd }: GitTabProps) {
   const { t } = useTranslation();
   const [isRepo, setIsRepo] = useState<boolean | null>(null);
   const [branch, setBranch] = useState<string | null>(null);
@@ -261,6 +261,50 @@ function StatusGroup({ label, entries }: {
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * The agent's repository, or, when its folder is not one (a projects folder
+ * holding several), a picker of the repositories inside it, one or two levels
+ * down, with the chosen one shown below.
+ */
+export function GitTab({ cwd }: GitTabProps) {
+  const { t } = useTranslation();
+  const [isRepo, setIsRepo] = useState<boolean | null>(null);
+  const [nested, setNested] = useState<string[]>([]);
+  const [picked, setPicked] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setPicked(null);
+    void window.cth.gitIsRepo(cwd).then(async (repo) => {
+      if (!alive) return;
+      setIsRepo(repo);
+      if (!repo) {
+        const list = await window.cth.gitNestedRepos(cwd).catch(() => [] as string[]);
+        if (alive) setNested(list);
+      }
+    });
+    return () => { alive = false; };
+  }, [cwd]);
+  if (isRepo === null) return null;
+  if (isRepo) return <GitRepoView cwd={cwd} />;
+  if (!nested.length) return <GitRepoView cwd={cwd} />;
+  const current = picked ?? nested[0];
+  const rel = (p: string) => p.slice(cwd.length).replace(/^[\\/]+/, '');
+  return (
+    <div style={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '6px 10px', borderBottom: '1px solid var(--cth-ink-300)', fontFamily: 'var(--cth-font-ui)', fontSize: 12 }}>
+        <span style={{ color: 'var(--cth-ink-500)' }}>{t('gitTab.reposInside', { count: nested.length })}</span>
+        {nested.map((p) => (
+          <button key={p} onClick={() => setPicked(p)} title={p}
+            style={{ border: 'none', cursor: 'pointer', padding: '2px 8px', fontFamily: 'var(--cth-font-mono)', fontSize: 11,
+              background: p === current ? 'var(--cth-lemon)' : 'var(--cth-cream-200)', color: 'var(--cth-ink-900)',
+              boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)' }}>{rel(p)}</button>
+        ))}
+      </div>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><GitRepoView key={current} cwd={current} /></div>
     </div>
   );
 }

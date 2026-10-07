@@ -1193,7 +1193,8 @@
     "deleted": "eliminado",
     "renamed": "renombrado",
     "unmerged": "sin fusionar",
-    "copyPath": "Copiar la ruta"
+    "copyPath": "Copiar la ruta",
+    "reposInside": "{{count}} repositorios en esta carpeta:"
   },
   "fullscreenTerminal": {
     "showAgentList": "Mostrar la lista de agentes",

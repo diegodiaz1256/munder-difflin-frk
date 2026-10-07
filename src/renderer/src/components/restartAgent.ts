@@ -68,7 +68,10 @@ export async function restartAgent(a: Agent, model: string | undefined, opts: Re
     if (!resumeSessionId) {
       giveUpOnResume('No recorded session ID; current process was left running.');
     } else if (provider === 'claude' && !(await window.cth.resolveSessionCwd(resumeSessionId))) {
-      giveUpOnResume('Session transcript not found; current process was left running.');
+      // The recorded session never got a message (an empty restart): let main
+      // resume the newest of this agent's sessions that has a transcript. If
+      // none has, the spawn answers resumed:false and this restart fails below.
+      resumeSessionId = undefined;
     }
   }
   // Capture the live grid before replacing anything. Restart & Continue

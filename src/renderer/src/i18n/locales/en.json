@@ -1193,7 +1193,8 @@
     "deleted": "deleted",
     "renamed": "renamed",
     "unmerged": "unmerged",
-    "copyPath": "Copy path"
+    "copyPath": "Copy path",
+    "reposInside": "{{count}} repositories in this folder:"
   },
   "fullscreenTerminal": {
     "showAgentList": "Show the agent list",

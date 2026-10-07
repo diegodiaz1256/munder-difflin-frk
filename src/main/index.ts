@@ -3680,7 +3680,10 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
     // actually present (already or after the copy); otherwise fall back to a fresh
     // session rather than launching a `--resume` against a missing id.
     const explicitSid = typeof opts.resumeSessionId === 'string' ? opts.resumeSessionId.trim() : '';
-    const sid = explicitSid || (opts.resume === true ? hive.lastSession(opts.hive.id) : undefined);
+    // Restore: the newest of this agent's sessions that still has a transcript.
+    const sid = explicitSid || (opts.resume === true
+      ? (hive.recentSessions(opts.hive.id).find((x) => seedSessionTranscript(opts.cwd!, x)) ?? hive.lastSession(opts.hive.id))
+      : undefined);
     if (sid && !args.includes('--resume')) {
       if (seedSessionTranscript(opts.cwd, sid)) {
         args.push('--resume', sid);
@@ -4628,6 +4631,25 @@ async function revealFile(file: string): Promise<string> {
 }
 
 // ─── IPC: git ───────────────────────────────────────────────────────────────
+// Repositories inside a folder that is not one itself (a projects folder of
+// several repos, one or two levels down), for the Git tab's picker.
+ipcMain.handle('git:nestedRepos', (_evt, cwd: unknown) => {
+  if (typeof cwd !== 'string' || !cwd || !uncAllowed(cwd) || !existsSync(cwd)) return [];
+  const out: string[] = [];
+  const walk = (dir: string, depth: number) => {
+    if (depth > 2 || out.length >= 50) return;
+    let entries: import('node:fs').Dirent[] = [];
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith('.') || e.name === 'node_modules') continue;
+      const p = join(dir, e.name);
+      if (existsSync(join(p, '.git'))) out.push(p);
+      else walk(p, depth + 1);
+    }
+  };
+  walk(cwd, 1);
+  return out.sort((a, b) => a.localeCompare(b));
+});
 ipcMain.handle('git:isRepo', (_evt, cwd: unknown) => {
   if (typeof cwd !== 'string') return false;
   return isRepo(cwd);
