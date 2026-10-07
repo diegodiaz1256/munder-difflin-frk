@@ -2544,5 +2544,27 @@
     "status_doing": "doing",
     "status_blocked": "blocked",
     "status_done": "done"
+  },
+  "fortress": {
+    "unsupported": "Fortress ships no build for this computer.",
+    "install": "Download and install",
+    "installNote": "About 250 MB, checked against the release's SHA-256 list before it runs.",
+    "state_downloading": "Downloading… {{percent}}%",
+    "state_verifying": "Checking the download…",
+    "state_extracting": "Unpacking…",
+    "licensed": "Signed in: v3 engine.",
+    "notLicensed": "Not signed in: runs the older v1 engine.",
+    "signIn": "Sign in with your account",
+    "needsUv": "Signing in needs uv (above).",
+    "check": "Check again",
+    "approveHint": "Finish signing in in your browser, including approving this device:",
+    "useIt": "Use Fortress for the office browser",
+    "v1Note": "Until you sign in, Fortress runs its first-generation engine.",
+    "manual": "Prefer a terminal? Run",
+    "remove": "Remove ({{size}})",
+    "renew": "Renew key",
+    "renewTip": "Re-issue the key before it expires",
+    "signOut": "Sign out",
+    "needsUvWindows": "Signing in needs uv for Windows itself (Fortress runs beside the app, not inside WSL): powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\""
   }
 }

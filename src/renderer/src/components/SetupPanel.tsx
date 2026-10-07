@@ -15,7 +15,7 @@
  * from the renderer. The user still presses dispatch. That keeps a real
  * confirmation step in front of anything that writes outside the app.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PixelButton } from './PixelButton';
 import { Icon } from './Icon';
@@ -44,7 +44,7 @@ function StatusChip({ tool }: { tool: ToolStatus }) {
   );
 }
 
-function ToolRow({ tool }: { tool: ToolStatus }) {
+function ToolRow({ tool, onChanged }: { tool: ToolStatus; onChanged?: () => void }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const copy = () => {
@@ -100,6 +100,8 @@ function ToolRow({ tool }: { tool: ToolStatus }) {
         </div>
       )}
 
+      {tool.managed === 'fortress' && <FortressControls onInstalledChange={onChanged} />}
+
       {(tool.note || tool.docsUrl) && (
         <div style={{ fontSize: 11, color: 'var(--cth-ink-500)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {tool.note && <span>{tool.note}</span>}
@@ -111,6 +113,98 @@ function ToolRow({ tool }: { tool: ToolStatus }) {
             >{t('setupPanel.docs')}</a>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+type FortressView = Awaited<ReturnType<typeof window.cth.fortressStatus>>;
+
+const btn: React.CSSProperties = {
+  flexShrink: 0, fontFamily: 'var(--cth-font-ui)', fontSize: 11, padding: '3px 8px',
+  background: 'var(--cth-cream-200)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)',
+  border: 'none', cursor: 'pointer', color: 'var(--cth-ink-900)'
+};
+
+/**
+ * Fortress's own controls: the app downloads and verifies it, the user signs in
+ * with their own account (Fortress's device flow, in their browser), and a
+ * switch makes it the office browser's engine. Polls while something runs.
+ */
+function FortressControls({ onInstalledChange }: { onInstalledChange?: () => void }) {
+  const { t } = useTranslation();
+  const [st, setSt] = useState<FortressView | null>(null);
+  // The row's READY / NOT SET UP chip comes from the panel's list: reload it
+  // when an install finishes or a removal lands here.
+  const installed = st?.installed;
+  const seen = useRef<boolean | undefined>(undefined);
+  useEffect(() => {
+    if (installed === undefined) return;
+    if (seen.current !== undefined && seen.current !== installed) onInstalledChange?.();
+    seen.current = installed;
+  }, [installed, onInstalledChange]);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => { try { setSt(await window.cth.fortressStatus()); } catch { /* keep last */ } }, []);
+  useEffect(() => { void load(); }, [load]);
+  const busy = !!st && (['downloading', 'verifying', 'extracting'].includes(st.installing.state) || st.activation.state === 'waiting');
+  useEffect(() => {
+    if (!busy) return;
+    const id = setInterval(() => { void load(); }, 1500);
+    return () => clearInterval(id);
+  }, [busy, load]);
+  if (!st) return null;
+  if (!st.supported) return <div style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>{t('fortress.unsupported')}</div>;
+
+  const run = async (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+    setError(null);
+    const r = await fn();
+    if (!r.ok && r.error) setError(r.error);
+    void load();
+  };
+  const licensed = st.license?.licensed && st.license.mode === 'v3';
+  const inst = st.installing;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: 'var(--cth-ink-700)' }}>
+      {!st.installed && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {inst.state === 'idle' || inst.state === 'failed'
+            ? <button style={btn} onClick={() => void run(window.cth.fortressInstall)}>{t('fortress.install')}</button>
+            : <span>{t(`fortress.state_${inst.state}`, { percent: inst.percent ?? 0 })}</span>}
+          <span style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>{t('fortress.installNote')}</span>
+        </div>
+      )}
+      {st.installed && (
+        <>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>{licensed ? t('fortress.licensed') : t('fortress.notLicensed')}</span>
+            {!licensed && st.activation.state !== 'waiting' && st.activator && (
+              <button style={btn} onClick={() => void run(window.cth.fortressActivate)}>{t('fortress.signIn')}</button>
+            )}
+            {!st.activator && !licensed && <span style={{ color: 'var(--cth-ink-500)' }}>{t(window.cth.platform === 'win32' ? 'fortress.needsUvWindows' : 'fortress.needsUv')}</span>}
+            <button style={btn} onClick={() => { void window.cth.fortressRefreshLicense().then(() => load()); }}>{t('fortress.check')}</button>
+            {licensed && <button style={btn} title={t('fortress.renewTip')} onClick={() => void run(() => window.cth.fortressLicense('refresh'))}>{t('fortress.renew')}</button>}
+            {licensed && <button style={btn} onClick={() => void run(() => window.cth.fortressLicense('logout'))}>{t('fortress.signOut')}</button>}
+          </div>
+          {st.activation.state === 'waiting' && st.activation.url && (
+            <div style={{ padding: 6, background: 'var(--cth-lemon-light)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)' }}>
+              {t('fortress.approveHint')}{' '}
+              <a href={st.activation.url} onClick={(e) => { e.preventDefault(); void window.cth.openExternal(st.activation.url!); }} style={{ color: 'var(--cth-ink-900)', wordBreak: 'break-all' }}>{st.activation.url}</a>
+            </div>
+          )}
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
+            <input type="checkbox" checked={st.enabled} onChange={(e) => void run(() => window.cth.fortressSetEnabled(e.target.checked))} />
+            {t('fortress.useIt')}
+          </label>
+          {st.enabled && !licensed && <div style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>{t('fortress.v1Note')}</div>}
+          <div style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>
+            {t('fortress.manual')} <code style={{ fontFamily: 'var(--cth-font-mono)' }}>{st.activator === 'tilion' ? 'tilion activate' : 'uvx --from tilion-fortress==153.0.8010.36.post1 tilion-fortress activate'}</code>
+            {' · '}
+            <button style={{ ...btn, padding: '1px 6px' }} onClick={() => void run(window.cth.fortressUninstall)}>{t('fortress.remove', { size: `${Math.round(st.bytes / 1e6)} MB` })}</button>
+          </div>
+        </>
+      )}
+      {(error || inst.error || st.activation.error || st.error) && (
+        <div style={{ fontSize: 11, color: 'var(--cth-coral)' }}>{error || inst.error || st.activation.error || st.error}</div>
       )}
     </div>
   );
@@ -205,7 +299,7 @@ export function SetupPanel({ onDone }: { onDone?: () => void } = {}) {
             }}>{t(section.titleKey)}</div>
             <div style={{ fontSize: 11, color: 'var(--cth-ink-500)', marginTop: -2 }}>{t(section.blurbKey)}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {rows.map((t) => <ToolRow key={t.id} tool={t} />)}
+              {rows.map((t) => <ToolRow key={t.id} tool={t} onChanged={() => void refresh()} />)}
             </div>
           </div>
         );

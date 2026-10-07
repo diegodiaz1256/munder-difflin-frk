@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'ele
 import type { AgentProvider } from '../shared/agentProvider';
 import type { HireManifest } from '../shared/hire';
 import type { TaskEvent } from '../shared/taskHistory';
+import type { FortressStatus } from '../main/fortress';
+export type FortressStatusView = FortressStatus & { enabled: boolean; bytes: number };
 import type { RateLimits } from '../shared/rateLimits';
 export type { HireManifest } from '../shared/hire';
 import type { IntegrationRecord, IntegrationTemplate } from '../shared/integrations';
@@ -1491,6 +1493,16 @@ const api = {
   wslDistros: (): Promise<{ ok: boolean; distros: string[]; mirrored?: boolean; error?: string }> => ipcRenderer.invoke('wsl:distros'),
   wslCreateOffice: (distro: string, name: string): Promise<{ ok: boolean; path?: string; error?: string }> =>
     ipcRenderer.invoke('wsl:createOffice', distro, name),
+  // Fortress as the office browser's engine (main/fortress.ts). The license
+  // key never crosses here: activation is the user's own sign-in in their browser.
+  fortressStatus: (): Promise<FortressStatusView> => ipcRenderer.invoke('fortress:status'),
+  fortressInstall: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('fortress:install'),
+  fortressActivate: (): Promise<{ ok: boolean; url?: string; error?: string }> => ipcRenderer.invoke('fortress:activate'),
+  fortressRefreshLicense: (): Promise<FortressStatusView['license']> => ipcRenderer.invoke('fortress:refreshLicense'),
+  /** `license refresh` / `license logout` with Fortress's own CLI. */
+  fortressLicense: (which: 'refresh' | 'logout'): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('fortress:license', which),
+  fortressSetEnabled: (on: boolean): Promise<{ ok: boolean }> => ipcRenderer.invoke('fortress:setEnabled', on),
+  fortressUninstall: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('fortress:uninstall'),
   // Environment & secrets (main/envVault.ts). Secret values are write-only.
   envList: (): Promise<{ vars: EnvVarView[]; runners: RunnerView[] }> => ipcRenderer.invoke('env:list'),
   envSetVar: (v: { name: string; kind: 'plain' | 'secret' | 'op'; value?: string; agents?: string[] | null; note?: string }, secret?: string): Promise<{ ok: boolean; error?: string }> =>

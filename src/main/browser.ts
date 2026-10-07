@@ -9,6 +9,7 @@
  * no popups, navigation limited to http(s).
  */
 import { BrowserWindow, app, session, type Session } from 'electron';
+import { cdpRead } from './cdpBrowse';
 import {
   EXTRACT_PAGE_SCRIPT, EXTRACT_SEARCH_SCRIPT, browseUrlProblem, chromeUserAgent,
   type BrowsedPage
@@ -22,6 +23,23 @@ const SLOW_SETTLE_MS = 2500;
 const MAX_PARALLEL = 2;
 /** Requests that cost memory and CPU but add no text. */
 const SKIPPED = new Set(['image', 'media', 'font', 'object']);
+
+/** An external engine to use instead (Fortress, fortress.ts): resolves its
+ *  CDP port, or null when it is switched off. Any failure falls back to the
+ *  built-in engine, so turning Fortress on can never take browsing away. */
+let externalEngine: (() => Promise<number> | null) | null = null;
+let onExternalFailure: ((e: unknown) => void) | null = null;
+export function setExternalEngine(port: (() => Promise<number> | null) | null, onFailure?: (e: unknown) => void): void {
+  externalEngine = port;
+  onExternalFailure = onFailure ?? null;
+}
+
+async function viaExternal<T>(fn: (port: number) => Promise<T>): Promise<T | undefined> {
+  const pending = externalEngine?.();
+  if (!pending) return undefined;
+  try { return await fn(await pending); }
+  catch (e) { onExternalFailure?.(e); return undefined; }
+}
 
 let browserSession: Session | null = null;
 let userAgent = '';
@@ -77,21 +95,32 @@ async function withPage<T>(url: string, read: (win: BrowserWindow, status: numbe
 export function browsePage(url: string): Promise<BrowsedPage> {
   const problem = browseUrlProblem(url);
   if (problem) return Promise.reject(new Error(problem));
-  return slot(() => withPage(url, async (win, status) => {
-    let page = await win.webContents.executeJavaScript(EXTRACT_PAGE_SCRIPT, true) as BrowsedPage;
-    // A page that JavaScript is still filling: give it a little longer.
-    if ((page.text ?? '').trim().length < 200) {
-      await sleep(SLOW_SETTLE_MS);
-      page = await win.webContents.executeJavaScript(EXTRACT_PAGE_SCRIPT, true) as BrowsedPage;
-    }
-    return { ...page, status };
-  }));
+  return slot(async () => {
+    const ext = await viaExternal(async (port) => {
+      const r = await cdpRead<BrowsedPage>(port, url, EXTRACT_PAGE_SCRIPT, (p) => (p?.text ?? '').trim().length < 200);
+      return { ...r.value, status: r.status };
+    });
+    if (ext) return ext;
+    return withPage(url, async (win, status) => {
+      let page = await win.webContents.executeJavaScript(EXTRACT_PAGE_SCRIPT, true) as BrowsedPage;
+      // A page that JavaScript is still filling: give it a little longer.
+      if ((page.text ?? '').trim().length < 200) {
+        await sleep(SLOW_SETTLE_MS);
+        page = await win.webContents.executeJavaScript(EXTRACT_PAGE_SCRIPT, true) as BrowsedPage;
+      }
+      return { ...page, status };
+    });
+  });
 }
 
 /** Search the web (DuckDuckGo's HTML results) and return the result list. */
 export function searchWeb(query: string): Promise<{ results: Array<{ title: string; href: string; snippet: string }>; text: string }> {
   const q = String(query ?? '').trim().slice(0, 400);
   if (!q) return Promise.reject(new Error('a query is required'));
-  return slot(() => withPage(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`, async (win) =>
-    win.webContents.executeJavaScript(EXTRACT_SEARCH_SCRIPT, true)));
+  const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
+  return slot(async () => {
+    const ext = await viaExternal(async (port) => (await cdpRead<{ results: Array<{ title: string; href: string; snippet: string }>; text: string }>(port, searchUrl, EXTRACT_SEARCH_SCRIPT)).value);
+    if (ext) return ext;
+    return withPage(searchUrl, async (win) => win.webContents.executeJavaScript(EXTRACT_SEARCH_SCRIPT, true));
+  });
 }

@@ -256,6 +256,9 @@ export interface HarnessConfig {
   envVars?: Array<{ name: string; kind: 'plain' | 'secret' | 'op'; value?: string; agents?: string[] | null; note?: string }>;
   /** Commands agents may ask the app to run with secrets (envVault.ts). */
   runners?: Array<{ id: string; name: string; command: string; description?: string; secrets: string[]; approval: 'always' | 'on-change' | 'never'; timeoutSec?: number }>;
+  /** The office browser's engine: the built-in Chromium (default) or Fortress,
+   *  downloaded and verified by the app (main/fortress.ts). */
+  officeBrowserEngine?: 'builtin' | 'fortress';
   /** Your own MCP servers (main/mcpServers.ts). Secret env values are NOT
    *  here: they live in the encrypted store as mcp:<id>:<ENV>. */
   customMcp?: Array<{ id: string; name: string; transport: { kind: 'stdio'; command: string; args: string[] } | { kind: 'http'; url: string }; env: Record<string, string>; secretEnv: string[]; enabled: boolean; agents: string[] | null; source?: string }>;
