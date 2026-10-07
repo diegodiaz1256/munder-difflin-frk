@@ -95,3 +95,9 @@ export function disposeTerminal(ptyId: string): void {
   try { entry.term.dispose(); } catch { /* noop */ }
   pool.delete(ptyId);
 }
+
+/** No terminals are drawn on the server: nobody types into one here. */
+export function takeHumanInput(_ptyId: string | undefined, _withinMs?: number): boolean { return false; }
+
+/** No terminal screen to read on the server. */
+export function terminalUsage(_ptyId: string | undefined): { percent: number; window: string } | null { return null; }
