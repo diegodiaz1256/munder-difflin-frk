@@ -1036,12 +1036,18 @@ export const useStore = create<State>((set, get) => ({
   enqueuePendingHires: (manifests) => set((s) => ({
     hireQueue: enqueueHires(s.hireQueue, manifests)
   })),
-  finishPendingHire: () => set((s) => ({
-    hireQueue: finishCurrentHire(s.hireQueue)
-  })),
-  clearPendingHires: () => set((s) => ({
-    hireQueue: clearHireQueue(s.hireQueue)
-  })),
+  finishPendingHire: () => set((s) => {
+    const token = s.hireQueue.pending[0]?.reviewToken;
+    if (token) void window.cth.markHireReviewed?.(token);
+    return { hireQueue: finishCurrentHire(s.hireQueue) };
+  }),
+  clearPendingHires: () => set((s) => {
+    // Closing the review must not lose the rest of an orchestrator batch: main
+    // puts those manifests back in research/hires/ for the next launch.
+    const tokens = s.hireQueue.pending.map((m) => m.reviewToken).filter((t): t is string => !!t);
+    if (tokens.length) void window.cth.deferHires?.(tokens);
+    return { hireQueue: clearHireQueue(s.hireQueue) };
+  }),
   setFullscreen: (id) => {
     // Entering focus mode makes it the default view; leaving it clears that.
     // Only an explicit toggle writes the preference, so an agent closing under

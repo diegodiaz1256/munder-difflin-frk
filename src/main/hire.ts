@@ -277,27 +277,48 @@ export function readHireManifestFiles(paths: readonly string[]): {
  * offered once. A manifest is moved to `.offered/` once it is handed to the
  * Add-Agent review (so a restart does not offer it again) and to `.invalid/`
  * when it does not validate. Never spawns anything: the human confirms.
+ *
+ * Dotfiles and empty files are not manifests and are left alone: Claude Code's
+ * sandbox mounts an empty `.mcp.json` into any folder a sandboxed command runs
+ * in, and reporting it as a rejected hire every pass flooded the inbox.
+ * `skip` holds `<dir>/<file>` paths the human closed without deciding; they
+ * stay where they are until the next launch.
  */
-export function collectHireManifests(dirs: readonly string[]): {
+export function collectHireManifests(dirs: readonly string[], skip?: ReadonlySet<string>): {
   offered: HireManifest[];
+  /** Where each offered manifest came from, index-aligned with `offered`. */
+  sources: Array<{ dir: string; file: string }>;
   invalid: Array<{ file: string; error: string }>;
 } {
   const offered: HireManifest[] = [];
+  const sources: Array<{ dir: string; file: string }> = [];
   const invalid: Array<{ file: string; error: string }> = [];
   for (const dir of dirs) {
     let files: string[] = [];
-    try { files = readdirSync(dir).filter((f) => f.endsWith('.json')).sort(); } catch { continue; }
+    try { files = readdirSync(dir).filter((f) => f.endsWith('.json') && !f.startsWith('.')).sort(); } catch { continue; }
     for (const f of files) {
       const path = join(dir, f);
+      if (skip?.has(path)) continue;
+      try { if (statSync(path).size === 0) continue; } catch { continue; }
       const res = readHireManifestFile(path);
       const sub = res.ok ? '.offered' : '.invalid';
       try {
         mkdirSync(join(dir, sub), { recursive: true });
         renameSync(path, join(dir, sub, f));
       } catch { continue; } // could not move it: try again next pass rather than offer twice
-      if (res.ok) offered.push(res.manifest);
+      if (res.ok) { offered.push(res.manifest); sources.push({ dir, file: f }); }
       else invalid.push({ file: f, error: res.error.split(path).join(f) });
     }
   }
-  return { offered, invalid };
+  return { offered, sources, invalid };
+}
+
+/** Put an offered manifest back in <dir> (the human closed the review without
+ *  spawning or skipping it). Returns the restored path, or null. */
+export function restoreOfferedHire(dir: string, file: string): string | null {
+  if (file !== basename(file) || file.startsWith('.') || !file.endsWith('.json')) return null;
+  try {
+    renameSync(join(dir, '.offered', file), join(dir, file));
+    return join(dir, file);
+  } catch { return null; }
 }

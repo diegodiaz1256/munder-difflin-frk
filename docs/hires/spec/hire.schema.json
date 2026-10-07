@@ -70,9 +70,19 @@
     },
     "tokenCap": {
       "type": "integer",
-      "minimum": 1,
+      "minimum": 0,
       "maximum": 10000000000,
-      "description": "Per-agent total-token ceiling, applied to the harness's agentTokenCaps after spawn."
+      "description": "Per-agent total-token ceiling, applied to the harness's agentTokenCaps after spawn. 0 means no cap."
+    },
+    "cwd": {
+      "type": "string",
+      "maxLength": 1024,
+      "description": "Absolute path of the folder the agent works in. Local manifests only (research/hires/ or a file import); dropped from a deep-linked manifest."
+    },
+    "sessionId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,128}$",
+      "description": "A Claude session id to continue with --resume. Local manifests only, like cwd."
     },
     "author": {
       "type": "string",
