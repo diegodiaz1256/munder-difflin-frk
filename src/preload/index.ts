@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import type { AgentProvider } from '../shared/agentProvider';
 import type { HireManifest } from '../shared/hire';
+import type { TaskEvent } from '../shared/taskHistory';
 import type { RateLimits } from '../shared/rateLimits';
 export type { HireManifest } from '../shared/hire';
 import type { IntegrationRecord, IntegrationTemplate } from '../shared/integrations';
@@ -890,7 +891,11 @@ const api = {
    *  main. Pass { id } for one message, { agentId } to scope to one mailbox, or
    *  {} for the whole floor. Backs Realtime Michael's get_messages. The renderer
    *  never sees a raw body or a secret — stripping happens main-side. */
-  hiveMessages: (opts?: { agentId?: string; id?: string; limit?: number; includeArchived?: boolean }): Promise<VoiceMessage[]> =>
+  /** What happened to the tasks (created, assigned, moved, asked, answered…),
+   *  oldest first; one task's when `taskId` is given. */
+  hiveTaskHistory: (taskId?: string, limit?: number): Promise<TaskEvent[]> =>
+    ipcRenderer.invoke('hive:taskHistory', taskId ?? null, limit),
+  hiveMessages: (opts?: { agentId?: string; id?: string; limit?: number; includeArchived?: boolean; history?: boolean }): Promise<VoiceMessage[]> =>
     ipcRenderer.invoke('hive:messages', opts ?? {}),
   /** Consolidated per-agent directory (registry + telemetry + context), incl.
    *  archived agents. Backs Realtime Michael's get_agent_detail / list_agents. */

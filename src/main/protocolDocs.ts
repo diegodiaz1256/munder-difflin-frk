@@ -76,7 +76,8 @@ The harness fills in \`id\`, \`from\`, \`hops\`, and timestamps.
     body: `Two shared surfaces, both in the hive root:
 - \`board.md\` — the freeform narrative plan. God is its sole scribe; others \`propose\` edits to god.
 - \`tasks.json\` — the task cards (a kanban: \`todo / doing / blocked / done\`, with title, assignee,
-  priority, deps, and \`deliverable\`). Keep the card you're working on in the right status.`
+  priority, deps, \`deliverable\`, and \`parent\` on a subtask: the id of the card it is a piece of).
+  Keep the card you're working on in the right status.`
   },
   {
     file: 'services.md',

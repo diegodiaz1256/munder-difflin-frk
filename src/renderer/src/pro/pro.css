@@ -150,6 +150,16 @@ button.pro-card:hover { border-color: var(--pro-line-strong); }
   .pro-side { width: 168px; }
 }
 
+/* A task card's deliverable: one quiet line that lights up on hover. */
+.pro-deliv-chip {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  font-size: 12px; padding: 4px 8px; border-radius: 6px; cursor: pointer;
+  background: var(--cth-cream-100); border: 1px dashed var(--pro-line); color: var(--pro-text);
+}
+.pro-deliv-chip:hover, .pro-deliv-chip:focus-visible { background: var(--cth-lemon-light); border-style: solid; outline: none; }
+.pro-deliv-chip svg { flex-shrink: 0; opacity: .7; }
+.pro-deliv-chip > span:nth-of-type(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+
 /* Factories floor: a working desk's avatar bobs as it types; a newly hired
    desk fades in. */
 .pro-typing { animation: pro-type 0.9s steps(2) infinite; }

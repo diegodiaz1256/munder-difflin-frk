@@ -5,9 +5,13 @@ import { PixelButton } from './PixelButton';
 import { PixelBadge } from './PixelBadge';
 import { Icon } from './Icon';
 import { useStore } from '@/store/store';
+import { TaskTimeline } from './TaskTimeline';
+import { FileTypeBadge } from './FileTypeBadge';
+import { deliverablePaths, splitPath } from '@shared/deliverables';
 import { MarkdownPreview } from '@/markdown/MarkdownPreview';
 import { useRtl } from '@/i18n/useDirection';
 import { useProStore } from '@/pro/proStore';
+import { SpritePortrait } from './SpritePortrait';
 
 /** A card on the task kanban. Mirrors HiveTask in the main/preload process —
  *  re-declared locally so the renderer doesn't reach into the preload package
@@ -39,6 +43,8 @@ export interface HiveTask {
   result?: string;
   /** Path(s) of what the card produced for the human (Manager → Deliverables). */
   deliverable?: string;
+  /** The task this one is a piece of (a subtask), by id. */
+  parent?: string;
 }
 
 /** The card's currently open question for the human, if any. An entry the human
@@ -100,6 +106,7 @@ export function parseTasks(raw: unknown): HiveTask[] {
       dependsOn: Array.isArray(t.dependsOn) ? t.dependsOn.filter((d): d is string => typeof d === 'string') : [],
       priority: typeof t.priority === 'number' ? t.priority : 3,
       deliverable: typeof t.deliverable === 'string' && t.deliverable.trim() ? t.deliverable : undefined,
+      parent: typeof t.parent === 'string' && t.parent.trim() ? t.parent.trim() : undefined,
       result: typeof t.result === 'string' && t.result.trim() ? t.result : undefined,
       createdAt: typeof t.createdAt === 'string' ? t.createdAt : new Date().toISOString(),
       humanQA: Array.isArray(t.humanQA)
@@ -206,7 +213,7 @@ export function TasksKanban() {
               </div>
               <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {cards.length === 0 && (
-                  <div style={{ fontSize: 12, color: 'var(--cth-ink-300)', textAlign: 'center', padding: '8px 0' }}>—</div>
+                  <div style={{ fontSize: 12, color: 'var(--cth-ink-300)', textAlign: 'center', padding: '8px 0' }}>{t('kanban.emptyColumn')}</div>
                 )}
                 {cards.map((t) => (
                   <TaskCard
@@ -214,6 +221,7 @@ export function TasksKanban() {
                     task={t}
                     accent={col.accent}
                     assigneeName={nameFor(t.assignee)}
+                    all={tasks}
                     onOpen={() => openTaskDetail(t.id)}
                     onDismiss={() => dismissTask(t.id)}
                   />
@@ -233,14 +241,19 @@ export function TasksKanban() {
 // lives in the detail view a click away: a kanban card can carry little more
 // than a title.
 
-function TaskCard({ task, accent, assigneeName, onOpen, onDismiss }: {
+function TaskCard({ task, accent, assigneeName, all, onOpen, onDismiss }: {
   task: HiveTask;
   accent: string;
   assigneeName?: string;
+  all: HiveTask[];
   onOpen: () => void;
   onDismiss: () => void;
 }) {
   const { t } = useTranslation();
+  const owner = useStore((s) => (task.assignee ? s.agents.find((a) => a.id === task.assignee) : undefined));
+  const parent = task.parent ? all.find((x) => x.id === task.parent) : undefined;
+  const kids = all.filter((x) => x.parent === task.id);
+  const open = openQuestion(task);
   return (
     <div style={{ position: 'relative', display: 'flex' }}>
       <button
@@ -266,25 +279,44 @@ function TaskCard({ task, accent, assigneeName, onOpen, onDismiss }: {
             fontFamily: 'var(--cth-font-mono)', fontSize: 10,
             color: 'var(--cth-ink-500)'
           }}>{task.id}</span>
+          {parent && (
+            <span style={{ fontSize: 10.5, color: 'var(--cth-ink-500)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t('kanban.partOf')}>↳ {parent.title}</span>
+          )}
           <span style={{
             fontFamily: 'var(--cth-font-ui)', fontSize: 12, lineHeight: '16px',
             color: 'var(--cth-ink-900)',
             display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
           }}>{task.title}</span>
-          {assigneeName && (
-            <span style={{ fontSize: 10, color: 'var(--cth-ink-500)', fontFamily: 'var(--cth-font-display)' }}>
-              {assigneeName.toUpperCase()}
-            </span>
+          {/* What it waits on, in words: the open question for you. */}
+          {open && (
+            <span title={t('kanban.needsYouTitle')} style={{
+              fontSize: 11, lineHeight: '15px', padding: '3px 5px', marginTop: 2,
+              background: 'var(--cth-lilac-light)', color: 'var(--cth-ink-900)',
+              boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)',
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
+            }}><strong>{t('kanban.asksYou')}</strong> {open.q.replace(/[*_`#>]/g, '')}</span>
           )}
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+            {owner ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--cth-ink-700)' }}>
+                <SpritePortrait character={owner.character} scale={1} />{owner.name}
+              </span>
+            ) : assigneeName ? (
+              <span style={{ fontSize: 11, color: 'var(--cth-ink-700)' }}>{assigneeName}</span>
+            ) : (
+              <span style={{ fontSize: 11, color: 'var(--cth-ink-300)' }}>{t('kanban.unassigned')}</span>
+            )}
+            {kids.length > 0 && (
+              <span style={{ fontSize: 10.5, color: 'var(--cth-ink-500)' }}>
+                {t('kanban.subtasksShort', { done: kids.filter((k) => k.status === 'done').length, total: kids.length })}
+              </span>
+            )}
+            {task.deliverable && (() => {
+              const first = splitPath(task.deliverable.split(/[\n,;]/)[0].trim()).name;
+              return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: 'var(--cth-ink-500)', minWidth: 0 }} title={task.deliverable}><FileTypeBadge name={first} />{first}</span>;
+            })()}
+          </span>
         </span>
-        {waitsOnHuman(task) && (
-          <span title={t('kanban.needsYouTitle')} style={{
-            alignSelf: 'center', marginRight: 18, flexShrink: 0,
-            fontFamily: 'var(--cth-font-display)', fontSize: 10, padding: '2px 5px 1px',
-            background: 'var(--cth-lilac)', color: 'var(--cth-ink-900)',
-            boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)'
-          }}>?</span>
-        )}
       </button>
       {/* Dismiss — sibling button (not nested) so it never triggers onOpen. */}
       <button
@@ -325,12 +357,36 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
   const rtl = useRtl();
   // Files an agent wrote into research/ while this card was its task (linked by
   // the app, not the orchestrator) — counted here, listed in Deliverables.
-  const [linkedCount, setLinkedCount] = useState(0);
+  // Every file this card produced: its deliverable field plus linked files,
+  // with who wrote each (the link's agent) and the file's last change.
+  const [files, setFiles] = useState<Array<{ path: string; agentId?: string; mtime?: number }>>([]);
   useEffect(() => {
     let alive = true;
-    void window.cth.deliverablesList?.().then((d) => { if (alive) setLinkedCount(d.links.filter((l) => l.taskId === task.id).length); }).catch(() => {});
+    void window.cth.deliverablesList?.().then((d) => {
+      if (!alive || !d.root) return;
+      const meta = new Map(d.files.map((f) => [f.abs.replace(/\\/g, '/').toLowerCase(), f.mtime]));
+      const out: Array<{ path: string; agentId?: string; mtime?: number }> = [];
+      const seen = new Set<string>();
+      const add = (path: string, agentId?: string) => {
+        const k = path.replace(/\\/g, '/').toLowerCase();
+        if (seen.has(k)) return;
+        seen.add(k);
+        out.push({ path, agentId, mtime: meta.get(k) });
+      };
+      for (const p of deliverablePaths(task.deliverable, d.root, d.distro)) add(p, task.assignee);
+      for (const l of d.links.filter((x) => x.taskId === task.id)) add(l.path, l.agentId);
+      setFiles(out);
+    }).catch(() => {});
     return () => { alive = false; };
-  }, [task.id]);
+  }, [task.id, task.deliverable, task.assignee]);
+  const agentName = (id?: string) => (id ? (useStore.getState().agents.find((a) => a.id === id)?.name ?? id) : '');
+  const openInDeliverables = () => {
+    const pro = useProStore.getState();
+    pro.setLayout('pro');
+    pro.setFocusTask(task.id);
+    pro.setView({ kind: 'section', section: 'deliverables' });
+    onClose();
+  };
   const col = COLUMNS.find((c) => c.key === task.status) ?? COLUMNS[0];
   // Belt + suspenders: parseTasks normalizes these, but the ledger is a
   // hand-written file — never trust a card's shape at the point of use.
@@ -388,18 +444,57 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
               {task.description?.trim() || <span style={{ color: 'var(--cth-ink-300)' }}>{t('kanban.noDescription')}</span>}
             </div>
 
-            {/* What the card produced: open it in Manager → Deliverables. */}
-            {(task.deliverable || linkedCount > 0) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontFamily: 'var(--cth-font-display)', fontSize: 8, color: 'var(--cth-ink-500)' }}>{t('kanban.deliverable')}</span>
-                <span style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 12, color: 'var(--cth-ink-900)', overflowWrap: 'anywhere', flex: 1, minWidth: 0 }}>{task.deliverable ?? ''}{linkedCount > 0 ? `${task.deliverable ? ' · ' : ''}${t('kanban.linkedFiles', { count: linkedCount })}` : ''}</span>
-                <PixelButton variant="secondary" size="sm" onClick={() => {
-                  const pro = useProStore.getState();
-                  pro.setLayout('pro');
-                  pro.setFocusTask(task.id);
-                  pro.setView({ kind: 'section', section: 'deliverables' });
-                  onClose();
-                }}>{t('kanban.openDeliverable')}</PixelButton>
+            {/* Where it comes from and what it was split into (subtasks). */}
+            {(() => {
+              const parent = task.parent ? all.find((x) => x.id === task.parent) : undefined;
+              const kids = all.filter((x) => x.parent === task.id);
+              if (!parent && !kids.length) return null;
+              const row = (x: HiveTask) => {
+                const c = COLUMNS.find((cc) => cc.key === x.status) ?? COLUMNS[0];
+                return (
+                  <button key={x.id} onClick={() => useStore.getState().openTaskDetail(x.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 7px', border: 'none', cursor: 'pointer', textAlign: 'start', font: 'inherit',
+                      background: 'var(--cth-cream-200)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)', fontSize: 12, color: 'var(--cth-ink-900)' }}>
+                    <span style={{ width: 8, height: 8, background: c.accent, boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)', flexShrink: 0 }} />
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.title}</span>
+                    <span style={{ fontSize: 10, color: 'var(--cth-ink-500)' }}>{t(c.labelKey)}</span>
+                  </button>
+                );
+              };
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {parent && <>
+                    <div style={{ fontFamily: 'var(--cth-font-display)', fontSize: 8, color: 'var(--cth-ink-500)' }}>{t('kanban.partOf')}</div>
+                    {row(parent)}
+                  </>}
+                  {kids.length > 0 && <>
+                    <div style={{ fontFamily: 'var(--cth-font-display)', fontSize: 8, color: 'var(--cth-ink-500)' }}>
+                      {t('kanban.subtasks', { done: kids.filter((k) => k.status === 'done').length, total: kids.length })}
+                    </div>
+                    {kids.map(row)}
+                  </>}
+                </div>
+              );
+            })()}
+
+            {/* What the card produced, one row per file: type, name, who, when. */}
+            {files.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontFamily: 'var(--cth-font-display)', fontSize: 8, color: 'var(--cth-ink-500)', flex: 1 }}>{t('kanban.deliverable')} · {files.length}</span>
+                  <PixelButton variant="secondary" size="sm" onClick={openInDeliverables}>{t('kanban.openDeliverable')}</PixelButton>
+                </div>
+                {files.map((f) => (
+                  <button key={f.path} onClick={openInDeliverables} title={f.path}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', border: 'none', cursor: 'pointer', textAlign: 'start',
+                      background: 'var(--cth-paper-100)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)', font: 'inherit', color: 'var(--cth-ink-900)' }}>
+                    <FileTypeBadge name={f.path} />
+                    <span style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 12, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{splitPath(f.path).name}</span>
+                    <span style={{ fontSize: 11, color: 'var(--cth-ink-500)', flexShrink: 0 }}>
+                      {[agentName(f.agentId), f.mtime ? new Date(f.mtime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''].filter(Boolean).join(' · ')}
+                    </span>
+                  </button>
+                ))}
               </div>
             )}
 
@@ -445,6 +540,9 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
                 ))}
               </div>
             )}
+
+            {/* What happened to it, and the messages that name it. */}
+            <TaskTimeline taskId={task.id} taskKey={(task as HiveTask & { key?: string }).key} />
 
             {/* Dependencies, resolved to titles */}
             {deps.length > 0 && (

@@ -13,7 +13,7 @@ import * as https from 'node:https';
 import { rootCertificates as tlsRootCertificates } from 'node:tls';
 import { buildCaBundle, tlsActive, tlsEnv, WINDOWS_STORE_SCRIPT } from './caBundle';
 import {
-  rmSync, existsSync, readFileSync, readdirSync, statSync, cpSync, writeFileSync,
+  rmSync, existsSync, readFileSync, appendFileSync, readdirSync, statSync, cpSync, writeFileSync,
   unlinkSync, mkdirSync, renameSync, createWriteStream, copyFileSync, lstatSync,
   readlinkSync, symlinkSync
 } from 'node:fs';
@@ -97,6 +97,7 @@ import { mcpCatalogEntry } from '../shared/mcpCatalog';
 import type { PromptConnection } from '../shared/agentConnections';
 import { PROVIDER_BACKENDS, backendForModel, providerKeyEnv } from '../shared/providerBackends';
 import { LIST_MODELS, SIGN_IN, authProviders, piOwnModels, cleanCustomProviders, effectiveModel, keyScope, piSettingsWithModel, customKeyEnv, modelsFromListing, opencodeProviders, parseModelList, piModelsJson, type ManagedEngine } from '../shared/engineModels';
+import { diffTasks, snapshotOf, type TaskEvent, type TaskSnapshot } from '../shared/taskHistory';
 import { DELIVERABLES_DIR, addLink, canOpenExternally, currentTaskOf, isInside, linkFor, writtenFiles, type DeliverableLink } from '../shared/deliverables';
 import { validateBaseUrl, buildAuthHeaders, resolveUpstreamUrl, secretRefFor, INTEGRATION_TEMPLATES, hasPlaceholderHost, probeSpecFor } from '../shared/integrations';
 import { RosterStore } from './roster';
@@ -2718,6 +2719,58 @@ function deliverHire(manifest: HireManifest): void {
  * the human confirms it in the UI, but nothing looked there, so the
  * proposal sat unseen. Each one now opens the Add-Agent review, prefilled.
  */
+// Task history (shared/taskHistory.ts): the orchestrator rewrites tasks.json
+// whole, so who moved which card, and when, was never kept. Each tick compares
+// the ledger with the last read and appends the difference to
+// taskHistory.jsonl. The last read is kept on disk too, so a change made while
+// the app was closed is still recorded (dated when the app sees it).
+const TASK_HISTORY_EVERY_MS = 5000;
+let taskHistoryAt = 0;
+let taskHistoryState: { root: string; snapshot: TaskSnapshot[] | null; raw: string } | null = null;
+function recordTaskHistory(): void {
+  const now = Date.now();
+  if (now - taskHistoryAt < TASK_HISTORY_EVERY_MS) return;
+  taskHistoryAt = now;
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root) return;
+  let raw = '';
+  try { raw = readFileSync(join(root, 'tasks.json'), 'utf8'); } catch { return; }
+  const snapPath = join(root, 'taskHistory.snapshot.json');
+  if (!taskHistoryState || taskHistoryState.root !== root) {
+    let snapshot: TaskSnapshot[] | null = null;
+    try { snapshot = JSON.parse(readFileSync(snapPath, 'utf8')) as TaskSnapshot[]; } catch { /* first run */ }
+    taskHistoryState = { root, snapshot: Array.isArray(snapshot) ? snapshot : null, raw: '' };
+  }
+  if (raw === taskHistoryState.raw) return;
+  let list: unknown[] = [];
+  try {
+    const parsed = JSON.parse(raw) as { tasks?: unknown } | unknown[];
+    list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.tasks) ? parsed.tasks : [];
+  } catch { return; } // mid-write: try again next tick
+  const next = list.map(snapshotOf).filter((t): t is TaskSnapshot => !!t);
+  const events = diffTasks(taskHistoryState.snapshot, next, new Date(now).toISOString());
+  try {
+    if (events.length) appendFileSync(join(root, 'taskHistory.jsonl'), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
+    writeFileSync(snapPath, JSON.stringify(next));
+    taskHistoryState = { root, snapshot: next, raw };
+  } catch (e) { console.error('[tasks] could not record history:', e); }
+}
+ipcMain.handle('hive:taskHistory', (_evt, taskId: unknown, limit: unknown) => {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root) return [];
+  let lines: string[] = [];
+  try { lines = readFileSync(join(root, 'taskHistory.jsonl'), 'utf8').split('\n').filter(Boolean); } catch { return []; }
+  const max = typeof limit === 'number' && limit > 0 ? Math.min(5000, Math.round(limit)) : 500;
+  const out: TaskEvent[] = [];
+  for (let i = lines.length - 1; i >= 0 && out.length < max; i--) {
+    try {
+      const e = JSON.parse(lines[i]) as TaskEvent;
+      if (typeof taskId !== 'string' || e.taskId === taskId) out.push(e);
+    } catch { /* torn line */ }
+  }
+  return out.reverse();
+});
+
 /** A local manifest's folder as this machine opens it, the same way a worker
  *  request's is (spawn-requests): a WSL floor's orchestrator writes Linux
  *  paths, so they go through \\wsl.localhost; a network path is dropped (even
@@ -6602,6 +6655,7 @@ async function ephemeralWorkerTick(): Promise<void> {
   try {
     const cfg = readConfig();
     offerOrchestratorHires();
+    recordTaskHistory();
     const maxWorkers = Math.max(1, cfg.maxConcurrentWorkers ?? 4);
     const idleTimeoutMs = Math.max(1, cfg.workerIdleTimeoutMinutes ?? 20) * 60_000;
     // Per-worker token cap. 0 = UNLIMITED (the default — wired but never throttles

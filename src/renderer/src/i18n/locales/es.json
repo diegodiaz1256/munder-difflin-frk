@@ -1401,7 +1401,12 @@
     "priority": "Prioridad {{level}}/5",
     "deliverable": "ENTREGABLE",
     "openDeliverable": "Abrir",
-    "linkedFiles": "archivos enlazados: {{count}}"
+    "linkedFiles": "archivos enlazados: {{count}}",
+    "partOf": "Parte de",
+    "subtasks": "Subtareas · {{done}}/{{total}} hechas",
+    "asksYou": "Te pregunta:",
+    "emptyColumn": "Nada aquí",
+    "subtasksShort": "{{done}}/{{total}} subtareas"
   },
   "queueComposer": {
     "recording": "● grabando: pulsa parar para transcribir",
@@ -1663,7 +1668,16 @@
       "col_blocked": "Bloqueada",
       "col_done": "Hecha",
       "asksYou": "Te pregunta",
-      "unassigned": "sin asignar"
+      "unassigned": "sin asignar",
+      "recent": "Actividad reciente",
+      "since": "desde hace {{time}}",
+      "fewerDone": "Ver menos",
+      "allDone": "Ver las {{count}}",
+      "subtaskOf": "Subtarea de",
+      "subtasks": "Subtareas {{done}}/{{total}}",
+      "layout": "Vista",
+      "layout_board": "Tablero",
+      "layout_tree": "Por petición"
     },
     "automations": {
       "rules": "Programaciones, contexto y webhooks",
@@ -2466,5 +2480,24 @@
         "help": "Déjalo vacío para sentry.io."
       }
     }
+  },
+  "taskHistory": {
+    "title": "Historial",
+    "empty": "Aún no hay nada registrado. Los cambios se registran desde ahora.",
+    "created": "Creada ({{status}})",
+    "createdFor": "Creada para {{name}} ({{status}})",
+    "assigned": "Asignada a {{name}}",
+    "unassigned": "Sin asignar",
+    "status": "Movida de {{from}} a {{to}}",
+    "asked": "Te hizo una pregunta",
+    "answered": "Respondiste",
+    "dismissed": "Descartaste una pregunta",
+    "result": "Resultado escrito",
+    "removed": "Quitada del tablero",
+    "message": "Mensaje de {{from}} a {{to}}",
+    "status_todo": "por hacer",
+    "status_doing": "en curso",
+    "status_blocked": "bloqueada",
+    "status_done": "hecha"
   }
 }
