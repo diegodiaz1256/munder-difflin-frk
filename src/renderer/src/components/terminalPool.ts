@@ -36,7 +36,8 @@ import {
   type TerminalAutomationBlock
 } from './terminalAutomation';
 import { sanitizeTerminalSelection } from './terminalSelection';
-import { detectRemoteControl, isRemoteControlMenu } from '@shared/remoteControl';
+import { detectRemoteControl, isRemoteControlConfirm, isRemoteControlMenu } from '@shared/remoteControl';
+import { isChromeLine, usageNotice } from '@shared/terminalChrome';
 import { detectMenu } from '@shared/terminalMenu';
 import { useStore } from '@/store/store';
 import { terminalKeySequence } from './terminalKeys';
@@ -221,7 +222,7 @@ export function acquireTerminal(ptyId: string, theme?: ThemeMap, fontSize = 14):
     // Remote Control's state, for the Command Center's cloud button. A small
     // tail of earlier output covers a link split across two chunks.
     rcTail = (rcTail + chunk).slice(-800);
-    if (/claude\.ai\/code|Remote Control|remote-control|Enter to (?:select|confirm|continue)/i.test(chunk)) {
+    if (/claude\.ai\/code|Remote Control|remote-control|Enter to (?:select|confirm|continue)|\(y\/n\)/i.test(chunk)) {
       const rc = detectRemoteControl(rcTail);
       if (rc) useStore.getState().setRemoteControl(ptyId, rc);
       // /remote-control asked something back: its menu when it was already on
@@ -229,7 +230,22 @@ export function acquireTerminal(ptyId: string, theme?: ThemeMap, fontSize = 14):
       // cloud button sent it a moment ago, answer with Enter, as a person
       // would; otherwise the terminal sits waiting on a question. Once only.
       const st = useStore.getState();
-      if (isRemoteControlMenu(rcTail) && Date.now() - (st.remoteControlAskedAt[ptyId] ?? 0) < 10_000) {
+      const askedRecently = Date.now() - (st.remoteControlAskedAt[ptyId] ?? 0) < 10_000;
+      if (askedRecently && isRemoteControlConfirm(rcTail)) {
+        // First time: "Enable Remote Control? (y/n)". Answer yes; if the
+        // question is still on screen a moment later, it wanted Enter too.
+        useStore.setState((x) => ({ remoteControlAskedAt: { ...x.remoteControlAskedAt, [ptyId]: 0 } }));
+        rcTail = '';
+        setTimeout(() => {
+          void window.cth.writePty(ptyId, 'y');
+          setTimeout(() => {
+            const buf = term.buffer.active;
+            const bottom: string[] = [];
+            for (let i = Math.max(0, buf.length - 12); i < buf.length; i++) bottom.push(buf.getLine(i)?.translateToString(true) ?? '');
+            if (isRemoteControlConfirm(bottom.join('\n'))) void window.cth.writePty(ptyId, '\r');
+          }, 1000);
+        }, 300);
+      } else if (askedRecently && isRemoteControlMenu(rcTail)) {
         useStore.setState((x) => ({ remoteControlAskedAt: { ...x.remoteControlAskedAt, [ptyId]: 0 } }));
         rcTail = '';
         setTimeout(() => { void window.cth.writePty(ptyId, '\r'); }, 300);
@@ -478,11 +494,28 @@ export function terminalTail(ptyId: string | undefined, max = 3): string[] {
     const last = buf.baseY + buf.cursorY;
     for (let y = last; y >= 0 && y > last - 200 && out.length < max; y--) {
       const text = buf.getLine(y)?.translateToString(true).trimEnd() ?? '';
-      if (text.trim() && !/^[\s─-╿▀-▟>›❯]*$/.test(text)) out.unshift(text);
+      // Skip box drawing and the CLI's own footer (usage warnings, mode hints).
+      if (text.trim() && !/^[\s─-╿▀-▟>›❯]*$/.test(text) && !isChromeLine(text)) out.unshift(text);
     }
     return out;
   } catch {
     return [];
+  }
+}
+
+/** The plan-usage warning a CLI is showing at the bottom of its terminal
+ *  ("91% of your session limit"), if any. */
+export function terminalUsage(ptyId: string | undefined): { percent: number; window: string } | null {
+  const entry = ptyId ? pool.get(ptyId) : undefined;
+  if (!entry) return null;
+  try {
+    const buf = entry.term.buffer.active;
+    const last = buf.baseY + buf.cursorY;
+    const lines: string[] = [];
+    for (let y = Math.max(0, last - 30); y <= last + 5; y++) lines.push(buf.getLine(y)?.translateToString(true) ?? '');
+    return usageNotice(lines);
+  } catch {
+    return null;
   }
 }
 

@@ -62,6 +62,8 @@ function readGroups(): Record<string, boolean> {
  * hive underneath (god, routing, PTYs, queues) is the same one, so switching
  * back and forth never touches a running agent.
  */
+const LS_SIDE_HIDDEN = 'cth.pro.sideHidden';
+
 export function ProShell({ config }: { config: HarnessConfig }) {
   const { t } = useTranslation();
   const view = useProStore((s) => s.view);
@@ -73,6 +75,15 @@ export function ProShell({ config }: { config: HarnessConfig }) {
   const openAsks = tasks.filter(waitsOnHuman).length;
   const god = roster.find((a) => a.isGod);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(readGroups);
+  // In a small window the sidebar takes width the terminal needs: it can be
+  // folded away, and the choice is remembered on this machine.
+  const [sideHidden, setSideHidden] = useState<boolean>(() => {
+    try { return window.localStorage.getItem(LS_SIDE_HIDDEN) === '1'; } catch { return false; }
+  });
+  const toggleSide = () => setSideHidden((v) => {
+    try { window.localStorage.setItem(LS_SIDE_HIDDEN, v ? '0' : '1'); } catch { /* noop */ }
+    return !v;
+  });
   const toggleGroup = (id: string): void => setOpenGroups((g) => {
     const next = { ...g, [id]: !g[id] };
     try { window.localStorage.setItem(LS_GROUPS, JSON.stringify(next)); } catch { /* private window */ }
@@ -115,13 +126,14 @@ export function ProShell({ config }: { config: HarnessConfig }) {
 
   return (
     <div className="pro-root">
-      <nav className="pro-side" aria-label={t('pro.nav.aria')}>
+      {!sideHidden && <nav className="pro-side" aria-label={t('pro.nav.aria')}>
         <div className="pro-brand">
           <Avatar agent={god} />
           <span style={{ display: 'flex', flexDirection: 'column', lineHeight: '15px' }}>
             <span>{APP_NAME}</span>
             <span className="pro-sub" style={{ fontSize: 10 }}>Munder Difflin</span>
           </span>
+          <button className="pro-side-toggle" title={t('pro.nav.hideMenu')} aria-label={t('pro.nav.hideMenu')} onClick={toggleSide}>«</button>
         </div>
         {NAV_GROUPS.map((g) => {
           const items = TOP.filter((i) => g.items.includes(i.id));
@@ -179,8 +191,13 @@ export function ProShell({ config }: { config: HarnessConfig }) {
         <button className="pro-nav" style={{ marginTop: 4 }} aria-current={section === 'temps'} onClick={() => go('temps')}>
           <ProIcon name="temps" /> {t('pro.nav.temps')}
         </button>
-      </nav>
-      <main className="pro-main"><BootBanner />{page}</main>
+      </nav>}
+      <main className="pro-main">
+        {sideHidden && (
+          <button className="pro-side-toggle pro-side-show" title={t('pro.nav.showMenu')} aria-label={t('pro.nav.showMenu')} onClick={toggleSide}>» {t('pro.nav.menu')}</button>
+        )}
+        <BootBanner />{page}
+      </main>
     </div>
   );
 }

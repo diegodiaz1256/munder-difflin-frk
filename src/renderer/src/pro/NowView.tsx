@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ActivityItem, ActivityKind } from '@shared/officeActivity';
+import { currentStep, groupActivity, type ActivityItem, type ActivityKind } from '@shared/officeActivity';
+import { useStore } from '@/store/store';
+import { Avatar, StateBadge, agentState, useTasks } from './data';
 import { useOfficeActivity } from './activityStore';
 import { useProStore } from './proStore';
 
@@ -41,9 +43,13 @@ export function NowView() {
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const i = setInterval(() => setNow(Date.now()), 5000); return () => clearInterval(i); }, []);
 
-  const shown = useMemo(() => items.filter((i) =>
+  const shown = useMemo(() => groupActivity(items.filter((i) =>
     filter === 'all' ? true : filter === 'message' ? i.kind === 'message' || i.kind === 'join' || i.kind === 'leave' : i.kind === filter
-  ).slice(0, 200), [items, filter]);
+  )).slice(0, 200), [items, filter]);
+
+  // Right now: every agent on the floor, what it is on and its latest step.
+  const agents = useStore((s) => s.agents).filter((a) => !a.archived && !a.isAssistant);
+  const tasks = useTasks();
 
   return (
     <div className="pro-page">
@@ -56,11 +62,53 @@ export function NowView() {
           <button key={f} role="tab" aria-selected={filter === f} onClick={() => setFilter(f)}>{t(`pro.now.filter_${f}`)}</button>
         ))}
       </div>
+      <section className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: 8, flexShrink: 0 }}>
+        <div className="pro-sub" style={{ fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', padding: '2px 6px' }}>{t('pro.now.rightNow')}</div>
+        {agents.map((a) => {
+          const task = tasks.find((x) => x.assignee === a.id && (x.status === 'doing' || x.status === 'blocked'));
+          const step = currentStep(items, a.id, now, 10 * 60_000);
+          const last = items.find((i) => i.agentId === a.id);
+          return (
+            <button key={a.id} className="pro-now-row" onClick={() => setView({ kind: 'agent', agentId: a.id })}
+              style={{ display: 'grid', gridTemplateColumns: 'auto minmax(90px, 140px) auto 1fr auto', gap: 10, alignItems: 'center', textAlign: 'start', background: 'none', border: 'none', padding: '5px 6px', cursor: 'pointer', color: 'inherit' }}>
+              <Avatar agent={a} />
+              <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</strong>
+              <StateBadge {...agentState(a, !!task && task.status === 'blocked')} />
+              <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {task ? <><span className="pro-ticket">{task.key ?? task.id}</span> {task.title}</> : <span className="pro-sub">{t('pro.now.noTask')}</span>}
+                </span>
+                {step && <span className="pro-mono pro-sub" style={{ fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sentence(step).text}{sentence(step).detail ? ` · ${sentence(step).detail}` : ''}</span>}
+              </span>
+              <span className="pro-sub" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{last ? ago(last.ts, now, t) : ''}</span>
+            </button>
+          );
+        })}
+      </section>
       {!shown.length ? (
         <p className="pro-text">{t('pro.now.empty')}</p>
       ) : (
         <div className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: 8 }}>
-          {shown.map((i) => {
+          {shown.map((row, ri) => {
+            if (row.kind === 'roster') {
+              // A relaunch (or several restarts) in one line, not a dozen.
+              const restarted = row.joined.filter((n) => row.left.includes(n));
+              const joined = row.joined.filter((n) => !restarted.includes(n));
+              const left = row.left.filter((n) => !restarted.includes(n));
+              const parts = [
+                restarted.length && t('pro.now.restartedList', { names: restarted.join(', ') }),
+                joined.length && t('pro.now.joinedList', { names: joined.join(', ') }),
+                left.length && t('pro.now.leftList', { names: left.join(', ') })
+              ].filter(Boolean);
+              return (
+                <div key={`r${ri}`} className="pro-sub" style={{ display: 'grid', gridTemplateColumns: '18px 1fr auto', gap: 8, padding: '4px 6px', fontSize: 12.5 }}>
+                  <span aria-hidden style={{ textAlign: 'center' }}>↻</span>
+                  <span>{parts.join(' · ')}</span>
+                  <span style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{ago(row.ts, now, t)}</span>
+                </div>
+              );
+            }
+            const i = row.item;
             const s = sentence(i);
             return (
               <button key={i.id} className="pro-now-row" onClick={() => { if (i.agentId) setView({ kind: 'agent', agentId: i.agentId }); }}
@@ -68,6 +116,7 @@ export function NowView() {
                 <span aria-hidden style={{ fontWeight: 700, textAlign: 'center' }}>{ICON[i.kind]}</span>
                 <span style={{ minWidth: 0 }}>
                   <span>{s.text}</span>
+                  {row.repeat > 1 && <span className="pro-chip" style={{ marginInlineStart: 6, fontSize: 10.5 }}>×{row.repeat}</span>}
                   {s.detail && <span className="pro-mono" style={{ display: 'block', fontSize: 12, opacity: 0.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.detail}</span>}
                 </span>
                 <span className="pro-sub" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{ago(i.ts, now, t)}</span>
