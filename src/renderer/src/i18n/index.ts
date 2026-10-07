@@ -19,9 +19,7 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import { DEFAULT_GOD_NAME } from '@shared/godIdentity';
 import en from './locales/en.json';
-import zhCN from './locales/zh-CN.json';
 import es from './locales/es.json';
-import ar from './locales/ar.json';
 
 /**
  * The languages the Settings picker offers, in display order.
@@ -29,18 +27,15 @@ import ar from './locales/ar.json';
  * `dir` is the language's WRITING DIRECTION, and it is the ONLY thing the app
  * keys right-to-left layout off. Not the OS locale, not the content of a
  * document, not a system font — the language the user picked here, and nothing
- * else. That is what makes RTL inert for everybody who has not picked an RTL
- * language: `dir` is 'ltr' for every one of them, so every `isRtl` branch in
- * the renderer takes the same path it took before Arabic existed.
+ * else. No language here is right-to-left today, so every `isRtl` branch
+ * takes the left-to-right path; the plumbing stays for one that is.
  */
-export const LANGUAGES = [
+export const LANGUAGES: ReadonlyArray<{ code: string; label: string; dir: 'ltr' | 'rtl' }> = [
   { code: 'en', label: 'English', dir: 'ltr' },
-  { code: 'es', label: 'Español', dir: 'ltr' },
-  { code: 'zh-CN', label: '简体中文', dir: 'ltr' },
-  { code: 'ar', label: 'العربية', dir: 'rtl' }
-] as const;
+  { code: 'es', label: 'Español', dir: 'ltr' }
+];
 
-export type LanguageCode = (typeof LANGUAGES)[number]['code'];
+export type LanguageCode = 'en' | 'es';
 
 /** Language codes that read right-to-left, derived from LANGUAGES itself so a
  *  new locale cannot be registered with a direction and then forgotten here. */
@@ -111,13 +106,11 @@ void i18n
   .init({
     resources: {
       en: { translation: en },
-      es: { translation: es },
-      'zh-CN': { translation: zhCN },
-      ar: { translation: ar }
+      es: { translation: es }
     },
     lng: detectLanguage(),
     fallbackLng: 'en',
-    supportedLngs: ['en', 'es', 'zh-CN', 'ar'],
+    supportedLngs: ['en', 'es'],
     // Resources are bundled inline, so nothing ever suspends — the string is
     // there at init time. Keeping this false lets every component call
     // useTranslation() without wrapping the tree in <Suspense>.

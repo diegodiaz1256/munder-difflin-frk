@@ -49,7 +49,7 @@ Two data planes feed the renderer (see `docs/ARCHITECTURE.md`):
 - **Telemetry/cost**: `transcript.ts` reads provider JSONL transcripts, while `usage.ts`, `pricing.ts`, `costLifetime.ts` and `db.ts` (better-sqlite3 ledger) attribute cost. `analytics.ts` is anonymous PostHog and no-ops unless `POSTHOG_KEY` is set at build time (contract in `TELEMETRY.md`).
 - **Main-process `.cjs` sidecars** (`slack-trigger.cjs`, `kg-core.cjs`) are `require()`d at runtime and are not bundled. They are copied by the `copyMainSidecars` plugin in `electron.vite.config.ts`, so a new sidecar must be added there.
 
-Renderer areas: `scene/office/` (Pixi floor, characters, pathfinding), `pro/` (newer sidebar "Pro" layout, `ProShell.tsx` + views), `components/` (classic panels), `terminal/` (xterm.js), `ide/`, `realtime/` (voice via OpenAI realtime), `store/` (zustand), `i18n/` (en, zh-CN, ar with RTL via `useDirection`).
+Renderer areas: `scene/office/` (Pixi floor, characters, pathfinding), `pro/` (newer sidebar "Pro" layout, `ProShell.tsx` + views), `components/` (classic panels), `terminal/` (xterm.js), `ide/`, `realtime/` (voice via OpenAI realtime), `store/` (zustand), `i18n/` (en, es).
 
 Design docs: `HIVE.md` (multi-agent design target), `SPEC.md` (terminal/event plane), `DESIGN.md` (visual system, canonical), `docs/message-queue.md` (who may type into an agent's terminal, and when).
 
@@ -59,7 +59,7 @@ Design docs: `HIVE.md` (multi-agent design target), `SPEC.md` (terminal/event pl
 - **Provider neutral**: shared behaviour must not assume Claude Code. Put provider-specific logic behind explicit checks (see `src/shared/agentProvider.ts` and the `*Commands.ts` files).
 - **Don't assume the local machine**: agents run in their own cwd/env.
 - **UI derives from design tokens**: `src/renderer/src/design/tokens.ts` and `tokens.css` are mirrored, so change both. No ad-hoc colors, spacing or fonts. Aesthetic: pixel-snapped SNES/Earthbound, Dunder-Mifflin maroon `#6E1423` + gold `#F4D35E`.
-- **i18n**: user-facing strings go through react-i18next locales. Keep key parity across `en.json`, `zh-CN.json` and `ar.json`.
+- **i18n**: user-facing strings go through react-i18next locales. Keep key parity between `en.json` and `es.json`.
 - **PRs**: one change per PR. No drive-by reformatting. Justify new dependencies. Every PR needs `### Before` / `### After` evidence in the description, enforced by the `PR evidence` check (for test-only changes, use red → green suite output). Before opening: `npm run typecheck`, `npm run test:focused` (add a test for behaviour changes), and `npm run build`.
 - **Assets**: new art must be original or compatibly licensed and listed in `src/renderer/src/assets/ATTRIBUTION.md`. Keep the LimeZu credit.
 

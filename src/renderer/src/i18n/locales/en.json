@@ -241,10 +241,7 @@
       "languageDesc": "Choose the language for the app interface. English is the default.",
       "dangerZone": "DANGER ZONE",
       "dangerDesc": "Reset wipes {{godName}}'s memories, the entire hive (every agent, message, task, and the board), the semantic-memory palace, and all settings - then takes you back to onboarding.",
-      "resetStartOver": "reset & start over",
-      "arabicTerminal": "Arabic / RTL text in terminals",
-      "arabicTerminalDesc": "Renders terminals with the browser's text engine so Arabic joins and reads right-to-left (xterm has no bidi of its own). Off is the GPU renderer: faster, but RTL-blind. Applies to open terminals and new ones alike.",
-      "arabicTerminalFollowsLanguage": "Following your app language. Switch it here to override that either way — the choice sticks even if you change language again."
+      "resetStartOver": "reset & start over"
     },
     "agentsModels": {
       "defaultModel": "Default agent model",
@@ -2429,7 +2426,12 @@
       "crashed": "{{who}} stopped with an error (code {{code}})",
       "degraded": "{{who}} is running without office events",
       "nowLabel": "Now:",
-      "stoppedCard": "Its terminal ended (code {{code}}). Restart it from its page."
+      "stoppedCard": "Its terminal ended (code {{code}}). Restart it from its page.",
+      "rightNow": "Right now",
+      "noTask": "no task in progress",
+      "restartedList": "Restarted: {{names}}",
+      "joinedList": "Joined: {{names}}",
+      "leftList": "Left: {{names}}"
     }
   },
   "hivePicker": {
