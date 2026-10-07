@@ -79,6 +79,10 @@ export interface IntegrationBrokerDeps {
   runners?: {
     describe: (workerId: string) => Array<{ id: string; name: string; description?: string; secrets: string[] }>;
     run: (workerId: string, runnerId: string) => Promise<{ ok: boolean; exitCode?: number | null; output?: string; error?: string }>;
+    /** Names (never values) of the secrets a proposed runner may use. */
+    secretNames?: () => string[];
+    /** Propose a runner; resolves once the human has decided. */
+    propose?: (workerId: string, proposal: unknown) => Promise<{ ok: boolean; id?: string; error?: string }>;
   };
   /** The office browser (browser.ts): read a page or search the web with the
    *  app's Chromium. `blocked` says why this agent may not (Web switched off). */
@@ -222,7 +226,20 @@ export class IntegrationBroker {
       const runners = this.deps.runners;
       if (!run[1] && req.method === 'GET') {
         res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ runners: runners.describe(cap.workerId) }));
+        res.end(JSON.stringify({ runners: runners.describe(cap.workerId), secrets: runners.secretNames?.() ?? [] }));
+        return;
+      }
+      // POST /run {name, command, secrets, description}: propose a new runner.
+      // Held open until the human decides (the prompt shows the command).
+      if (!run[1] && req.method === 'POST' && runners.propose) {
+        const propose = runners.propose;
+        void readBodyCapped(req).then(async (buf) => {
+          let body: unknown = {};
+          try { body = JSON.parse(buf.toString('utf8') || '{}'); } catch { return IntegrationBroker.sendError(res, 400, 'bad_request', 'body must be JSON'); }
+          const r = await propose(cap.workerId, body);
+          res.writeHead(r.ok ? 200 : 409, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(r));
+        }, (e) => IntegrationBroker.sendError(res, 500, 'proposal_failed', e instanceof Error ? e.message : String(e)));
         return;
       }
       if (run[1] && req.method === 'POST') {
@@ -232,7 +249,7 @@ export class IntegrationBroker {
         }, (e) => IntegrationBroker.sendError(res, 500, 'runner_failed', e instanceof Error ? e.message : String(e)));
         return;
       }
-      return IntegrationBroker.sendError(res, 405, 'method_not_allowed', 'GET /run or POST /run/<id>');
+      return IntegrationBroker.sendError(res, 405, 'method_not_allowed', 'GET /run, POST /run (propose) or POST /run/<id>');
     }
 
     // 3a'') POST /browse {url, links?, max_chars?} and POST /search {query}: the

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import type { Agent } from '@/store/store';
+import { useStore, type Agent } from '@/store/store';
+import { restartAgents } from '@/components/restartAgent';
 import type { EnvVarView, RunnerView } from '../../../preload/index';
 import { StateBadge } from './data';
 import { Guide, useGuide } from './Guide';
@@ -36,6 +37,31 @@ export function EnvironmentView({ roster }: { roster: Agent[] }) {
   const secretNames = vars.filter((v) => v.kind !== 'plain').map((v) => v.name);
   const agents = roster.filter((a) => !a.archived);
 
+  // A plain variable is put in an agent's environment when its process starts,
+  // and a running process can never be handed a new one. So a change only
+  // reaches the agents it applies to after a restart: list them, offer it.
+  // (Secrets and 1Password values need none: runners read them on every run.)
+  const [stale, setStale] = useState<string[]>([]);
+  const [restarting, setRestarting] = useState(false);
+  const markStale = useCallback((scopes: Array<string[] | null | undefined>) => {
+    const all = scopes.some((s) => !s || !s.length);
+    const ids = new Set(all ? agents.map((a) => a.id) : scopes.flatMap((s) => s ?? []));
+    const live = agents.filter((a) => a.ptyId && ids.has(a.id)).map((a) => a.id);
+    setStale((prev) => [...new Set([...prev, ...live])]);
+  }, [agents]);
+  const restartStale = async () => {
+    setRestarting(true);
+    setError(null);
+    // Fresh agent records: a restart rewrites command/terminal state.
+    const now = useStore.getState().agents;
+    const failed = await restartAgents(stale.map((id) => now.find((a) => a.id === id)).filter((a): a is Agent => !!a));
+    setRestarting(false);
+    const left = Object.keys(failed);
+    setStale(left);
+    if (left.length) setError(left.map((id) => `${agents.find((a) => a.id === id)?.name ?? id}: ${failed[id]}`).join(' · '));
+  };
+  const staleNames = stale.map((id) => agents.find((a) => a.id === id)?.name ?? id);
+
   return (
     <div className="pro-page">
       <div className="pro-head">
@@ -45,6 +71,15 @@ export function EnvironmentView({ roster }: { roster: Agent[] }) {
       </div>
       {guideOpen && <Guide title={t('pro.env.guideTitle')} steps={STEPS(t)} onClose={toggleGuide} />}
       {error && <div className="pro-card" style={{ borderColor: 'var(--cth-coral)' }}><span className="pro-text">{error}</span></div>}
+      {stale.length > 0 && (
+        <div className="pro-card pro-row" style={{ gap: 10, flexWrap: 'wrap', borderColor: 'var(--cth-lemon)' }}>
+          <span className="pro-text" style={{ flex: '1 1 260px' }}>{t('pro.env.restartNeeded', { names: staleNames.join(', ') })}</span>
+          <button className="pro-btn pro-btn-primary" disabled={restarting} onClick={() => void restartStale()}>
+            {restarting ? t('common.restarting') : t('pro.env.restartNow', { count: stale.length })}
+          </button>
+          <button className="pro-btn" disabled={restarting} onClick={() => setStale([])}>{t('pro.env.restartLater')}</button>
+        </div>
+      )}
 
       {op && !op.installed && (
         <section className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -60,9 +95,9 @@ export function EnvironmentView({ roster }: { roster: Agent[] }) {
       <section className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: 0, flexShrink: 0 }}>
         {vars.length === 0 && <p className="pro-sub" style={{ margin: 0, padding: 14 }}>{t('pro.env.noVars')}</p>}
         {vars.slice().sort((a, b) => a.name.localeCompare(b.name)).map((v) => (
-          <VarRow key={v.name} v={v} agents={agents} onChanged={reload} onError={setError} />
+          <VarRow key={v.name} v={v} agents={agents} unused={v.kind !== 'plain' && !runners.some((r) => r.secrets.includes(v.name))} onChanged={reload} onPlainChanged={markStale} onError={setError} />
         ))}
-        <NewVar agents={agents} onChanged={reload} onError={setError} />
+        <NewVar agents={agents} onChanged={reload} onPlainChanged={markStale} onError={setError} />
       </section>
 
       <h3 style={{ margin: '6px 0 0', fontSize: 14 }}>{t('pro.env.runners')}</h3>
@@ -80,7 +115,9 @@ function scopeText(v: EnvVarView, agents: Agent[], t: TFunction): string {
   return v.agents.map((id) => agents.find((a) => a.id === id)?.name ?? id).join(', ');
 }
 
-function VarRow({ v, agents, onChanged, onError }: { v: EnvVarView; agents: Agent[]; onChanged: () => void; onError: (e: string | null) => void }) {
+type PlainChanged = (scopes: Array<string[] | null | undefined>) => void;
+
+function VarRow({ v, agents, unused, onChanged, onPlainChanged, onError }: { v: EnvVarView; agents: Agent[]; unused?: boolean; onChanged: () => void; onPlainChanged: PlainChanged; onError: (e: string | null) => void }) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   // Plain values are not secret, but they are often tokens-in-waiting (a URL
@@ -89,9 +126,10 @@ function VarRow({ v, agents, onChanged, onError }: { v: EnvVarView; agents: Agen
   const remove = async () => {
     if (!(await window.cth.confirm(t('pro.env.deleteVar', { name: v.name }), { detail: v.kind === 'secret' ? t('pro.env.deleteVarDetail') : undefined, ok: t('pro.caps.delete') }))) return;
     await window.cth.envRemoveVar(v.name);
+    if (v.kind === 'plain') onPlainChanged([v.agents]);
     onChanged();
   };
-  if (editing) return <VarForm initial={v} agents={agents} onDone={() => { setEditing(false); onChanged(); }} onCancel={() => setEditing(false)} onError={onError} />;
+  if (editing) return <VarForm initial={v} agents={agents} onDone={() => { setEditing(false); onChanged(); }} onPlainChanged={onPlainChanged} onCancel={() => setEditing(false)} onError={onError} />;
   return (
     <div className="pro-row" style={{ padding: '10px 14px', borderBottom: '1px solid var(--pro-line)', gap: 12 }}>
       <span className="pro-mono" style={{ fontSize: 13, fontWeight: 600, minWidth: 160 }}>{v.name}</span>
@@ -104,22 +142,24 @@ function VarRow({ v, agents, onChanged, onError }: { v: EnvVarView; agents: Agen
       {v.kind !== 'secret' && (
         <button className="pro-btn" aria-pressed={shown} onClick={() => setShown((s) => !s)}>{shown ? t('pro.env.hide') : t('pro.env.reveal')}</button>
       )}
-      <span className="pro-sub" style={{ fontSize: 11 }}>{v.kind === 'plain' ? scopeText(v, agents, t) : t('pro.env.runnersOnly')}</span>
+      <span className="pro-sub" style={{ fontSize: 11 }} title={unused ? t('pro.env.unusedTip') : undefined}>
+        {v.kind === 'plain' ? scopeText(v, agents, t) : unused ? t('pro.env.unused') : t('pro.env.runnersOnly')}
+      </span>
       <button className="pro-btn" onClick={() => setEditing(true)}>{t('pro.caps.edit')}</button>
       <button className="pro-btn" onClick={() => void remove()}>{t('pro.caps.delete')}</button>
     </div>
   );
 }
 
-function NewVar({ agents, onChanged, onError }: { agents: Agent[]; onChanged: () => void; onError: (e: string | null) => void }) {
+function NewVar({ agents, onChanged, onPlainChanged, onError }: { agents: Agent[]; onChanged: () => void; onPlainChanged: PlainChanged; onError: (e: string | null) => void }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   if (!open) return <button className="pro-btn" style={{ margin: 12, alignSelf: 'flex-start' }} onClick={() => setOpen(true)}>+ {t('pro.env.addVar')}</button>;
-  return <VarForm agents={agents} onDone={() => { setOpen(false); onChanged(); }} onCancel={() => setOpen(false)} onError={onError} />;
+  return <VarForm agents={agents} onDone={() => { setOpen(false); onChanged(); }} onPlainChanged={onPlainChanged} onCancel={() => setOpen(false)} onError={onError} />;
 }
 
-function VarForm({ initial, agents, onDone, onCancel, onError }: {
-  initial?: EnvVarView; agents: Agent[]; onDone: () => void; onCancel: () => void; onError: (e: string | null) => void;
+function VarForm({ initial, agents, onDone, onPlainChanged, onCancel, onError }: {
+  initial?: EnvVarView; agents: Agent[]; onDone: () => void; onPlainChanged: PlainChanged; onCancel: () => void; onError: (e: string | null) => void;
 }) {
   const { t } = useTranslation();
   const [name, setName] = useState(initial?.name ?? '');
@@ -131,6 +171,11 @@ function VarForm({ initial, agents, onDone, onCancel, onError }: {
     onError(null);
     const r = await window.cth.envSetVar({ name, kind, value: kind === 'secret' ? undefined : value, agents: kind === 'plain' && scope.length ? scope : null }, kind === 'secret' ? secret : undefined);
     if (!r.ok) { onError(r.error ?? t('pro.env.notSaved')); return; }
+    // Became, stayed or stopped being plain: its old and new agents are affected.
+    const scopes: Array<string[] | null | undefined> = [];
+    if (initial?.kind === 'plain') scopes.push(initial.agents);
+    if (kind === 'plain') scopes.push(scope.length ? scope : null);
+    if (scopes.length) onPlainChanged(scopes);
     onDone();
   };
   return (

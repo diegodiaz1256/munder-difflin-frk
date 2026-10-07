@@ -1472,6 +1472,26 @@ export class HiveManager {
     return this.registry().agents[agentId]?.sessionId;
   }
 
+  /**
+   * Every session this agent has had, newest first (the recorded one, then the
+   * log's earlier ones). A CLI writes a session's transcript only after its
+   * first message, so the newest id can be an empty session (a restart that
+   * started fresh and was closed again): resuming tries these in order and
+   * takes the newest that has a transcript, instead of starting fresh and
+   * recording yet another empty one, which lost the real conversation.
+   */
+  recentSessions(agentId: string, max = 10): string[] {
+    const out: string[] = [];
+    const add = (id: unknown) => { if (typeof id === 'string' && id && !out.includes(id)) out.push(id); };
+    add(this.lastSession(agentId));
+    const log = this.logTail(20_000) as Array<{ kind?: string; agentId?: string; sessionId?: string }>;
+    for (let i = log.length - 1; i >= 0 && out.length < max; i--) {
+      const e = log[i];
+      if (e?.kind === 'session' && e.agentId === agentId) add(e.sessionId);
+    }
+    return out;
+  }
+
   /** Claude Code settings that route every relevant hook through the shim.
    *  Claude-only — this is invoked solely on the Claude spawn path. (The MCP
    *  bundle is NOT here: see the --mcp-config note in ensureAgent.) */
@@ -2019,8 +2039,8 @@ export class HiveManager {
     const apiCli = inRoot('bin', 'md-api.cjs');
     const runCli = inRoot('bin', 'md-run.cjs');
     const runnersLine = runners && runners.length
-      ? `SECRETS: the human keeps secrets (API keys, passwords, database URLs) out of your reach — you will never see their values, and you must not try to read, print or exfiltrate them. Commands that need them are RUNNERS the app executes for you, in your worktree, with the secrets set; you get the output with every secret masked as ***. Available: ${runners.map((r) => `${r.id}${r.description ? ` (${r.description})` : ''}${r.secrets.length ? ` [uses ${r.secrets.join(', ')}]` : ''}`).join('; ')}. Run one with \`"${hiveNode}" "${runCli}" <runner>\` (\`"${hiveNode}" "${runCli}"\` lists them). The human may be asked to approve a run, especially after you changed files. If a task needs a secret no runner provides, ask the human for a runner — never ask for the value.`
-      : `RUNNERS: commands the human sets up to run with secrets you never see. None exist yet; one added later works at once: \`"${hiveNode}" "${runCli}"\` lists them, \`"${hiveNode}" "${runCli}" <runner>\` runs one (output masked). Never ask for a secret's value.`;
+      ? `SECRETS: the human keeps secrets (API keys, passwords, database URLs) out of your reach — you will never see their values, and you must not try to read, print or exfiltrate them. Commands that need them are RUNNERS the app executes for you, in your worktree, with the secrets set; you get the output with every secret masked as ***. Available: ${runners.map((r) => `${r.id}${r.description ? ` (${r.description})` : ''}${r.secrets.length ? ` [uses ${r.secrets.join(', ')}]` : ''}`).join('; ')}. Run one with \`"${hiveNode}" "${runCli}" <runner>\` (\`"${hiveNode}" "${runCli}"\` lists them and the names of the stored secrets). The human may be asked to approve a run, especially after you changed files. If a task needs a secret no runner provides, PROPOSE one: \`"${hiveNode}" "${runCli}" --propose <name> --secrets NAME[,NAME] --why "<reason>" -- <command>\` (the human approves the exact command once; it then runs like any runner). Never ask for the value.`
+      : `RUNNERS: commands that run with secrets you never see. None exist yet; one added later works at once: \`"${hiveNode}" "${runCli}"\` lists them and the names of the stored secrets, \`"${hiveNode}" "${runCli}" <runner>\` runs one (output masked). When a task needs a secret (a migration, a script, a check against a service), propose a runner: \`"${hiveNode}" "${runCli}" --propose <name> --secrets NAME[,NAME] --why "<reason>" -- <command>\`; the human approves the exact command once. Never ask for a secret's value.`;
     // The lists that exist now, so an agent uses them instead of inventing
     // its own place for the human's things.
     let existingLists: ReturnType<typeof parseList>[] = [];
@@ -3622,25 +3642,55 @@ const MD_RUN_CLI = `#!/usr/bin/env node
 'use strict';
 // Ask the app to run a runner: a command the human defined, executed with
 // secrets you never see; its output comes back with them masked.
-const id = process.argv[2];
+//   md-run                      list runners and the secrets that exist (names only)
+//   md-run <runner>             run one
+//   md-run --propose <name> --secrets A,B [--why "<reason>"] -- <command…>
+//                               ask the human to add a runner (they see the command)
+const argv = process.argv.slice(2);
 const base = process.env.MD_BROKER_URL, token = process.env.MD_BROKER_TOKEN;
 if (!base || !token) { console.error('md-run: no runners are available to this agent.'); process.exit(2); }
-const headers = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
-const url = base.replace(/\\/+$/, '') + '/run' + (id ? '/' + encodeURIComponent(id) : '');
-fetch(url, { method: id ? 'POST' : 'GET', headers })
-  .then(async (res) => {
-    const body = await res.json().catch(() => ({}));
-    if (!id) {
-      if (!(body.runners || []).length) console.log('No runners are set up for you yet (the human adds them in Environment; they work at once). usage: md-run <runner>');
-      for (const r of body.runners || []) console.log(r.id + (r.description ? '  — ' + r.description : '') + (r.secrets && r.secrets.length ? '  [uses ' + r.secrets.join(', ') + ']' : ''));
-      process.exit(0);
-    }
-    if (!body.ok) { console.error('md-run: ' + (body.error || ('HTTP ' + res.status))); process.exit(1); }
-    if (body.output) process.stdout.write(body.output.endsWith('\\n') ? body.output : body.output + '\\n');
-    console.log('[exit ' + body.exitCode + ']');
-    process.exit(body.exitCode === 0 ? 0 : 1);
-  })
-  .catch((e) => { console.error('md-run: ' + (e && e.message || e)); process.exit(1); });
+const headers = { Authorization: 'Bearer ' + token, Accept: 'application/json', 'Content-Type': 'application/json' };
+const root = base.replace(/\\/+$/, '') + '/run';
+const fail = (e) => { console.error('md-run: ' + (e && e.message || e)); process.exit(1); };
+if (argv[0] === '--propose') {
+  const sep = argv.indexOf('--');
+  const opts = sep === -1 ? argv.slice(1) : argv.slice(1, sep);
+  const command = sep === -1 ? '' : argv.slice(sep + 1).join(' ');
+  const name = opts[0] && !opts[0].startsWith('--') ? opts[0] : '';
+  const val = (flag) => { const i = opts.indexOf(flag); return i === -1 ? '' : (opts[i + 1] || ''); };
+  if (!name || !command) {
+    console.error('usage: md-run --propose <name> --secrets A,B [--why "<reason>"] -- <command…>');
+    process.exit(2);
+  }
+  const secrets = val('--secrets').split(',').map((x) => x.trim()).filter(Boolean);
+  console.log('Waiting for the human to approve runner "' + name + '"…');
+  fetch(root, { method: 'POST', headers, body: JSON.stringify({ name, command, secrets, description: val('--why') }) })
+    .then(async (res) => {
+      const body = await res.json().catch(() => ({}));
+      if (!body.ok) { console.error('md-run: ' + (body.error || ('HTTP ' + res.status))); process.exit(1); }
+      console.log('Added runner ' + body.id + '. Run it with: md-run ' + body.id);
+    })
+    .catch(fail);
+} else {
+  const id = argv[0];
+  fetch(root + (id ? '/' + encodeURIComponent(id) : ''), { method: id ? 'POST' : 'GET', headers })
+    .then(async (res) => {
+      const body = await res.json().catch(() => ({}));
+      if (!id) {
+        if (!(body.runners || []).length) console.log('No runners are set up for you yet (the human adds them in Environment, or you propose one below; they work at once).');
+        for (const r of body.runners || []) console.log(r.id + (r.description ? '  — ' + r.description : '') + (r.secrets && r.secrets.length ? '  [uses ' + r.secrets.join(', ') + ']' : ''));
+        console.log('');
+        console.log('Secrets stored (names only, never values): ' + ((body.secrets || []).join(', ') || 'none yet'));
+        console.log('Need a command with one of them? md-run --propose <name> --secrets NAME[,NAME] --why "<reason>" -- <command>');
+        process.exit(0);
+      }
+      if (!body.ok) { console.error('md-run: ' + (body.error || ('HTTP ' + res.status))); process.exit(1); }
+      if (body.output) process.stdout.write(body.output.endsWith('\\n') ? body.output : body.output + '\\n');
+      console.log('[exit ' + body.exitCode + ']');
+      process.exit(body.exitCode === 0 ? 0 : 1);
+    })
+    .catch(fail);
+}
 `;
 
 const GENERATED_HIVE_DOCS = [

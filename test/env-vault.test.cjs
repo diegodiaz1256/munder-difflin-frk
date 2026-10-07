@@ -15,9 +15,10 @@ function vault(opts = {}) {
     readRunners: () => runners, writeRunners: (x) => { runners = x; },
     getSecret: (r) => secrets.get(r), setSecret: (r, s) => { secrets.set(r, s); return { ok: true }; }, deleteSecret: (r) => secrets.delete(r),
     approve: async (req) => { asked.push(req); return opts.answer ?? 'once'; },
+    approveProposal: async (req) => { asked.push(req); return opts.addProposal ?? true; },
     opRead: async (ref) => { if (ref === 'op://Dev/Db/url') return 'postgres://u:hunter2-op@db/x'; throw new Error('not found'); }
   });
-  return { v, secrets, asked, get vars() { return vars; } };
+  return { v, secrets, asked, get vars() { return vars; }, get runners() { return runners; } };
 }
 
 test('masking catches the value and its encodings', () => {
@@ -127,4 +128,31 @@ test('on a WSL floor a runner runs inside the distro, secrets over stdin, output
   assert.match(out.output, /kernel=Linux pwd=\/tmp/);
   assert.match(out.output, /value=\*\*\*/);
   assert.ok(!out.output.includes('wsl_secret_value'), out.output);
+});
+
+test('an agent can propose a runner; it exists only once the human approves it', async () => {
+  const yes = vault();
+  yes.v.setVar({ name: 'DATABASE_URL', kind: 'secret' }, 'postgres://u:hunter2@db/x');
+  yes.v.setVar({ name: 'NODE_ENV', kind: 'plain', value: 'dev' });
+  assert.deepEqual(yes.v.secretNames(), ['DATABASE_URL'], 'names only, and never a plain variable');
+
+  const r = await yes.v.proposeRunner({ name: 'Migrate DB', command: 'npm run migrate', secrets: ['DATABASE_URL'], description: 'apply the new table' }, { agentName: 'Jim' });
+  assert.deepEqual(r, { ok: true, id: 'migrate-db' });
+  assert.equal(yes.asked[0].agentName, 'Jim');
+  assert.equal(yes.asked[0].proposal.command, 'npm run migrate', 'the human sees the exact command');
+  assert.deepEqual(yes.runners[0].secrets, ['DATABASE_URL']);
+  assert.equal(yes.runners[0].approval, 'on-change', 'still asked again after the worktree changes');
+
+  const again = await yes.v.proposeRunner({ name: 'migrate db', command: 'rm -rf /', secrets: [] }, { agentName: 'Jim' });
+  assert.equal(again.ok, false, 'an existing runner is never replaced by a proposal');
+  assert.equal(yes.runners[0].command, 'npm run migrate');
+
+  const missing = await yes.v.proposeRunner({ name: 'x', command: 'y', secrets: ['NODE_ENV'] }, { agentName: 'Jim' });
+  assert.equal(missing.ok, false, 'only stored secrets can be named');
+  assert.match(missing.error, /DATABASE_URL/);
+
+  const no = vault({ addProposal: false });
+  no.v.setVar({ name: 'K', kind: 'secret' }, 'v');
+  assert.equal((await no.v.proposeRunner({ name: 'k', command: 'c', secrets: ['K'] }, { agentName: 'Pam' })).ok, false);
+  assert.equal(no.runners.length, 0, 'declined: nothing added');
 });

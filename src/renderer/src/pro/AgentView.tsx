@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { HarnessConfig } from '@/store/config';
 import type { Agent } from '@/store/store';
 import { AgentDetailPanel } from '@/components/AgentDetailPanel';
+import { canResumeAgent, restartAgent } from '@/components/restartAgent';
 import { MCP_CATALOG } from '@shared/mcpCatalog';
 import { mcpLabel } from '@shared/roleBundles';
 import { useProStore } from './proStore';
@@ -42,6 +43,25 @@ export function AgentView({ agent, roster, tasks, directory, config, onOpen }: P
   const servers = effectiveServers(config, agent.id);
   // The terminal is for typing to the agent; the steps are for reading what it is doing.
   const [pane, setPane] = useState<'terminal' | 'steps' | 'both'>('terminal');
+  const [restarting, setRestarting] = useState(false);
+  const [restartError, setRestartError] = useState<string | null>(null);
+  const canResume = canResumeAgent(agent);
+  /** Restart only this agent's process: the rest of the office keeps running.
+   *  Continues its conversation when its CLI can, else starts it fresh. Also
+   *  how a changed environment variable reaches a running agent. */
+  const restart = async () => {
+    if (!agent.ptyId || restarting) return;
+    const ok = await window.cth.confirm(t('pro.agent.restartConfirm', { name: agent.name }), {
+      detail: t(canResume ? 'pro.agent.restartDetailResume' : 'pro.agent.restartDetailFresh'),
+      ok: t('pro.agent.restart')
+    });
+    if (!ok) return;
+    setRestarting(true);
+    setRestartError(null);
+    try { await restartAgent(agent, agent.model, { resume: canResume, resumeOptional: true }); }
+    catch (e) { setRestartError(e instanceof Error ? e.message : String(e)); }
+    finally { setRestarting(false); }
+  };
 
   return (
     <div className="pro-page" style={{ gap: 12 }}>
@@ -51,28 +71,38 @@ export function AgentView({ agent, roster, tasks, directory, config, onOpen }: P
         {agent.isGod
           ? <span className="pro-badge" style={{ background: 'var(--cth-lemon-light)' }}>{t('pro.nav.orchestrator')}</span>
           : <StateBadge {...st} />}
-        <div className="pro-switch pro-head-end" role="group" aria-label={t('pro.agent.view')}>
+        <div className="pro-head-end" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        {agent.ptyId && (
+          <button className="pro-btn" disabled={restarting} title={t('pro.agent.restartTip')} onClick={() => void restart()}>
+            {restarting ? t('common.restarting') : t('pro.agent.restart')}
+          </button>
+        )}
+        <div className="pro-switch" role="group" aria-label={t('pro.agent.view')}>
           {(['terminal', 'steps', 'both'] as const).map((p) => (
             <button key={p} aria-pressed={pane === p} onClick={() => setPane(p)}>{t(`pro.agent.view_${p}`)}</button>
           ))}
         </div>
+        </div>
+        {restartError && <span className="pro-text" style={{ color: 'var(--cth-coral)', fontSize: 12, flexBasis: '100%' }}>{restartError}</span>}
       </div>
 
       {agent.isGod && <RoutingMap god={agent} roster={roster} tasks={tasks} directory={directory} config={config} onOpen={onOpen} />}
 
-      <div style={{ flex: 1, minHeight: 420, display: 'flex', gap: 12 }}>
+      {/* Wraps when the window is narrow: the terminal keeps the full width and
+          the facts move below it, instead of everything squeezing side by side. */}
+      <div style={{ flex: 1, minHeight: 420, display: 'flex', flexWrap: 'wrap', gap: 12 }}>
         {pane !== 'steps' && (
-          <div className="pro-embed" style={{ minWidth: 0, ...(pane === 'both' ? { flex: '1 1 45%' } : {}) }}>
+          <div className="pro-embed" style={{ minWidth: 0, minHeight: 420, flex: pane === 'both' ? '1 1 420px' : '999 1 520px' }}>
             <AgentDetailPanel agent={agent} />
           </div>
         )}
         {pane !== 'terminal' && (
-          <div style={{ flex: pane === 'both' ? '1 1 55%' : 1, minWidth: 0, display: 'flex' }}>
+          <div style={{ flex: pane === 'both' ? '1 1 420px' : '999 1 520px', minWidth: 0, minHeight: 320, display: 'flex' }}>
             <StepsView agentId={agent.id} />
           </div>
         )}
         {/* Side by side, terminal and steps need the width more than the facts do. */}
-        {pane !== 'both' && <aside style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {pane !== 'both' && <aside style={{ flex: '1 1 220px', maxWidth: 280, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Fact label={t('pro.agent.goal')}>{agent.goal || agent.description || '—'}</Fact>
           <Fact label={t('pro.agent.engine')}>{[agent.provider ?? 'claude', agent.model].filter(Boolean).join(' · ')}</Fact>
           <Fact label={t('pro.agent.usage')}>
