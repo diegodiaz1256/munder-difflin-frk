@@ -18,7 +18,7 @@ import {
   readlinkSync, symlinkSync
 } from 'node:fs';
 import { randomBytes, randomUUID, createHash, timingSafeEqual } from 'node:crypto';
-import { join, resolve, sep, basename, dirname, isAbsolute } from 'node:path';
+import { join, resolve, relative, sep, basename, dirname, isAbsolute } from 'node:path';
 import { homedir, hostname } from 'node:os';
 import { request as httpsRequest } from 'node:https';
 import { PtyManager, type SpawnOptions } from './pty';
@@ -4460,10 +4460,52 @@ ipcMain.handle('fs:revealPath', async (_evt, p: unknown) => {
   }
   const st = await statAbs(p);
   if (!st.exists) return { ok: false, error: 'not found' };
-  if (st.isFile) { shell.showItemInFolder(st.path); return { ok: true }; }
-  const err = await shell.openPath(st.path);
+  const err = st.isFile ? await revealFile(st.path) : await openFolder(st.path);
   return err ? { ok: false, error: err } : { ok: true };
 });
+
+/** The app itself running inside WSL (WSLg), where xdg-open often has no file
+ *  browser to hand a folder to, but Windows Explorer is one call away. */
+const RUNNING_IN_WSL = process.platform === 'linux'
+  && (!!process.env.WSL_DISTRO_NAME || (() => { try { return /microsoft/i.test(readFileSync('/proc/version', 'utf8')); } catch { return false; } })());
+
+/** Open a folder in the OS file browser. Resolves an error message, or ''. */
+async function openFolder(dir: string): Promise<string> {
+  if (RUNNING_IN_WSL) {
+    const win = await new Promise<string>((res) => {
+      execFile('wslpath', ['-w', dir], { timeout: 5000 }, (e, out) => res(e ? '' : String(out).trim()));
+    });
+    if (win) {
+      // explorer.exe exits 1 even when it opened the window, so only a spawn failure counts.
+      return new Promise((res) => {
+        const c = spawn('explorer.exe', [win], { detached: true, stdio: 'ignore' });
+        c.once('error', (e) => res(e.message));
+        c.once('spawn', () => { c.unref(); res(''); });
+      });
+    }
+  }
+  const err = await shell.openPath(dir);
+  if (err && process.platform === 'linux') return `${err} (no file browser is set for folders: try \`xdg-mime default <your-file-manager>.desktop inode/directory\`)`;
+  return err;
+}
+
+/** Show a file in its folder. Electron's showItemInFolder reports nothing: on
+ *  a Linux desktop with no FileManager1 D-Bus service (most tiling setups) it
+ *  silently does nothing, and Explorer can refuse a \\wsl.localhost path the
+ *  same way. So: Explorer's own /select on Windows, the parent folder on Linux
+ *  (a file browser opened there, with an error if there is none). */
+async function revealFile(file: string): Promise<string> {
+  if (process.platform === 'darwin') { shell.showItemInFolder(file); return ''; }
+  if (process.platform === 'win32') {
+    return new Promise((res) => {
+      // A Windows path cannot contain '"', so quoting it verbatim is safe.
+      const c = spawn('explorer.exe', [`/select,"${file}"`], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true });
+      c.once('error', (e) => res(e.message));
+      c.once('spawn', () => { c.unref(); res(''); });
+    });
+  }
+  return openFolder(dirname(file));
+}
 
 // ─── IPC: git ───────────────────────────────────────────────────────────────
 ipcMain.handle('git:isRepo', (_evt, cwd: unknown) => {
@@ -4617,6 +4659,26 @@ function readDeliverableLinks(): DeliverableLink[] {
     return Array.isArray(raw.links) ? raw.links.filter((l): l is DeliverableLink => !!l && typeof l.path === 'string' && typeof l.taskId === 'string') : [];
   } catch { return []; }
 }
+// Deliverables keep a history with an author: what an agent writes in
+// research/ is committed as that agent a few seconds later (several writes in
+// a row become one commit), so `git log` says who changed each file and when.
+const pendingDeliverableCommits = new Map<string, { rels: Set<string>; timer: ReturnType<typeof setTimeout> }>();
+function hiveRel(root: string, abs: string): string {
+  return relative(root, abs).split(sep).join('/').replace(/\\/g, '/');
+}
+function queueDeliverableCommit(agentId: string, root: string, abs: string[]): void {
+  const entry = pendingDeliverableCommits.get(agentId) ?? { rels: new Set<string>(), timer: undefined as unknown as ReturnType<typeof setTimeout> };
+  for (const p of abs) entry.rels.add(hiveRel(root, p));
+  clearTimeout(entry.timer);
+  entry.timer = setTimeout(() => {
+    pendingDeliverableCommits.delete(agentId);
+    const name = hive.registry().agents?.[agentId]?.name ?? agentId;
+    try { hive.commitDeliverables([...entry.rels], { id: agentId, name }); }
+    catch (err) { console.error('[deliverables] could not commit:', err); }
+  }, 3000);
+  pendingDeliverableCommits.set(agentId, entry);
+}
+
 hookServer.onStep = (agentId, e) => {
   // Any CLI: the files main worked out for this call (Write, apply_patch, write_to_file…).
   const written = writtenFiles([e]).map((f) => f.path);
@@ -4627,6 +4689,7 @@ hookServer.onStep = (agentId, e) => {
   const research = join(root, DELIVERABLES_DIR);
   const paths = written.map((p) => (wsl ? fromLinuxPath(p, wsl.distro, () => distroHomeUnc(wsl.distro)) : p)).filter((p) => isInside(p, research));
   if (!paths.length) return;
+  queueDeliverableCommit(agentId, root, paths);
   const taskId = currentTaskOf((hive.tasks() as { tasks?: Array<{ id: string; assignee?: string; status?: string; createdAt?: string }> }).tasks ?? [], agentId);
   if (!taskId) return;
   let links = readDeliverableLinks();
@@ -4672,7 +4735,64 @@ ipcMain.handle('deliverables:list', async () => {
       .filter((f) => !norm(f.path).startsWith(norm(agentsDir) + '/'))
       .map((f) => ({ ...f, agentId: a.id, name: a.name }))
   ).sort((x, y) => y.ts - x.ts).slice(0, 200);
-  return { root, dir, distro: wsl?.distro ?? null, files, written, links: readDeliverableLinks() };
+  // Who changed each research/ file, from its git history (agents only).
+  let authors: Record<string, { authors: string[]; last: string; lastTs: string }> = {};
+  try { authors = hive.fileAuthors(DELIVERABLES_DIR); } catch { /* no history yet */ }
+  return { root, dir, distro: wsl?.distro ?? null, files, written, links: readDeliverableLinks(), hidden: readHiddenDeliverables(), authors };
+});
+/** A deliverable path as the hive repo names it, or null when outside research/. */
+function deliverableRel(p: unknown): string | null {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root || typeof p !== 'string' || !p.length || p.length > 4096 || p.includes('\0')) return null;
+  const abs = resolve(p);
+  return isInside(abs, resolve(root, DELIVERABLES_DIR)) ? hiveRel(root, abs) : null;
+}
+ipcMain.handle('deliverables:history', (_evt, p: unknown) => {
+  const rel = deliverableRel(p);
+  return rel ? hive.fileHistory(rel) : [];
+});
+ipcMain.handle('deliverables:version', (_evt, p: unknown, hash: unknown) => {
+  const rel = deliverableRel(p);
+  if (!rel || typeof hash !== 'string') return { ok: false, error: 'bad request' };
+  const text = hive.fileAt(rel, hash);
+  return text === null ? { ok: false, error: 'that version is not in the history' } : { ok: true, text };
+});
+
+// Hidden deliverables: paths the human put out of sight. Only the listing
+// changes; the file stays. Kept in the hive beside deliverableLinks.json.
+function readHiddenDeliverables(): string[] {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root) return [];
+  try {
+    const raw = JSON.parse(readFileSync(join(root, 'deliverableHidden.json'), 'utf8')) as { paths?: unknown };
+    return Array.isArray(raw.paths) ? raw.paths.filter((x): x is string => typeof x === 'string') : [];
+  } catch { return []; }
+}
+ipcMain.handle('deliverables:setHidden', (_evt, p: unknown, hidden: unknown) => {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root || typeof p !== 'string' || !p.length || p.length > 4096 || p.includes('\0')) return { ok: false, error: 'bad request' };
+  const key = (x: string) => x.replace(/\\/g, '/').toLowerCase();
+  const next = readHiddenDeliverables().filter((x) => key(x) !== key(p));
+  if (hidden === true) next.push(p);
+  try { writeFileSync(join(root, 'deliverableHidden.json'), JSON.stringify({ paths: next.slice(-5000) }, null, 2)); }
+  catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+  return { ok: true };
+});
+// Delete a deliverable: only a file in the office's research/ folder (what an
+// agent wrote into a project is the project's, so that can only be hidden).
+// To the trash first; `permanent` only after the human confirmed that the
+// trash is not available here (common on a WSL path or a bare Linux desktop).
+ipcMain.handle('deliverables:delete', async (_evt, p: unknown, permanent: unknown) => {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root || typeof p !== 'string' || !p.length || p.length > 4096 || p.includes('\0')) return { ok: false, error: 'bad request' };
+  const target = resolve(p);
+  if (!isInside(target, resolve(root, DELIVERABLES_DIR))) return { ok: false, error: 'only files in the office deliverables folder can be deleted' };
+  try { if (!lstatSync(target).isFile()) return { ok: false, error: 'not a file' }; } catch { return { ok: false, error: 'not found' }; }
+  if (permanent === true) {
+    try { unlinkSync(target); return { ok: true }; } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) }; }
+  }
+  try { await shell.trashItem(target); return { ok: true }; }
+  catch (e) { return { ok: false, noTrash: true, error: e instanceof Error ? e.message : String(e) }; }
 });
 // Open a deliverable in its default program. Only document types (see
 // canOpenExternally): the path comes from an agent, and fs:revealPath's rule
