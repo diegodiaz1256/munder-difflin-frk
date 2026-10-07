@@ -4858,6 +4858,27 @@ ipcMain.handle('deliverables:openExternal', async (_evt, p: unknown) => {
   const err = await shell.openPath(st.path);
   return err ? { ok: false, error: err } : { ok: true };
 });
+// What the human typed straight into an agent's terminal, kept for the Inbox
+// (the renderer knows which prompts were typed by a person). Main-only file.
+ipcMain.handle('hive:keepHumanPrompt', (_evt, agentId: unknown) => {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root || typeof agentId !== 'string') return { ok: false };
+  const p = hookServer.lastPrompt(agentId);
+  if (!p) return { ok: false };
+  try {
+    appendFileSync(join(root, 'humanPrompts.jsonl'), JSON.stringify({ id: `hp-${agentId}-${p.ts}`, agentId, ts: new Date(p.ts).toISOString(), text: p.text }) + '\n');
+    return { ok: true };
+  } catch { return { ok: false }; }
+});
+ipcMain.handle('hive:humanPrompts', () => {
+  const root = hive.enabled() ? hive.root() : null;
+  if (!root) return [];
+  try {
+    return readFileSync(join(root, 'humanPrompts.jsonl'), 'utf8').split('\n').filter(Boolean).slice(-2000)
+      .map((l) => { try { return JSON.parse(l) as { id: string; agentId: string; ts: string; text: string }; } catch { return null; } })
+      .filter((x): x is { id: string; agentId: string; ts: string; text: string } => !!x);
+  } catch { return []; }
+});
 ipcMain.handle('hive:steps', (_evt, agentId: unknown) => (typeof agentId === 'string' ? hookServer.stepsFor(agentId) : []));
 ipcMain.handle('hive:log', (_evt, n: unknown) => hive.logTail(typeof n === 'number' ? n : 200));
 ipcMain.handle('hive:memory', (_evt, id: unknown) => (typeof id === 'string' ? hive.memory(id) : ''));
