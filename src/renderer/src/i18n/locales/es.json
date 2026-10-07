@@ -2544,5 +2544,27 @@
     "status_doing": "en curso",
     "status_blocked": "bloqueada",
     "status_done": "hecha"
+  },
+  "fortress": {
+    "unsupported": "Fortress no publica una versión para este equipo.",
+    "install": "Descargar e instalar",
+    "installNote": "Unos 250 MB, comprobados con la lista SHA-256 de la versión antes de ejecutarse.",
+    "state_downloading": "Descargando… {{percent}}%",
+    "state_verifying": "Comprobando la descarga…",
+    "state_extracting": "Descomprimiendo…",
+    "licensed": "Sesión iniciada: motor v3.",
+    "notLicensed": "Sin sesión: usa el motor v1, más antiguo.",
+    "signIn": "Inicia sesión con tu cuenta",
+    "needsUv": "Para iniciar sesión hace falta uv (arriba).",
+    "check": "Comprobar de nuevo",
+    "approveHint": "Termina de iniciar sesión en tu navegador, incluida la aprobación de este dispositivo:",
+    "useIt": "Usar Fortress en el navegador de la oficina",
+    "v1Note": "Hasta que inicies sesión, Fortress usa su motor de primera generación.",
+    "manual": "¿Prefieres la terminal? Ejecuta",
+    "remove": "Quitar ({{size}})",
+    "renew": "Renovar clave",
+    "renewTip": "Vuelve a emitir la clave antes de que caduque",
+    "signOut": "Cerrar sesión",
+    "needsUvWindows": "Para iniciar sesión hace falta uv en el propio Windows (Fortress se ejecuta junto a la app, no dentro de WSL): powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\""
   }
 }

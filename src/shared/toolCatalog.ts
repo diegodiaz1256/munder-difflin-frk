@@ -37,6 +37,9 @@ export interface ToolSpec {
   /** Shown when there is no scripted install, or as extra context. */
   note?: string;
   docsUrl?: string;
+  /** Installed and managed by the app itself (its own row with its own
+   *  buttons), not by a command the user runs. */
+  managed?: 'fortress';
 }
 
 /** Base rows — the non-engine tools. Engines are appended by `toolCatalog()`. */
@@ -95,6 +98,18 @@ const BASE_TOOLS: ToolSpec[] = [
     install: { posix: '', win32: '' },
     note: 'The app installs this for you when an engine needs it — nothing to do by hand.',
     docsUrl: 'https://nodejs.org'
+  },
+  {
+    id: 'fortress',
+    bin: null, // presence comes from the app's own verified download (main/fortress.ts)
+    label: 'Fortress — office browser engine',
+    kind: 'prerequisite',
+    why: 'A Chromium build that sites read as an ordinary Chrome, so pages your agents read through the office browser are refused as a bot less often. Optional: without it the built-in engine is used.',
+    essential: false,
+    install: { posix: '', win32: '' },
+    note: 'The app downloads and checks it for you. The v3 engine needs a free sign-in with your own account.',
+    docsUrl: 'https://github.com/tiliondev/fortress#free-for-developers',
+    managed: 'fortress'
   }
 ];
 

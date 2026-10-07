@@ -90,7 +90,8 @@ import { effectiveApiAccess, explainConnection, isAccess, type Access } from '..
 import { blockedMcpServers, cleanToolBlocks } from '../shared/nativeTools';
 import { browseChars, formatBrowsed, formatSearch } from '../shared/browsePage';
 import { floorActiveSince } from '../shared/tokenDiet';
-import { browsePage, searchWeb } from './browser';
+import { browsePage, searchWeb, setExternalEngine } from './browser';
+import { Fortress } from './fortress';
 import { TeamNode, type TeamInbound } from './teamNode';
 import { appendTeamLog, disableTeam, enableTeam, loadTeamState, readTeamLog, relayToken, saveTeamState, setRelayToken, teamEnabled, teamPublicStatus } from './team';
 import { mcpCatalogEntry } from '../shared/mcpCatalog';
@@ -513,6 +514,50 @@ const mcpServers = new McpServers({
     const reg = hive.enabled() ? hive.registry() : null;
     return reg ? Object.values(reg.agents).filter((a) => a.status !== 'gone' && a.cwd).map((a) => ({ name: a.name, cwd: a.cwd, ...(root && a.provider === 'codex' ? { codexHome: join(root, 'agents', a.id, '.codex') } : {}) })) : [];
   }
+});
+
+// Fortress as the office browser's engine (fortress.ts), opt-in. Off, missing
+// or failing, the office browser uses the built-in Chromium.
+const fortress = new Fortress({
+  baseDir: join(app.getPath('userData'), 'fortress'),
+  uvPath: () => {
+    try { const r = resolveCliCommand('uv'); return r !== 'uv' && existsSync(r) ? r : null; } catch { return null; }
+  },
+  tilionPath: () => {
+    try { const r = resolveCliCommand('tilion'); return r !== 'tilion' && existsSync(r) ? r : null; } catch { return null; }
+  },
+  env: () => ({ ...process.env, PATH: process.platform === 'win32' ? (process.env.PATH ?? '') : userShellPath() }),
+  log: (m) => console.log('[fortress]', m)
+});
+function applyOfficeBrowserEngine(): void {
+  const on = readConfig().officeBrowserEngine === 'fortress';
+  if (!on) { setExternalEngine(null); fortress.stop(); return; }
+  setExternalEngine(
+    () => (fortress.launcherPath() ? fortress.ensureEngine() : null),
+    (e) => console.warn('[fortress] fell back to the built-in engine:', e instanceof Error ? e.message : e)
+  );
+}
+applyOfficeBrowserEngine();
+ipcMain.handle('fortress:status', async () => ({ ...(await fortress.status()), enabled: readConfig().officeBrowserEngine === 'fortress', bytes: fortress.diskUsage() }));
+ipcMain.handle('fortress:install', () => fortress.install());
+ipcMain.handle('fortress:activate', async () => {
+  const r = await fortress.activate();
+  // The link is the user's own sign-in: open it in their browser.
+  if (r.ok && r.url) void shell.openExternal(r.url);
+  return r;
+});
+ipcMain.handle('fortress:refreshLicense', () => fortress.license(true));
+ipcMain.handle('fortress:license', (_evt, which: unknown) => (which === 'refresh' || which === 'logout' ? fortress.licenseCommand(which) : { ok: false, error: 'bad request' }));
+ipcMain.handle('fortress:setEnabled', (_evt, on: unknown) => {
+  writeConfig({ officeBrowserEngine: on === true ? 'fortress' : 'builtin' });
+  applyOfficeBrowserEngine();
+  return { ok: true };
+});
+ipcMain.handle('fortress:uninstall', () => {
+  writeConfig({ officeBrowserEngine: 'builtin' });
+  applyOfficeBrowserEngine();
+  fortress.uninstall();
+  return { ok: true };
 });
 
 // Environment & secrets (envVault.ts): agents use secrets, never see them.
@@ -5185,6 +5230,11 @@ ipcMain.handle('tools:status', async (): Promise<ToolStatus[]> => {
             : `not installed inside WSL (${wslLoc.distro}); mempalace on Windows does not count for a WSL floor`
         };
       }
+      // Fortress runs beside the app, not inside the distro.
+      if (spec.managed === 'fortress') {
+        const launcher = fortress.launcherPath();
+        return { ...spec, installCommand: '', found: !!launcher, path: launcher };
+      }
       const installCommand = WSL_INSTALL[spec.id] ?? spec.install.posix.replace(/^xcode-select --install\s+# macOS · or: /, '');
       const path = spec.bin ? found[spec.bin] ?? null : null;
       return { ...spec, installCommand, found: !!path, path, detail: probeError ? `could not check inside WSL (${wslLoc.distro}): ${probeError}` : `inside WSL (${wslLoc.distro})` };
@@ -5202,6 +5252,10 @@ ipcMain.handle('tools:status', async (): Promise<ToolStatus[]> => {
           ? (mem.initialized ? 'palace initialised' : 'installed — palace not built yet')
           : undefined
       };
+    }
+    if (spec.managed === 'fortress') {
+      const launcher = fortress.launcherPath();
+      return { ...spec, installCommand, found: !!launcher, path: launcher };
     }
     if (!spec.bin) return { ...spec, installCommand, found: false, path: null };
     let path: string | null = null;
@@ -7464,6 +7518,7 @@ app.on('window-all-closed', () => {
 // exactly what's left to do.
 let analyticsFlushed = false;
 app.on('will-quit', (e) => {
+  fortress.stop();
   if (analyticsFlushed) return;
   analyticsFlushed = true;
   e.preventDefault();
