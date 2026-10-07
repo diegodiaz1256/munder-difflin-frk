@@ -3451,6 +3451,77 @@ export class HiveManager {
     console.warn('[hive] commit gave up after 5 attempts');
   }
 
+  /**
+   * Commit some deliverables as the agent that wrote them, so the history of
+   * research/ says who changed what (every other hive commit is authored
+   * "Hive"). Only these paths: whatever else is pending waits for the next
+   * ordinary commit. `rels` are relative to the hive root, with '/'.
+   */
+  commitDeliverables(rels: string[], author: { id: string; name: string }): void {
+    const root = this.root();
+    if (!root || !existsSync(join(root, '.git')) || !rels.length) return;
+    const clean = (x: string) => x.replace(/[<>\n\r]/g, '').trim().slice(0, 60) || 'agent';
+    const who = `${clean(author.name)} <${clean(author.id).replace(/[^A-Za-z0-9._-]/g, '-')}@hive.local>`;
+    const msg = `deliverable: ${rels.join(', ').slice(0, 300)} (${clean(author.name)})`;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      this.clearStaleLock(root);
+      const add = this.git(['add', '-A', '--', ...rels], root);
+      const commit = this.git(['commit', '-q', `--author=${who}`, '-m', msg, '--', ...rels], root);
+      if (commit.ok || /nothing (added )?to commit|no changes added/i.test(commit.out + commit.err)) return;
+      if (!add.ok || /index\.lock/i.test(commit.err)) { sleepSync(50 * (attempt + 1)); continue; }
+      console.warn('[hive] deliverable commit failed:', commit.err || commit.out);
+      return;
+    }
+  }
+
+  /** Every committed version of one hive file, newest first: hash, time,
+   *  author ("Hive" for the app's own batched commits) and message. */
+  fileHistory(rel: string, limit = 100): Array<{ hash: string; ts: string; author: string; subject: string }> {
+    const root = this.root();
+    if (!root || !existsSync(join(root, '.git'))) return [];
+    const r = this.git(['log', `-n${Math.max(1, Math.min(500, limit))}`, '--follow', '--format=%H%x1f%aI%x1f%an%x1f%s', '--', rel], root);
+    if (!r.ok) return [];
+    return r.out.split('\n').filter(Boolean).map((l) => {
+      const [hash, ts, author, subject] = l.split('\x1f');
+      return { hash, ts, author, subject: subject ?? '' };
+    }).filter((v) => /^[0-9a-f]{40}$/.test(v.hash));
+  }
+
+  /** A hive file as it was in one commit (text, capped), or null. */
+  fileAt(rel: string, hash: string): string | null {
+    const root = this.root();
+    if (!root || !/^[0-9a-f]{7,40}$/.test(hash) || rel.includes('..')) return null;
+    const r = this.git(['show', `${hash}:${rel}`], root);
+    return r.ok ? r.out.slice(0, 2_000_000) : null;
+  }
+
+  private authorsCache: { head: string; map: Record<string, { authors: string[]; last: string; lastTs: string }> } | null = null;
+  /** Who has changed each file under `dir` (agents only, not the app's own
+   *  "Hive" commits), most recent first, from one pass over the log; cached
+   *  until HEAD moves. Keys are hive-relative paths with '/'. */
+  fileAuthors(dir: string): Record<string, { authors: string[]; last: string; lastTs: string }> {
+    const root = this.root();
+    if (!root || !existsSync(join(root, '.git'))) return {};
+    const head = this.git(['rev-parse', 'HEAD'], root);
+    if (!head.ok) return {};
+    if (this.authorsCache?.head === head.out.trim()) return this.authorsCache.map;
+    const r = this.git(['log', '-n2000', '--no-merges', '--format=%x1e%an%x1f%aI', '--name-only', '--', dir], root);
+    const map: Record<string, { authors: string[]; last: string; lastTs: string }> = {};
+    if (r.ok) {
+      for (const chunk of r.out.split('\x1e').filter(Boolean)) {
+        const [headLine, ...files] = chunk.split('\n');
+        const [author, ts] = headLine.split('\x1f');
+        if (!author || author === 'Hive') continue;
+        for (const f of files.map((x) => x.trim()).filter(Boolean)) {
+          const e = map[f] ?? (map[f] = { authors: [], last: author, lastTs: ts });
+          if (!e.authors.includes(author)) e.authors.push(author);
+        }
+      }
+    }
+    this.authorsCache = { head: head.out.trim(), map };
+    return map;
+  }
+
   private clearStaleLock(root: string): void {
     const STALE_THRESHOLD_MS = 10_000;
     try {

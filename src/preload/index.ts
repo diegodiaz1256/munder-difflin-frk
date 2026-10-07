@@ -1009,10 +1009,20 @@ const api = {
 
   /** What an agent has done lately (hook events with what each tool was asked), oldest first. */
   /** Deliverables: the office's research/ folder (newest first) and what each agent wrote this session. */
-  deliverablesList: (): Promise<{ root: string | null; dir: string | null; distro: string | null; files: Array<{ rel: string; abs: string; size: number; mtime: number }>; written: Array<{ path: string; ts: number; created: boolean; agentId: string; name: string }>; links: Array<{ path: string; taskId: string; agentId: string; ts: number }> }> =>
+  deliverablesList: (): Promise<{ root: string | null; dir: string | null; distro: string | null; files: Array<{ rel: string; abs: string; size: number; mtime: number }>; written: Array<{ path: string; ts: number; created: boolean; agentId: string; name: string }>; links: Array<{ path: string; taskId: string; agentId: string; ts: number }>; hidden?: string[]; authors?: Record<string, { authors: string[]; last: string; lastTs: string }> }> =>
     ipcRenderer.invoke('deliverables:list'),
   /** Open a deliverable in its default program (document types only). */
   deliverablesOpenExternal: (path: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('deliverables:openExternal', path),
+  /** A deliverable's committed versions, newest first (author = the agent). */
+  deliverablesHistory: (path: string): Promise<Array<{ hash: string; ts: string; author: string; subject: string }>> => ipcRenderer.invoke('deliverables:history', path),
+  /** A deliverable's text as it was in one of those versions. */
+  deliverablesVersion: (path: string, hash: string): Promise<{ ok: boolean; text?: string; error?: string }> => ipcRenderer.invoke('deliverables:version', path, hash),
+  /** Hide a deliverable from the listing (or show it again). The file stays. */
+  deliverablesSetHidden: (path: string, hidden: boolean): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('deliverables:setHidden', path, hidden),
+  /** Delete a file in the office's research/ folder: to the trash, or for good
+   *  with `permanent` once `noTrash` said the trash is not available. */
+  deliverablesDelete: (path: string, permanent?: boolean): Promise<{ ok: boolean; noTrash?: boolean; error?: string }> =>
+    ipcRenderer.invoke('deliverables:delete', path, permanent === true),
   hiveSteps: (agentId: string): Promise<HookEvent[]> => ipcRenderer.invoke('hive:steps', agentId),
   onHiveHookEvent: (
     cb: (e: HookEvent) => void
