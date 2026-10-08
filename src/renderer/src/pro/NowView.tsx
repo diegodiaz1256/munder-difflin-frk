@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentStep, groupActivity, type ActivityItem, type ActivityKind } from '@shared/officeActivity';
 import { useStore } from '@/store/store';
-import { Avatar, StateBadge, agentState, useTasks } from './data';
+import { Avatar, GodBadge, StateBadge, agentState, useTasks } from './data';
 import { useOfficeActivity } from './activityStore';
 import { useProStore } from './proStore';
 
@@ -72,7 +72,7 @@ export function NowView() {
             <button key={a.id} className="pro-now-row" onClick={() => setView({ kind: 'agent', agentId: a.id })}
               style={{ display: 'grid', gridTemplateColumns: 'auto minmax(90px, 140px) auto 1fr auto', gap: 10, alignItems: 'center', textAlign: 'start', background: 'none', border: 'none', padding: '5px 6px', cursor: 'pointer', color: 'inherit' }}>
               <Avatar agent={a} />
-              <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</strong>
+              <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', gap: 5, alignItems: 'center' }}>{a.name}{a.isGod && <GodBadge star />}</strong>
               <StateBadge {...agentState(a, !!task && task.status === 'blocked')} />
               <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

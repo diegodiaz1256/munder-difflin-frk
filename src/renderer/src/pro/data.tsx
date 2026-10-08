@@ -130,6 +130,16 @@ export function askingAgents(tasks: HiveTask[]): Set<string> {
 /** agentState's labels → their i18n keys (`pro.state.*`). */
 const STATE_KEY: Record<string, string> = { 'Needs you': 'needsYou', Working: 'working', Thinking: 'thinking', Breaker: 'breaker', Done: 'done', Idle: 'idle', Stopped: 'stopped' };
 
+/** Marks the orchestrator (the "god agent") wherever agents are listed, so it
+ *  never reads as just another worker. `star` is the one-glyph form for tight
+ *  rows; the tooltip says what the role is either way. */
+export function GodBadge({ star = false }: { star?: boolean }) {
+  const { t } = useTranslation();
+  const tip = t('pro.god.tip');
+  if (star) return <span className="pro-god-star" title={tip} aria-label={t('pro.god.badge')}>★</span>;
+  return <span className="pro-badge pro-badge-god" title={tip}>★ {t('pro.god.badge')} <span className="pro-badge-god-sub">· god agent</span></span>;
+}
+
 export function StateBadge({ label, tone }: { label: string; tone: Tone }) {
   const { t } = useTranslation();
   const key = STATE_KEY[label];

@@ -179,7 +179,9 @@ export function ProShell({ config }: { config: HarnessConfig }) {
               <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: '15px' }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
                 <span className="pro-sub" style={{ fontSize: 11 }}>
-                  {asking.has(a.id) ? t('pro.nav.askedYou') : ctx !== null ? `ctx ${ctx}%` : a.isGod ? t('pro.nav.orchestrator') : (a.model ?? a.provider ?? t('pro.nav.agent'))}
+                  {asking.has(a.id) ? t('pro.nav.askedYou')
+                    : a.isGod ? `★ ${t('pro.nav.orchestrator')}`
+                    : ctx !== null ? `ctx ${ctx}%` : (a.model ?? a.provider ?? t('pro.nav.agent'))}
                 </span>
               </span>
               <span className="pro-nav-end">

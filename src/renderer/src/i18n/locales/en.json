@@ -1531,7 +1531,9 @@
   },
   "app": {
     "godFailed": "The orchestrator could not start:",
-    "godRetry": "Retry"
+    "godRetry": "Retry",
+    "clockingIn": "CLOCKING IN",
+    "clockingInBody": "{{godName}} is settling into the corner office and getting the floor ready. Hang tight…"
   },
   "usage": {
     "title": "Subscription usage",
@@ -2469,6 +2471,10 @@
       "restartedList": "Restarted: {{names}}",
       "joinedList": "Joined: {{names}}",
       "leftList": "Left: {{names}}"
+    },
+    "god": {
+      "badge": "Orchestrator",
+      "tip": "{{godName}} is the orchestrator (the \"god agent\"): it reads your requests, hands the work to the right agents, keeps them coordinated and only brings you what needs you."
     }
   },
   "hivePicker": {
