@@ -1734,7 +1734,11 @@
       "waitingTip": "Questions waiting for your answer",
       "jumpToQuestion": "Show the question",
       "showInternal": "Show messages between agents ({{count}})",
-      "runSummary": "{{count}} messages between {{people}}",
+      "runSummary_one": "{{count}} message between {{people}}",
+      "runSummary_other": "{{count}} messages between {{people}}",
+      "runWith_one": "{{count}} message with {{people}}",
+      "runWith_other": "{{count}} messages with {{people}}",
+      "listAnd": "{{list}} and {{last}}",
       "hideRun": "Hide these messages"
     },
     "temps": {
