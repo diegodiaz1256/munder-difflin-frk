@@ -130,6 +130,17 @@ export function askingAgents(tasks: HiveTask[]): Set<string> {
 /** agentState's labels → their i18n keys (`pro.state.*`). */
 const STATE_KEY: Record<string, string> = { 'Needs you': 'needsYou', Working: 'working', Thinking: 'thinking', Breaker: 'breaker', Done: 'done', Idle: 'idle', Stopped: 'stopped' };
 
+/** The same state as StateBadge, as a quiet line (a dot and a word) for dense rows. */
+export function StateLine({ label, tone }: { label: string; tone: Tone }) {
+  const { t } = useTranslation();
+  const key = STATE_KEY[label];
+  return (
+    <span className="pro-state-line">
+      <span className="pro-dot" style={{ background: TONE_COLOR[tone] }} /> {key ? t(`pro.state.${key}`) : label}
+    </span>
+  );
+}
+
 export function StateBadge({ label, tone }: { label: string; tone: Tone }) {
   const { t } = useTranslation();
   const key = STATE_KEY[label];
