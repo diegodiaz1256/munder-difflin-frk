@@ -23,15 +23,15 @@ if (cmd === 'list') {
 } else if (cmd === 'search') {
   if (cat.policy === 'off') { console.log('Skills are switched off for you (Capabilities > Skills).'); process.exit(0); }
   var words = process.argv.slice(3).join(' ').toLowerCase().split(/\\s+/).filter(Boolean);
-  var pool = cat.skills.filter(function (c) { return cat.policy !== 'official' || c.owner === 'anthropics'; });
+  var pool = cat.skills.filter(function (c) { return cat.policy === 'catalog' || c.owner === 'anthropics' || (cat.policy === 'mine' && !!c.marketplace); });
   var hits = pool.map(function (c) {
     var name = c.name.toLowerCase(), hay = (c.description + ' ' + c.category).toLowerCase();
     var score = words.reduce(function (s, w) { return s + (name === w ? 5 : name.indexOf(w) >= 0 ? 3 : hay.indexOf(w) >= 0 ? 1 : 0); }, words.length ? 0 : 1);
     return { c: c, score: score };
   }).filter(function (x) { return x.score > 0; }).sort(function (a, b) { return b.score - a.score || a.c.name.localeCompare(b.c.name); }).slice(0, 8);
   if (!cat.skills.length) console.log('The catalog is not loaded yet; try again in a minute.');
-  else if (!hits.length) console.log('Nothing matches.' + (cat.policy === 'official' ? ' (Only Anthropic skills are allowed.)' : ''));
-  hits.forEach(function (x) { var d = x.c.description || ''; console.log(x.c.name + ' [' + x.c.owner + '] ' + (d.length > 90 ? d.slice(0, 89) + '...' : d) + (office[x.c.name] ? ' (in the office)' : '')); });
+  else if (!hits.length) console.log('Nothing matches.' + (cat.policy === 'official' ? ' (Only Anthropic skills are allowed.)' : cat.policy === 'mine' ? " (Only Anthropic's and the human's own marketplaces are allowed.)" : ''));
+  hits.forEach(function (x) { var d = x.c.description || ''; console.log(x.c.name + ' [' + x.c.owner + (x.c.marketplace ? ', your marketplace' : '') + '] ' + (d.length > 90 ? d.slice(0, 89) + '...' : d) + (office[x.c.name] ? ' (in the office)' : '')); });
 } else {
   console.log('md-skills search <words> | md-skills list');
 }

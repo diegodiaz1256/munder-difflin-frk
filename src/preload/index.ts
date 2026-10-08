@@ -425,7 +425,8 @@ export interface HarnessConfig {
   agentRoam?: string[];
   /** What the orchestrator may add as office skills: nothing, Anthropic's own
    *  (default), or anything in the catalog (shared/skillRequests.ts). */
-  orchestratorSkills?: 'off' | 'official' | 'catalog';
+  orchestratorSkills?: 'off' | 'official' | 'mine' | 'catalog';
+  skillMarketplaces?: Array<{ url: string; label?: string }>;
   autoDeliveryPausedAgents?: string[];
   maxTurns?: number;
   circuitBreaker?: CircuitBreakerConfig;
@@ -951,8 +952,14 @@ const api = {
   skillsOfficeRemove: (name: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('skills:officeRemove', name),
   /** The browsable skills catalog (cached; `force` re-fetches). */
   skillsCatalog: (force?: boolean): Promise<{
-    skills: CatalogSkill[]; fetchedAt: number; stale: boolean; error?: string;
+    skills: Array<CatalogSkill & { marketplace?: string }>; fetchedAt: number; stale: boolean; error?: string;
   }> => ipcRenderer.invoke('skills:catalog', force),
+  /** Your own skill marketplaces (GitHub repos), with how many skills each has. */
+  skillMarketplaces: (force?: boolean): Promise<Array<{ url: string; label: string; count: number; fetchedAt: number; error?: string }>> =>
+    ipcRenderer.invoke('skills:marketplaces', force),
+  addSkillMarketplace: (url: string, label?: string): Promise<{ ok: boolean; count?: number; error?: string }> =>
+    ipcRenderer.invoke('skills:addMarketplace', url, label),
+  removeSkillMarketplace: (url: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('skills:removeMarketplace', url),
   /** Install a catalog skill into ~/.claude/skills. `unsupported` distinguishes
    *  "there is no downloadable source" from "the download failed". */
   skillsInstall: (url: string, name: string): Promise<

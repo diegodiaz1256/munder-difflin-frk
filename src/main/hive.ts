@@ -1562,7 +1562,7 @@ export class HiveManager {
   }
 
   /** The catalog the orchestrator searches (md-skills), and what it may add. */
-  writeSkillCatalogMirror(skills: Array<{ name: string; description: string; category: string; owner: string }>, policy: SkillPolicy): void {
+  writeSkillCatalogMirror(skills: Array<{ name: string; description: string; category: string; owner: string; marketplace?: string }>, policy: SkillPolicy): void {
     const root = this.root();
     if (!root) return;
     try {
@@ -1570,7 +1570,7 @@ export class HiveManager {
       writeFileSync(join(root, 'skills', 'catalog.json'), JSON.stringify({
         note: 'Mirror of the skills catalog for md-skills. Read-only.',
         policy,
-        skills: skills.map((s) => ({ name: s.name, description: s.description, category: s.category, owner: s.owner }))
+        skills: skills.map((s) => ({ name: s.name, description: s.description, category: s.category, owner: s.owner, ...(s.marketplace ? { marketplace: true } : {}) }))
       }), 'utf8');
     } catch { /* best-effort */ }
   }

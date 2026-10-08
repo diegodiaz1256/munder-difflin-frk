@@ -90,6 +90,7 @@ button.pro-card:hover { border-color: var(--pro-line-strong); }
 }
 .pro-chip-on { border-color: var(--pro-green); color: var(--cth-ink-900); }
 .pro-chip-off { opacity: .5; }
+.pro-mkt { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--pro-line); }
 .pro-badge {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 11px; line-height: 20px; padding: 0 8px; border-radius: 6px; white-space: nowrap;

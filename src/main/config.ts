@@ -359,6 +359,9 @@ export interface HarnessConfig {
    *  The on-disk hive (god orchestration under harnessHome) stays process-global;
    *  floors share it. */
   multiWindow?: boolean;
+  /** Your own skill marketplaces (GitHub repos or folders), added to the catalog
+   *  (main/skillMarketplaces.ts). */
+  skillMarketplaces?: Array<{ url: string; label?: string }>;
   /** Terminal theme — mirrored into each agent's per-session Claude settings
    *  ("theme" key) at spawn so the TUI's truecolor palette matches. Scoped to
    *  harness agents only; the user's global Claude theme is never touched. */

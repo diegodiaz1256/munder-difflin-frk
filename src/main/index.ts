@@ -125,6 +125,7 @@ import { buildMissingCliScript, chooseInstallRung } from './cliInstall';
 import { detectNodeVersion, nodeAtLeast, nodeIsUsable, resolveNodeInstaller } from './nodeInstall';
 import { toolCatalog, type ToolStatus } from '../shared/toolCatalog';
 import { listLocalSkills, loadCatalog, installSkill, uninstallSkill, type LocalSkill, type CatalogSkill } from './skills';
+import { cleanMarketplaces, loadMarketplace, loadMarketplaces, marketplaceProblem, mergeCatalog } from './skillMarketplaces';
 import { cleanSkillPolicy, planSkillRequest } from '../shared/skillRequests';
 import { loadHero } from './hero';
 import { loadModelCatalog } from './modelCatalog';
@@ -1028,6 +1029,15 @@ function processScheduleRequests(): void {
  *  (shared/skillRequests.ts). Installed once into the hive's store, copied to
  *  the agents named, answered in its inbox. */
 const SKILL_CATALOG_CACHE = () => join(app.getPath('userData'), 'skill-catalog.json');
+const MARKETPLACE_CACHE = () => join(app.getPath('userData'), 'skill-marketplaces');
+/** The public catalog plus your own marketplaces. */
+async function fullSkillCatalog(force = false): Promise<{ skills: Array<CatalogSkill & { marketplace?: string }>; fetchedAt: number; stale: boolean; error?: string }> {
+  const [catalog, markets] = await Promise.all([
+    loadCatalog(SKILL_CATALOG_CACHE(), { force }).catch((e) => ({ skills: [] as CatalogSkill[], fetchedAt: 0, stale: true, error: String(e) })),
+    loadMarketplaces(cleanMarketplaces(readConfig().skillMarketplaces), MARKETPLACE_CACHE(), force).catch(() => [])
+  ]);
+  return { ...catalog, skills: mergeCatalog(catalog.skills, markets) };
+}
 let skillMirrorAt = 0;
 async function processSkillRequests(): Promise<void> {
   const root = hive.root();
@@ -1041,7 +1051,7 @@ async function processSkillRequests(): Promise<void> {
   // cache, so this rarely touches the network.
   const stale = Date.now() - skillMirrorAt > 3_600_000 || !existsSync(join(root, 'skills', 'catalog.json'));
   if (!files.length && !stale) return;
-  const catalog = await loadCatalog(SKILL_CATALOG_CACHE()).catch(() => ({ skills: [] as CatalogSkill[] }));
+  const catalog = await fullSkillCatalog().catch(() => ({ skills: [] as CatalogSkill[] }));
   hive.writeSkillCatalogMirror(catalog.skills, policy);
   skillMirrorAt = Date.now();
   for (const f of files) {
@@ -5230,9 +5240,32 @@ ipcMain.handle('skills:local', (_evt, cwd: unknown): LocalSkill[] => {
 /** The skills catalog, parsed from its README and cached in userData.
  *  `force` is the explicit refresh button; everything else is served from a
  *  day-old cache so opening the tab never waits on the network. */
-ipcMain.handle('skills:catalog', async (_evt, force: unknown) => {
-  const cachePath = join(app.getPath('userData'), 'skill-catalog.json');
-  return loadCatalog(cachePath, { force: force === true });
+ipcMain.handle('skills:catalog', async (_evt, force: unknown) => fullSkillCatalog(force === true));
+
+// Your own skill marketplaces (skillMarketplaces.ts): listed with their skills
+// count (and the last error), added after one successful read, removed by URL.
+ipcMain.handle('skills:marketplaces', async (_evt, force: unknown) =>
+  (await loadMarketplaces(cleanMarketplaces(readConfig().skillMarketplaces), MARKETPLACE_CACHE(), force === true))
+    .map((m) => ({ url: m.url, label: m.label, count: m.skills.length, fetchedAt: m.fetchedAt, error: m.error })));
+ipcMain.handle('skills:addMarketplace', async (_evt, url: unknown, label: unknown) => {
+  if (typeof url !== 'string') return { ok: false, error: 'invalid address' };
+  const problem = marketplaceProblem(url);
+  if (problem) return { ok: false, error: problem };
+  const list = cleanMarketplaces(readConfig().skillMarketplaces);
+  if (list.some((m) => m.url === url.trim())) return { ok: false, error: 'That marketplace is already added.' };
+  const m = { url: url.trim(), ...(typeof label === 'string' && label.trim() ? { label: label.trim().slice(0, 60) } : {}) };
+  const read = await loadMarketplace(m, MARKETPLACE_CACHE(), true);
+  if (read.error && !read.skills.length) return { ok: false, error: `Could not read it: ${read.error}` };
+  if (!read.skills.length) return { ok: false, error: 'No skills found there (each skill is a folder with a SKILL.md).' };
+  writeConfig({ skillMarketplaces: [...list, m] });
+  skillMirrorAt = 0;
+  return { ok: true, count: read.skills.length };
+});
+ipcMain.handle('skills:removeMarketplace', (_evt, url: unknown) => {
+  if (typeof url !== 'string') return { ok: false };
+  writeConfig({ skillMarketplaces: cleanMarketplaces(readConfig().skillMarketplaces).filter((m) => m.url !== url.trim()) });
+  skillMirrorAt = 0;
+  return { ok: true };
 });
 
 /** Install one catalog skill into ~/.claude/skills. Structured refusals, never a

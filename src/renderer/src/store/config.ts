@@ -136,7 +136,8 @@ export interface HarnessConfig {
   agentRoam?: string[];
   /** What the orchestrator may add as office skills: nothing, Anthropic's own
    *  (default), or anything in the catalog (shared/skillRequests.ts). */
-  orchestratorSkills?: 'off' | 'official' | 'catalog';
+  orchestratorSkills?: 'off' | 'official' | 'mine' | 'catalog';
+  skillMarketplaces?: Array<{ url: string; label?: string }>;
   /** Manager → Connections "Choose agents": a keyed MCP server listed here reaches
    *  only these agent ids (on their next spawn). Absent → every agent. */
   connectionScopes?: Record<string, string[]>;
