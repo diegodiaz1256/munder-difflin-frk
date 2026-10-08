@@ -2472,6 +2472,8 @@
     }
   },
   "hivePicker": {
+    "inUse": "abierta en otra planta",
+    "inUseTitle": "Otra planta está usando esta oficina. Usa esa ventana o elige otra oficina aquí.",
     "couldNotOpen": "No se pudo abrir esa carpeta.",
     "title": "ELIGE UNA OFICINA",
     "intro": "Una <strong>oficina</strong> es la carpeta donde la app guarda todo lo de un espacio de trabajo: sus ajustes, tus agentes y su memoria, las tareas, los disparadores y el historial. Cada una es independiente, así que puedes tener configuraciones distintas a la vez. Abre en la que estabas trabajando, cambia a otra o empieza una nueva.",

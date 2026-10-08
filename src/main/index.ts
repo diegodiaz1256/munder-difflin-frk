@@ -3,6 +3,10 @@ import { DEMO_HOME } from './demo';
 // Copies the data of this fork's old name (Munder Difflin) on first launch — before
 // anything reads userData (see legacyMigration.ts).
 import { offerLegacyUninstall } from './legacyMigration';
+// A floor (another office, its own process) redirects userData too — after the
+// legacy copy, which only ever fills the main profile (see floorProfile.ts).
+import { FLOOR_ID, floorArgs, seedFloor } from './floorProfile';
+import { claimOffice, officeHolder, releaseOffice } from './officeLock';
 // Headless (server) mode sets Chromium switches — must load before ready too.
 import { HEADLESS, HEADLESS_SETUP, SERVER } from './headless';
 import { APP_NAME } from '../shared/fork';
@@ -3242,9 +3246,21 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
 /** Open a new floor window — gated by the multiWindow flag. Returns the window,
  *  or null when the feature is off (the entry points are hidden in that case,
  *  but the IPC stays defensive). */
-function openFloor(): BrowserWindow | null {
-  if (!readConfig().multiWindow) return null;
-  return createWindow({ floor: true });
+/** New Floor: another office, run by its own copy of the app (floorProfile.ts).
+ *  It starts from these settings and keys and opens on the office picker. */
+function openFloor(): boolean {
+  if (!readConfig().multiWindow) return false;
+  const id = randomBytes(5).toString('hex');
+  try {
+    seedFloor(id);
+    const child = spawn(process.execPath, floorArgs(process.argv, id), { detached: true, stdio: 'ignore', env: process.env });
+    child.on('error', (e) => console.error('[floor] could not start:', e));
+    child.unref();
+    return true;
+  } catch (e) {
+    console.error('[floor] could not start:', e);
+    return false;
+  }
 }
 
 /** Build + install the application menu. Only called when multiWindow is on, so
@@ -4524,6 +4540,8 @@ ipcMain.handle('config:ensureHome', (_evt, path: unknown) => {
 // optionally MOVING the existing hive + palace and relaunching so every service
 // re-binds against the new root. mode: 'move' copies the data (old kept as a
 // safety net), 'fresh' just re-points and bootstraps an empty home.
+ipcMain.handle('config:officesInUse', (_evt, paths: unknown) =>
+  Array.isArray(paths) ? paths.filter((p): p is string => typeof p === 'string' && !!p && officeHolder(resolve(expandTilde(p))) !== null) : []);
 ipcMain.handle('config:changeHome', async (_evt, payload: unknown) => {
   const p = (payload ?? {}) as { newHome?: unknown; mode?: unknown };
   if (typeof p.newHome !== 'string' || !p.newHome) return { ok: false, error: 'invalid newHome' };
@@ -4548,6 +4566,9 @@ ipcMain.handle('config:changeHome', async (_evt, payload: unknown) => {
 
   const ensured = ensureHarnessHome(newHome);
   if (!ensured.ok) return ensured;
+  if (officeHolder(newHome) !== null) {
+    return { ok: false, error: 'That office is already open on another floor. Switch to that window to use it.' };
+  }
 
   // Tear down everything bound to the OLD root before copying, so nothing writes
   // mid-copy — a live git commit into hive/.git would otherwise be copied as a
@@ -4594,6 +4615,7 @@ ipcMain.handle('config:changeHome', async (_evt, payload: unknown) => {
   allowQuit = true;
   writeConfig({ harnessHome: newHome });
   try { ptyManager.killAll(); } catch (e) { console.error('[changeHome] killAll:', e); }
+  releaseClaimedOffice();
   app.relaunch();
   app.exit(0);
   return { ok: true as const }; // unreachable (process exits) — typed for the renderer
@@ -5668,8 +5690,7 @@ ipcMain.handle('app:cancelClose', () => {
 // inside openFloor(); returns whether a window opened so a renderer button can
 // reflect availability. The app-menu "New Floor" item calls openFloor() directly.
 ipcMain.handle('window:newFloor', () => {
-  const win = openFloor();
-  return { ok: win != null };
+  return { ok: openFloor() };
 });
 
 // ─── IPC: closing time (graceful, data-loss-free shutdown) ──────────────────
@@ -5727,6 +5748,7 @@ ipcMain.handle('app:resetAll', () => {
   // Back to first-run defaults, then relaunch clean so all in-memory services
   // re-bootstrap from scratch and the renderer lands on onboarding.
   resetConfig();
+  releaseClaimedOffice();
   app.relaunch();
   app.exit(0);
 });
@@ -7141,8 +7163,45 @@ ipcMain.handle('workers:hire', async (_evt, req: unknown): Promise<{ ok: boolean
 /** Start every hive-bound background service against the current harnessHome.
  *  Called on boot, and again to recover in place if a folder-change copy fails
  *  (config:changeHome tears these down before copying). No-op without a home. */
+/** The office this process runs (officeLock.ts), so quitting gives it back. */
+let claimedOffice: string | null = null;
+function releaseClaimedOffice(): void {
+  releaseOffice(claimedOffice);
+  claimedOffice = null;
+}
+process.on('exit', releaseClaimedOffice);
+
+/** Another floor already runs this office: say so, and leave it alone. */
+function officeTakenElsewhere(home: string): void {
+  const show = () => {
+    const opts = {
+      type: 'warning' as const,
+      message: 'This office is already open on another floor',
+      detail: `${home}
+
+One office runs in one window at a time, so two orchestrators never share its inbox and history. Use the other window, or pick a different office here.`,
+      buttons: ['Pick another office', 'Close this window'],
+      defaultId: 0,
+      cancelId: 1
+    };
+    const w = BrowserWindow.getAllWindows()[0];
+    void (w ? dialog.showMessageBox(w, opts) : dialog.showMessageBox(opts)).then(({ response }) => {
+      allowQuit = true;
+      if (response === 0) { writeConfig({ harnessHome: null }); app.relaunch(); }
+      app.exit(0);
+    });
+  };
+  if (app.isReady()) show(); else void app.whenReady().then(show);
+}
+
 function bootstrapHiveServices(): void {
   if (!hive.enabled()) return;
+  const home = readConfig().harnessHome;
+  if (home && claimedOffice !== resolve(home)) {
+    const claim = claimOffice(resolve(home));
+    if (!claim.ok) { officeTakenElsewhere(home); return; }
+    claimedOffice = resolve(home);
+  }
   hive.ensureHive();
   hive.refreshGeneratedDocs();
   // An office inside a project's repo: keep its files out of that repo's git.
@@ -7607,6 +7666,7 @@ app.on('window-all-closed', () => {
 let analyticsFlushed = false;
 app.on('will-quit', (e) => {
   fortress.stop();
+  releaseClaimedOffice();
   // What is still queued reaches the hive history before the process goes.
   try { hive.flushCommitsSync(); } catch { /* best-effort */ }
   if (analyticsFlushed) return;
