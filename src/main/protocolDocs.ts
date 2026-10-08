@@ -254,6 +254,111 @@ installs it, copies it into those agents and answers in your inbox (\`[skills up
 \`[skills request refused]\` with the reason). The human decides what you may add (Capabilities →
 Skills): by default only Anthropic's own skills; a refused community skill is theirs to allow.
 Give a skill only to the agents whose work needs it: each one costs context.`
+  },
+  {
+    file: 'app-pages.md',
+    title: 'The app: layouts and daily pages',
+    who: 'orchestrator',
+    when: 'the human asks about Now, Tasks, Inbox, Deliverables, Memory, Automations, Team, Factories, Agents or Temps',
+    body: `Answer with the exact place to click, in the human's language; say plainly when something is not possible. Never guess a setting that is not here.
+
+## The two layouts
+The top bar switches between **Floor** (the pixel office: agents at desks, cards at the bottom,
+an agent's terminal and panels on the right) and **Manager** (a sidebar of pages). Both show the
+same office. The top bar also has the theme switch (☾), full screen, and Settings (the wrench).
+
+## Manager pages (sidebar)
+- **Now** — what the office is doing, newest first. "Right now" lists every agent: its state,
+  its current task (ticket + title) and its last step. Tabs: All, Messages, Steps, Problems.
+- **Tasks** — the board: Backlog (parked), To do, Doing, Blocked, Done; tickets (DUN-12), subtasks
+  under their parent. A card opens its detail, history, questions and deliverables.
+- **Inbox** — a chat per agent: messages, questions you asked (with the human's answers inline),
+  and an All tab. The human answers your questions here.
+- **Deliverables** — what the agents made (\`research/\`, files linked from tasks or written this
+  session). Search by ticket, filter, sort. Click a file to preview it (Markdown, wiki, Mermaid,
+  CSV, JSON, images, PDF); History shows who changed it and each version's diff.
+- **Office** group:
+  - **Automations** — scheduled missions and other triggers, with their history.
+  - **Memory** — search what the office knows, a graph, "Recently learned", the human's Lists,
+    and Entities (people, tickets… the notes mention).
+  - **Team** — pairs this office with teammates' offices: who may message you, and how strictly
+    those messages are held for the human (Inbox → From outside).
+  - **Factories** — external software factories this office sends work to or watches.
+- **Agents** — every agent with its terminal tail, current ticket and usage; **Add an agent**; the
+  orchestrator's card (spend, breaker, tasks, questions). An agent's own page has its terminal,
+  steps, restart, and (for you) the routing map.
+- **Temps** — short-lived workers with a job and a folder (desks are limited); they finish and
+  leave.`
+  },
+  {
+    file: 'app-setup.md',
+    title: 'The app: Capabilities, Connections, Environment, providers, MCP',
+    who: 'orchestrator',
+    when: 'the human asks about permissions, git, folders, skills, keys, secrets, runners, engines or tool servers',
+    body: `Answer with the exact place to click, in the human's language; say plainly when something is not possible. Never guess a setting that is not here.
+
+## Manager → Setup
+- **Capabilities** — who has what. Role bundles (a set of tools and servers) granted per agent;
+  per-agent chips for web, shell, subagents, each MCP server, **Git** (off: the agent cannot run
+  git at all) and **Outside its folders** (off, the default: it writes only in its workspace, its
+  hive folder, the hive and the temp folder). These are checked before every command, including
+  one-liners in python/node and nested shells, but a script saved in a file is not read in
+  advance: it is a fence, not a jail. Tab **Skills**: what you may add (nothing, Anthropic's only,
+  Anthropic's plus the human's own marketplaces, or the whole catalog), the skills you gave, and
+  **Your marketplaces** (GitHub repositories with skills, added by address).
+- **Connections** — accounts and services: MCP connections that need a key (GitHub, Notion,
+  Sentry, Brave search…), and REST APIs (Jira, Confluence, Linear, Stripe, HubSpot or a custom
+  one) that agents call through \`md-api\` without seeing the key. Each has a Test button and a
+  read-only / read & write level.
+- **Environment** — variables for agents, secrets they can use but never see (stored encrypted,
+  or read from 1Password), and **runners**: commands the human defines that run with secrets and
+  give the agent only the masked output. An agent may propose a runner (\`md-run --propose\`); the
+  human approves it in a dialog. The secrets it names must already exist here.
+- **AI providers** — the engines (Claude Code, Codex, Gemini, Copilot, Cursor, Pi, OpenCode…),
+  their sign-in state, custom OpenAI-compatible endpoints (with model list), and certificates
+  for company proxies.
+- **MCP** — the human's own tool servers (command or URL), and the ones their other tools already
+  use (found on this computer) to import.`
+  },
+  {
+    file: 'app-settings.md',
+    title: 'The app: Settings, floors, the office picker',
+    who: 'orchestrator',
+    when: 'the human asks about Settings, updates, freezes, memory model, voice, Slack, another office (floors)',
+    body: `Answer with the exact place to click, in the human's language; say plainly when something is not possible. Never guess a setting that is not here.
+
+## Settings (the wrench)
+- **General** — version and updates (checked every 6 hours, install is the human's click), the
+  **Freezes** log (stalls over 200 ms the app wrote down by itself, with the cause; "Open log" for
+  a report), the office folder (change it: the app relaunches), keep the computer awake, plain
+  language mode, notifications, auto-compact, telemetry, language, and Reset (start over). The
+  layout (Floor / Manager) and the theme are in the top bar.
+- **Prerequisites** — the tools the app relies on (git, Node, uv, mempalace for memory…) with
+  install buttons.
+- **Agents & Models** — the orchestrator's engine and model, defaults for new agents.
+- **Autonomy & Budgets** — auto mode, token budgets for the floor and per agent, the circuit
+  breaker (error storms, hard stop).
+- **Connections** — Slack (a channel's messages into your queue, replies in threads) and webhooks
+  (public endpoints with a secret, per-trigger JSON schema).
+- **Voice** — dictation (Groq, or local Whisper downloaded once) and talking to you in real time
+  (needs an OpenAI key).
+- **Memory & Knowledge** — semantic memory on/off, the memory model (download or update it here:
+  the only time memory goes online), the knowledge base (documents agents can query).
+
+## Floors (several offices at once)
+File → **New Floor** (Ctrl+Shift+N), or the office name under "Scranton Branch" in the sidebar →
+**New floor**: another office in its own window and process, with its own orchestrator, starting
+from the same settings and keys. File → **Open Floor** (or that sidebar list) reopens or forgets
+one (its office folder is kept). One office per floor at a time.
+
+## The office picker
+On launch: open the current office, a recent one, another folder, or a new office (Windows or WSL).
+
+## Things that are not possible (say so instead of guessing)
+- Agents never see secret values; only the masked output of a runner or the result of an API call.
+- Only the app runs git in the hive; agents never commit the hive.
+- A floor cannot share an office with another floor.
+- Memory never downloads anything on its own: only the Settings button does.`
   }
 ];
 
