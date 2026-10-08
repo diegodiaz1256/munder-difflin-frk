@@ -3,6 +3,8 @@ import type { AgentProvider } from '../shared/agentProvider';
 import type { HireManifest } from '../shared/hire';
 import type { TaskEvent } from '../shared/taskHistory';
 import type { FortressStatus } from '../main/fortress';
+import type { FreezeEntry } from '../main/freezeLog';
+export type { FreezeEntry } from '../main/freezeLog';
 export type FortressStatusView = FortressStatus & { enabled: boolean; bytes: number };
 import type { RateLimits } from '../shared/rateLimits';
 export type { HireManifest } from '../shared/hire';
@@ -1184,6 +1186,14 @@ const api = {
   /** Open a new floor (independent office window). No-op when the multiWindow
    *  flag is off. Resolves { ok } indicating whether a window opened. */
   newFloor: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('window:newFloor'),
+
+  // ─── Freeze log (main/freezeLog.ts) ────────────────────────────────────────
+  /** Report one of this window's long tasks (fire-and-forget). */
+  reportLongTask: (ms: number, screen: string): void => ipcRenderer.send('diag:longTask', ms, screen),
+  /** The newest freezes, newest first. */
+  freezes: (): Promise<FreezeEntry[]> => ipcRenderer.invoke('diag:freezes'),
+  /** Show freezes.jsonl in the file manager. */
+  openFreezeLog: (): Promise<void> => ipcRenderer.invoke('diag:openFreezeLog'),
 
   // ─── Closing time (graceful shutdown via the hive) ─────────────────────────
   /** Start the closing-time protocol: the god broadcasts shutdown, every worker

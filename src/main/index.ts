@@ -135,6 +135,18 @@ import {
   codexRemoteSocketFits,
   withCodexRemoteArgs
 } from '../shared/codexRemote';
+import { FreezeMonitor, instrumentEvents, instrumentIpc, instrumentTimers, type FreezeEntry } from './freezeLog';
+
+// Freeze log (freezeLog.ts): set up before any handler or timer exists, so all
+// of them are timed and a stall can name what caused it.
+const freezes = new FreezeMonitor({
+  file: join(app.getPath('userData'), 'logs', 'freezes.jsonl'),
+  extra: () => ({ agents: ptyManager.list().length })
+});
+instrumentIpc(ipcMain, freezes);
+instrumentTimers(freezes);
+instrumentEvents(freezes);
+freezes.start();
 
 const isDev = !!process.env.ELECTRON_RENDERER_URL;
 
@@ -541,6 +553,12 @@ function applyOfficeBrowserEngine(): void {
   );
 }
 applyOfficeBrowserEngine();
+// The window's own long tasks (it measures them; main writes them down).
+ipcMain.on('diag:longTask', (_evt, ms: unknown, screen: unknown) => {
+  if (typeof ms === 'number' && ms >= 200 && ms < 600_000) freezes.record({ where: 'renderer', ms: Math.round(ms), screen: typeof screen === 'string' ? screen.slice(0, 80) : undefined });
+});
+ipcMain.handle('diag:freezes', (): FreezeEntry[] => freezes.recent(50));
+ipcMain.handle('diag:openFreezeLog', () => shell.showItemInFolder(join(app.getPath('userData'), 'logs', 'freezes.jsonl')));
 ipcMain.handle('fortress:status', async () => ({ ...(await fortress.status()), enabled: readConfig().officeBrowserEngine === 'fortress', bytes: fortress.diskUsage() }));
 ipcMain.handle('fortress:install', () => fortress.install());
 ipcMain.handle('fortress:activate', async () => {

@@ -415,7 +415,17 @@
     "saved": "Saved",
     "saving": "Saving…",
     "unsavedChanges": "unsaved changes",
-    "unsavedWarning": "You have unsaved settings. Close anyway and lose them?"
+    "unsavedWarning": "You have unsaved settings. Close anyway and lose them?",
+    "freezes": {
+      "title": "Freezes",
+      "none": "No freezes in the last 24 hours.",
+      "count_one": "{{count}} freeze in the last 24 hours (the longest: {{worst}} ms).",
+      "count_other": "{{count}} freezes in the last 24 hours (the longest: {{worst}} ms).",
+      "open": "Open log",
+      "inWindow": "the window, on {{screen}}",
+      "unknown": "cause not caught (not a handler or timer)",
+      "hint": "The app writes down every stall over 200 ms and what was running. Nothing is sent anywhere; attach the log file when you report a freeze."
+    }
   },
   "commandCenter": {
     "title": "COMMAND CENTER",
