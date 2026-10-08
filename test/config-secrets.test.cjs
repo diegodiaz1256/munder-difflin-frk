@@ -20,7 +20,7 @@ const safeStorage = {
 };
 require.cache[electron] = { id: electron, filename: electron, loaded: true, exports: { app: { getPath: () => userData }, safeStorage } };
 
-const { writeConfig, readConfig } = loadTs('src/main/config.ts');
+const { writeConfig, readConfig, forgetConfigCache } = loadTs('src/main/config.ts');
 const { splitSecrets, mergeSecrets } = loadTs('src/main/configSecrets.ts');
 
 test.after(() => fs.rmSync(userData, { recursive: true, force: true }));
@@ -60,6 +60,7 @@ test('an old config.json with plaintext secrets is migrated on read', () => {
   const old = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
   old.slackSigningSecret = 'legacy-signing';
   fs.writeFileSync(cfgPath, JSON.stringify(old));
+  forgetConfigCache(); // edited by hand, under the app's 1 s recheck
   assert.equal(readConfig().slackSigningSecret, 'legacy-signing');
   assert.ok(!files().cfg.includes('legacy-signing'), 'moved out of config.json');
   assert.equal(readConfig().slackSigningSecret, 'legacy-signing');

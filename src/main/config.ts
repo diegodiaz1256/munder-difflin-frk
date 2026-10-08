@@ -1,5 +1,5 @@
 import { app, safeStorage } from 'electron';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import {
@@ -700,6 +700,7 @@ function readSecretsFile(): Record<string, string> {
 }
 /** Write config.json without its secrets, the secrets (encrypted) first. */
 function writeConfigFiles(p: string, next: HarnessConfig): void {
+  configCache = null;
   const { plain, secrets } = splitSecrets(next as unknown as Record<string, unknown>, codec);
   if (secrets) atomicWrite(secretsFilePath(), JSON.stringify(secrets, null, 2), 0o600);
   atomicWrite(p, JSON.stringify(plain, null, 2));
@@ -718,7 +719,44 @@ function atomicWrite(p: string, text: string, mode?: number): void {
 }
 let secretsMigrated = false;
 
+/**
+ * The parsed config, kept while config.json and the secrets file are
+ * unchanged. readConfig ran ~0.8 ms (read, parse, merge secrets, defaults) and
+ * is called dozens of times per hook event (the hive root, grants, caps…), on
+ * Electron's main thread, for every agent. Now a stat of the two files and a
+ * copy. Any write goes through writeConfigFiles, which drops the cache; an edit
+ * from outside changes the mtime or size.
+ */
+let configCache: { key: string; cfg: HarnessConfig; checkedAt: number } | null = null;
+/** How long a cached config is trusted without looking at the files again:
+ *  the app's own writes drop it at once; an edit by hand shows within this. */
+const CONFIG_RECHECK_MS = 1000;
+
+/** Drop the cache (a test that edits config.json by hand, then reads it). */
+export function forgetConfigCache(): void { configCache = null; }
+
+function configCacheKey(p: string): string | null {
+  try {
+    const a = statSync(p);
+    let b = '';
+    try { const s = statSync(secretsFilePath()); b = `${s.mtimeMs}:${s.size}`; } catch { /* no secrets file */ }
+    return `${a.mtimeMs}:${a.size}|${b}`;
+  } catch { return null; }
+}
+
 export function readConfig(): HarnessConfig {
+  const now = Date.now();
+  if (configCache && now - configCache.checkedAt < CONFIG_RECHECK_MS) return structuredClone(configCache.cfg);
+  const key = configCacheKey(configPath());
+  if (key && configCache?.key === key) { configCache.checkedAt = now; return structuredClone(configCache.cfg); }
+  const cfg = readConfigUncached();
+  // Cache only a real read of an existing file (not the first-run defaults or
+  // a parse failure), and only when nothing wrote it meanwhile.
+  configCache = key && configCacheKey(configPath()) === key ? { key, cfg: structuredClone(cfg), checkedAt: now } : null;
+  return cfg;
+}
+
+function readConfigUncached(): HarnessConfig {
   const p = configPath();
   // No file yet = a first run with nothing to migrate; the defaults ARE the
   // post-migration shape. Deliberately does not persist — a bare read must not

@@ -315,6 +315,8 @@ const hive = new HiveManager(
     try { wc.send(channel, payload); return true; } catch { return false; }
   }
 );
+// Hive commits run queued and async in the app, never blocking this thread.
+hive.setAsyncCommits(true);
 // #7C — operator control state (pause/gate/steer/halt), read by the HookServer
 // when deciding hook returns.
 const control = new ControlRegistry();
@@ -7605,6 +7607,8 @@ app.on('window-all-closed', () => {
 let analyticsFlushed = false;
 app.on('will-quit', (e) => {
   fortress.stop();
+  // What is still queued reaches the hive history before the process goes.
+  try { hive.flushCommitsSync(); } catch { /* best-effort */ }
   if (analyticsFlushed) return;
   analyticsFlushed = true;
   e.preventDefault();

@@ -250,6 +250,15 @@ export function hookSockPath(root: string, env: { runtimeDir?: string; tmp: stri
 const SAFE_MSG_ID = /^(?!\.{1,2}$)[A-Za-z0-9._-]{1,128}$/;
 const HOP_CAP = 12;
 
+/** The author line and message of an agent's deliverable commit. */
+function deliverableCommitIdentity(rels: string[], author: { id: string; name: string }): { who: string; msg: string } {
+  const clean = (x: string) => x.replace(/[<>\n\r]/g, '').trim().slice(0, 60) || 'agent';
+  return {
+    who: `${clean(author.name)} <${clean(author.id).replace(/[^A-Za-z0-9._-]/g, '-')}@hive.local>`,
+    msg: `deliverable: ${rels.join(', ').slice(0, 300)} (${clean(author.name)})`
+  };
+}
+
 function sleepSync(ms: number): void {
   const sab = new SharedArrayBuffer(4);
   Atomics.wait(new Int32Array(sab), 0, 0, ms);
@@ -2513,10 +2522,25 @@ export class HiveManager {
 
   // — read helpers (for IPC / UI) —
 
+  /** registry.json, parsed: read on every hook event and route, so kept
+   *  while the file is unchanged (the hive's own writes drop it; it is
+   *  re-checked with a stat at most every 300 ms). A copy each time: callers
+   *  edit what they get and write it back. */
+  private registryCache: { path: string; key: string; reg: Registry; checkedAt: number } | null = null;
+
   registry(): Registry {
     const root = this.root();
     if (!root) return { godId: null, agents: {} };
-    return this.readJson<Registry>(join(root, 'registry.json'), { godId: null, agents: {} });
+    const p = join(root, 'registry.json');
+    const now = Date.now();
+    const c = this.registryCache;
+    if (c && c.path === p && now - c.checkedAt < 300) return structuredClone(c.reg);
+    let key = '';
+    try { const s = statSync(p); key = `${s.mtimeMs}:${s.size}`; } catch { /* missing */ }
+    if (c && c.path === p && key && c.key === key) { c.checkedAt = now; return structuredClone(c.reg); }
+    const reg = this.readJson<Registry>(p, { godId: null, agents: {} });
+    this.registryCache = key ? { path: p, key, reg: structuredClone(reg), checkedAt: now } : null;
+    return reg;
   }
   board(): string {
     const root = this.root();
@@ -3465,9 +3489,11 @@ export class HiveManager {
     try { return JSON.parse(readFileSync(p, 'utf8')) as T; } catch { return fallback; }
   }
   private writeJson(p: string, data: unknown): void {
+    if (p.endsWith('registry.json')) this.registryCache = null;
     writeFileSync(p, JSON.stringify(data, null, 2), 'utf8');
   }
   private atomicWriteJson(p: string, data: unknown): void {
+    if (p.endsWith('registry.json')) this.registryCache = null;
     const tmp = `${p}.tmp-${shortRand()}`;
     writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
     renameSync(tmp, p);
@@ -3573,8 +3599,120 @@ export class HiveManager {
     for (const r of rels) this.heldDeliverables.set(r, until);
   }
 
-  /** Commit all hive changes. No-op if there is nothing staged. */
+  // — commits off the main thread —
+  //
+  // Every message, route, task change and registration committed the hive at
+  // once with a synchronous `git add -A` + `git commit` on Electron's main
+  // thread: ~180 ms on a small hive, seconds on a big one or across WSL, many
+  // times a minute with a busy floor, the window frozen meanwhile. In the app
+  // (setAsyncCommits) a commit is queued instead: changes arriving within
+  // 1.5 s (5 s at most) become one commit, and git runs as an async child.
+  // Tests and one-off tools keep the synchronous commit.
+  private asyncCommits = false;
+  private commitQueue: Array<{ kind: 'all'; message: string } | { kind: 'dlv'; rels: string[]; author: { id: string; name: string } }> = [];
+  private commitTimer: ReturnType<typeof setTimeout> | null = null;
+  private firstQueuedAt = 0;
+  private flushing: Promise<void> | null = null;
+
+  setAsyncCommits(on: boolean): void { this.asyncCommits = on; }
+
+  private enqueueCommit(item: HiveManager['commitQueue'][number]): void {
+    this.commitQueue.push(item);
+    const now = Date.now();
+    if (!this.firstQueuedAt) this.firstQueuedAt = now;
+    if (this.commitTimer) clearTimeout(this.commitTimer);
+    const wait = Math.max(0, Math.min(1500, this.firstQueuedAt + 5000 - now));
+    this.commitTimer = setTimeout(() => { this.commitTimer = null; void this.flushCommits(); }, wait);
+    this.commitTimer.unref?.();
+  }
+
+  /** Commit what is queued now (deliverables as their authors, then the rest
+   *  as one commit). Resolves when it is in the history. */
+  async flushCommits(): Promise<void> {
+    while (this.flushing) await this.flushing;
+    const items = this.commitQueue.splice(0);
+    this.firstQueuedAt = 0;
+    if (!items.length) return;
+    this.flushing = (async () => {
+      for (const d of items) if (d.kind === 'dlv') await this.commitDeliverablesAsync(d.rels, d.author);
+      const msgs = items.filter((m): m is { kind: 'all'; message: string } => m.kind === 'all').map((m) => m.message);
+      if (msgs.length) await this.commitAllAsync(msgs.length === 1 ? msgs[0] : `hive: ${msgs.length} changes: ${msgs.slice(0, 8).join('; ')}`.slice(0, 600));
+    })().catch((e) => console.warn('[hive] queued commit failed:', e)).finally(() => { this.flushing = null; });
+    await this.flushing;
+  }
+
+  /** At quit: what is still queued, committed before the process exits. */
+  flushCommitsSync(): void {
+    if (this.commitTimer) { clearTimeout(this.commitTimer); this.commitTimer = null; }
+    const items = this.commitQueue.splice(0);
+    this.firstQueuedAt = 0;
+    for (const d of items) if (d.kind === 'dlv') this.commitDeliverablesSync(d.rels, d.author);
+    const msgs = items.filter((m) => m.kind === 'all');
+    if (msgs.length) this.commitSync(`hive: ${msgs.length} change(s) at quit`);
+  }
+
+  private gitAsync(args: string[], cwd: string): Promise<{ ok: boolean; out: string; err: string }> {
+    const inv = gitInvocation(cwd, ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=', '-c', 'commit.gpgsign=false', '-c', 'gc.autoDetach=false', '-c', 'user.name=Hive', '-c', 'user.email=hive@local', ...args]);
+    return new Promise((resolve) => {
+      let out = '';
+      let err = '';
+      let done = false;
+      const finish = (ok: boolean) => { if (!done) { done = true; clearTimeout(t); resolve({ ok, out, err }); } };
+      let child: ChildProcess;
+      try { child = spawn(inv.file, inv.args, { cwd: inv.cwd, windowsHide: true }); } catch (e) { err = String(e); finish(false); return; }
+      child.stdout?.on('data', (d) => { out += d; });
+      child.stderr?.on('data', (d) => { err += d; });
+      child.on('error', (e) => { err += String(e); finish(false); });
+      child.on('close', (code) => finish(code === 0));
+      const t = setTimeout(() => { try { child.kill(); } catch { /* gone */ } err += ' (timed out)'; finish(false); }, inv.distro ? 20000 : 8000);
+    });
+  }
+
+  private async commitAllAsync(message: string): Promise<void> {
+    const root = this.root();
+    if (!root || !existsSync(join(root, '.git'))) return;
+    this.untrackCostLedger(root);
+    this.untrackCodexHomes(root);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      this.clearStaleLock(root);
+      const add = await this.gitAsync(['add', '-A'], root);
+      const now = Date.now();
+      for (const [r, until] of this.heldDeliverables) if (until < now) this.heldDeliverables.delete(r);
+      if (this.heldDeliverables.size) await this.gitAsync(['reset', '-q', '--', ...this.heldDeliverables.keys()], root);
+      const commit = await this.gitAsync(['commit', '-q', '-m', message], root);
+      if (commit.ok || /nothing to commit/i.test(commit.out + commit.err)) return;
+      if (!add.ok || /index\.lock/i.test(commit.err)) { await new Promise((r) => setTimeout(r, 50 * (attempt + 1))); continue; }
+      console.warn(`[hive] commit gave up after ${attempt + 1} attempts:`, commit.err || commit.out);
+      return;
+    }
+  }
+
+  private async commitDeliverablesAsync(rels: string[], author: { id: string; name: string }): Promise<void> {
+    const root = this.root();
+    if (!root || !existsSync(join(root, '.git')) || !rels.length) return;
+    const { who, msg } = deliverableCommitIdentity(rels, author);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      this.clearStaleLock(root);
+      const add = await this.gitAsync(['add', '-A', '--', ...rels], root);
+      const commit = await this.gitAsync(['commit', '-q', `--author=${who}`, '-m', msg, '--', ...rels], root);
+      if (commit.ok || /nothing (added )?to commit|no changes added/i.test(commit.out + commit.err)) {
+        for (const r of rels) this.heldDeliverables.delete(r);
+        return;
+      }
+      if (!add.ok || /index\.lock/i.test(commit.err)) { await new Promise((r) => setTimeout(r, 50 * (attempt + 1))); continue; }
+      console.warn('[hive] deliverable commit failed:', commit.err || commit.out);
+      return;
+    }
+  }
+
+  /** Commit all hive changes (queued in the app, at once elsewhere). */
   commit(message: string): void {
+    if (this.asyncCommits) { this.enqueueCommit({ kind: 'all', message }); return; }
+    this.commitSync(message);
+  }
+
+  /** Commit all hive changes now, on this thread. No-op if nothing is staged. */
+  commitSync(message: string): void {
     const root = this.root();
     if (!root || !existsSync(join(root, '.git'))) return;
     this.untrackCostLedger(root);
@@ -3604,11 +3742,14 @@ export class HiveManager {
    * ordinary commit. `rels` are relative to the hive root, with '/'.
    */
   commitDeliverables(rels: string[], author: { id: string; name: string }): void {
+    if (this.asyncCommits) { if (rels.length) this.enqueueCommit({ kind: 'dlv', rels, author }); return; }
+    this.commitDeliverablesSync(rels, author);
+  }
+
+  private commitDeliverablesSync(rels: string[], author: { id: string; name: string }): void {
     const root = this.root();
     if (!root || !existsSync(join(root, '.git')) || !rels.length) return;
-    const clean = (x: string) => x.replace(/[<>\n\r]/g, '').trim().slice(0, 60) || 'agent';
-    const who = `${clean(author.name)} <${clean(author.id).replace(/[^A-Za-z0-9._-]/g, '-')}@hive.local>`;
-    const msg = `deliverable: ${rels.join(', ').slice(0, 300)} (${clean(author.name)})`;
+    const { who, msg } = deliverableCommitIdentity(rels, author);
     for (let attempt = 0; attempt < 5; attempt++) {
       this.clearStaleLock(root);
       const add = this.git(['add', '-A', '--', ...rels], root);
