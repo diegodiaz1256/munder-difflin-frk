@@ -56,6 +56,18 @@ files:
   - CHANGELOG.md
   - "!**/*.{md,map,ts,tsx}"
   - "!**/{.eslintrc,.prettierrc,tsconfig*.json,electron.vite.config.*}"
+  # Vite also emits ONNX Runtime's wasm under assets/ (from a URL inside the
+  # library), but the voice worker points ORT at out/renderer/ort/ before it
+  # loads; that 25.6 MB copy is never read.
+  - "!out/renderer/assets/ort-wasm-*.wasm"
+  # Native modules: ship the built binaries, not the compiler's leftovers
+  # (object files, link-time data, build logs, the sources they came from).
+  - "!**/node_modules/node-pty/build/deps/**"
+  - "!**/node_modules/node-pty/build/Release/obj/**"
+  - "!**/node_modules/node-pty/build/**/*.{iobj,ipdb,pdb,lib,exp,map,tlog}"
+  - "!**/node_modules/node-pty/{deps,src}/**"
+  - "!**/node_modules/better-sqlite3/{deps,src}/**"
+  - "!**/node_modules/better-sqlite3/build/{deps,Release/obj,Release/.deps}/**"
 
 # Ship the standalone Slack reply helper as a plain file under the app's
 # resources dir (process.resourcesPath). It runs under `node`, NOT inside the
@@ -76,6 +88,13 @@ extraResources:
   # repo resources/skills). Directory copy preserves the <id>/SKILL.md tree.
   - from: resources/skills
     to: skills
+
+# Chromium's own UI strings (context menus, dialogs): only the languages the
+# app speaks. The other ~50 locale packs were ~40 MB on disk.
+electronLanguages:
+  - en-US
+  - es
+  - es-419
 
 asarUnpack:
   - "**/node_modules/node-pty/**"

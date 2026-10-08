@@ -1,6 +1,6 @@
 import { useNotifyFaces } from '@/hooks/useNotifyFaces';
 import { useTranslation } from 'react-i18next';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useStore, selectedAgent } from '@/store/store';
 import { startMockLoop, stopMockLoop } from '@/store/mockEvents';
 import type { HarnessConfig } from '@/store/config';
@@ -31,7 +31,8 @@ import { SidebarSplitter } from '@/components/SidebarSplitter';
 import { acquireTerminal, notifyThemeChangeAll } from '@/components/terminalPool';
 import { FullscreenTerminal } from '@/components/FullscreenTerminal';
 import { TaskDetailOverlay } from '@/components/TaskDetailOverlay';
-import { IdePanel } from '@/ide/IdePanel';
+// The IDE (Monaco, several MB) loads when it is first opened, not at launch.
+const IdePanel = lazy(() => import('@/ide/IdePanel').then((m) => ({ default: m.IdePanel })));
 import { useHoldOptionToTalk } from '@/freeflow/holdOption';
 import { ProShell, LayoutSwitch } from '@/pro/ProShell';
 import { useProStore } from '@/pro/proStore';
@@ -547,7 +548,7 @@ export function App() {
       )}
 
       {fullscreenAgentId && <FullscreenTerminal config={config} />}
-      {ideOpen && <IdePanel />}
+      {ideOpen && <Suspense fallback={null}><IdePanel /></Suspense>}
       <TaskDetailOverlay />
     </div>
   );
