@@ -2371,7 +2371,18 @@
       "viewingVersion": "Viendo la versión que guardó {{who}} el {{when}}.",
       "backToCurrent": "Volver a la actual",
       "openTask": "Abrir esta tarea",
-      "noAuthor": "Sin autor registrado: lo escribió algo que no es un agente, o es anterior a que la app guardara quién cambia cada archivo."
+      "noAuthor": "Sin autor registrado: lo escribió algo que no es un agente, o es anterior a que la app guardara quién cambia cada archivo.",
+      "sortBy": "Ordenar",
+      "sort_recent": "Más recientes",
+      "sort_oldest": "Más antiguos",
+      "sort_name": "Nombre",
+      "sort_type": "Tipo",
+      "sort_author": "Autor",
+      "sort_ticket": "Ticket",
+      "searchTicket": "Buscar, o un ticket (DUN-12)",
+      "changes": "Cambios",
+      "changesBy": "Lo que cambió {{who}} · {{when}}",
+      "noChanges": "Esta versión no cambia texto."
     },
     "engines": {
       "title": "Motores",
