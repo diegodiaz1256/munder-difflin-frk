@@ -232,6 +232,28 @@ its inbox. An invalid file comes back to your inbox as \`[hire manifest rejected
 \`tokenCap\` 0 means no cap. A \`cwd\` that is not a project yet is added as one when the human
 confirms. Write several manifests to propose several hires: the human reviews them one after another,
 and any they close without deciding are offered again on the next launch.`
+  },
+  {
+    file: 'skills.md',
+    title: 'Giving agents skills',
+    who: 'orchestrator',
+    when: 'an agent would do a job better with a skill (pdf, docx, xlsx, pptx, web testing...)',
+    body: `Office skills come from the skills catalog. Find one with
+\`bin/md-skills.cjs search <words>\` (one line per match; your instructions give the full command)
+and see who has what with \`md-skills list\`. To add or remove, write ONE JSON file into your own
+\`skills/\` folder:
+
+\`\`\`json
+{ "action": "add", "skill": "pdf", "agents": ["jim", "pam"] }
+{ "action": "add", "skill": "docx", "agents": ["*"] }
+{ "action": "remove", "skill": "pdf", "agents": ["jim"] }
+\`\`\`
+
+\`"*"\` means every agent, new ones too; \`remove\` without agents takes it from everyone. The app
+installs it, copies it into those agents and answers in your inbox (\`[skills updated]\` or
+\`[skills request refused]\` with the reason). The human decides what you may add (Capabilities →
+Skills): by default only Anthropic's own skills; a refused community skill is theirs to allow.
+Give a skill only to the agents whose work needs it: each one costs context.`
   }
 ];
 

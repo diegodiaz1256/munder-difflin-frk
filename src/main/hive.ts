@@ -53,6 +53,8 @@ import { detectProjectType, memoryInstruction, memoryTemplate, parseMemory, type
 import { listsInstruction, parseList } from '../shared/lists';
 import { blockedMcpServers, cleanToolBlocks, disallowedTools } from '../shared/nativeTools';
 import type { GuardPolicy } from '../shared/toolGuard';
+import { MD_SKILLS } from './skillsCli';
+import { readOfficeSkills, skillReaches, type OfficeSkills, type SkillPolicy } from '../shared/skillRequests';
 import { MD_BROWSE } from './browseCli';
 import { MD_LISTS_MCP } from './listsMcp';
 
@@ -843,6 +845,8 @@ export class HiveManager {
     writeFileSync(join(root, 'bin', 'md-lists.cjs'), MD_LISTS_MCP, 'utf8');
     // md-browse: the office browser (browser.ts), as a command and an MCP server.
     writeFileSync(join(root, 'bin', 'md-browse.cjs'), MD_BROWSE, 'utf8');
+    // md-skills: the orchestrator's search of the skills catalog (skillsCli.ts).
+    writeFileSync(join(root, 'bin', 'md-skills.cjs'), MD_SKILLS, 'utf8');
     // The bundled-node launcher every shim above is invoked through — MUST be
     // written before any hook installer runs (they probe for it).
     this.writeNodeLauncher();
@@ -977,6 +981,8 @@ export class HiveManager {
     // agent always rides with the shipped safe skill set. Tolerant: a missing or
     // partial source dir is a no-op (Kevin populates the resource dir in lp-manifest).
     if (opts.skillsDir) this.copyBundledSkills(opts.skillsDir, join(dir, '.claude', 'skills'));
+    // Skills the orchestrator gave this agent (office.json).
+    this.syncOfficeSkills(meta.id);
 
     const memory = join(dir, 'memory.md');
     if (!existsSync(memory)) {
@@ -1523,6 +1529,66 @@ export class HiveManager {
   private sandboxWritableDirs(meta: AgentMeta, dir: string, root: string, extra?: string[]): string[] {
     const out = [dir, root, ...(extra ?? [])].filter((d) => typeof d === 'string' && d.length > 0);
     return Array.from(new Set(out));
+  }
+
+  /** Office skills (shared/skillRequests.ts): <hive>/skills/office.json, the
+   *  installed copies in <hive>/skills/store/<dir>. */
+  officeSkills(): OfficeSkills {
+    const root = this.root();
+    if (!root) return { skills: {} };
+    try { return readOfficeSkills(JSON.parse(readFileSync(join(root, 'skills', 'office.json'), 'utf8'))); } catch { return { skills: {} }; }
+  }
+
+  writeOfficeSkills(s: OfficeSkills): void {
+    const root = this.root();
+    if (!root) return;
+    mkdirSync(join(root, 'skills'), { recursive: true });
+    writeFileSync(join(root, 'skills', 'office.json'), JSON.stringify(s, null, 2), 'utf8');
+  }
+
+  /** Where office skills are installed once, before being copied to agents. */
+  officeSkillStore(): string | null {
+    const root = this.root();
+    return root ? join(root, 'skills', 'store') : null;
+  }
+
+  /** The catalog the orchestrator searches (md-skills), and what it may add. */
+  writeSkillCatalogMirror(skills: Array<{ name: string; description: string; category: string; owner: string }>, policy: SkillPolicy): void {
+    const root = this.root();
+    if (!root) return;
+    try {
+      mkdirSync(join(root, 'skills'), { recursive: true });
+      writeFileSync(join(root, 'skills', 'catalog.json'), JSON.stringify({
+        note: 'Mirror of the skills catalog for md-skills. Read-only.',
+        policy,
+        skills: skills.map((s) => ({ name: s.name, description: s.description, category: s.category, owner: s.owner }))
+      }), 'utf8');
+    } catch { /* best-effort */ }
+  }
+
+  /** Make an agent's .claude/skills match the office skills it should have:
+   *  copy the missing ones from the store, remove the ones taken away. Only
+   *  folders this marks as office skills are ever removed. */
+  syncOfficeSkills(agentId: string): void {
+    const store = this.officeSkillStore();
+    if (!store) return;
+    const dest = join(this.agentDir(agentId), '.claude', 'skills');
+    const MARK = '.office-skill';
+    const want = new Map(Object.values(this.officeSkills().skills).filter((s) => skillReaches(s, agentId)).map((s) => [s.dir, s]));
+    try {
+      if (existsSync(dest)) {
+        for (const d of readdirSync(dest)) {
+          if (!want.has(d) && existsSync(join(dest, d, MARK))) rmSync(join(dest, d), { recursive: true, force: true });
+        }
+      }
+      for (const dir of want.keys()) {
+        const from = join(store, dir);
+        const to = join(dest, dir);
+        if (!existsSync(from) || existsSync(join(to, MARK))) continue;
+        this.copyBundledSkills(from, to);
+        writeFileSync(join(to, MARK), 'Given by the orchestrator (office skills). Removed when it is taken away.\n', 'utf8');
+      }
+    } catch (e) { console.error('[hive] syncOfficeSkills failed:', e); }
   }
 
   /** The PreToolUse guard for an agent spawned in this run (undefined: none yet). */
@@ -2089,6 +2155,9 @@ export class HiveManager {
       : '';
     // Automations: the orchestrator changes scheduled missions by request file
     // (main validates and applies them, then answers in its inbox).
+    const skillsLine = meta.isGod
+      ? `SKILLS: you give agents skills from the skills catalog (pdf, docx, xlsx, web testing...). Search: \`"${hiveNode}" "${inRoot('bin', 'md-skills.cjs')}" search <words>\`. To add or remove one, write ONE JSON file into ${inDir('skills')}/<id>.json: {"action":"add","skill":"<catalog name>","agents":["<agent id>"]} ("*" = every agent; action "remove" takes it away); the app installs it and answers in your inbox. Never copy skill folders by hand: only a request reaches the agents. Details: ${inRoot(PROTOCOL_DIR, 'skills.md')}.`
+      : '';
     const scheduleLine = meta.isGod
       ? `AUTOMATIONS: you can create, change and delete scheduled missions (a prompt sent to an agent on a clock). Read ${inRoot('missions.json')} for the current ones and their ids. To change them, write ONE JSON file per change into ${inDir('schedule')}: {"op":"create","label":"…","to":"<agent id>","body":"<the prompt>","every":"1d"} (every: 30m, 2h, 1d, 1w; or "weekly":{"days":["mon","fri"],"time":"09:00"}), {"op":"update","id":"<id>", …only the fields to change, incl. "enabled":false}, or {"op":"delete","id":"<id>"}. The harness applies it and tells you the result in your inbox. Built-in missions can only be switched on/off or re-timed. Every mission spends tokens each time it fires, so schedule only what the human asked for or clearly needs.`
       : '';
@@ -2133,6 +2202,7 @@ export class HiveManager {
       listsLine,
       godLine,
       scheduleLine,
+      skillsLine,
       teamLine,
       spawnQueueLine,
       hireLine,

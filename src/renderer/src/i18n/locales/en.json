@@ -1910,7 +1910,18 @@
       "accessReadShort": "read",
       "accessWriteShort": "read & write",
       "accessHelp": "What this role may do with each connection. The connection’s own limit (Connections) still caps it.",
-      "apiHelp": "What this role may do with each REST API (Connections → REST APIs). Not set means read-only."
+      "apiHelp": "What this role may do with each REST API (Connections → REST APIs). Not set means read-only.",
+      "skills": {
+        "title": "Office skills",
+        "sub": "The orchestrator gives agents skills from the catalog and tells you in its inbox. Choose what it may add.",
+        "policy": "What the orchestrator may add",
+        "policy_off": "Nothing",
+        "policy_official": "Anthropic's skills only",
+        "policy_catalog": "Anything in the catalog",
+        "none": "None yet.",
+        "everyone": "every agent",
+        "remove": "Remove"
+      }
     },
     "conn": {
       "step1": "Pick a service and get its key",

@@ -423,6 +423,9 @@ export interface HarnessConfig {
   /** Claude Code tool groups taken from an agent (Capabilities): agent id → group ids (shared/nativeTools.ts). */
   agentToolBlocks?: Record<string, string[]>;
   agentRoam?: string[];
+  /** What the orchestrator may add as office skills: nothing, Anthropic's own
+   *  (default), or anything in the catalog (shared/skillRequests.ts). */
+  orchestratorSkills?: 'off' | 'official' | 'catalog';
   autoDeliveryPausedAgents?: string[];
   maxTurns?: number;
   circuitBreaker?: CircuitBreakerConfig;
@@ -942,6 +945,10 @@ const api = {
   }> => ipcRenderer.invoke('models:catalog', force),
   /** Skills already installed for the coding agents on this machine. */
   skillsLocal: (cwd?: string): Promise<LocalSkill[]> => ipcRenderer.invoke('skills:local', cwd),
+  /** Skills the orchestrator gave agents (shared/skillRequests.ts). */
+  skillsOffice: (): Promise<{ skills: Record<string, { url: string; owner: string; dir: string; agents: string[]; addedAt: string }> }> =>
+    ipcRenderer.invoke('skills:office'),
+  skillsOfficeRemove: (name: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('skills:officeRemove', name),
   /** The browsable skills catalog (cached; `force` re-fetches). */
   skillsCatalog: (force?: boolean): Promise<{
     skills: CatalogSkill[]; fetchedAt: number; stale: boolean; error?: string;
