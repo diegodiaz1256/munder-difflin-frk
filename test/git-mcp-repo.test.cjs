@@ -20,7 +20,7 @@ test('a folder outside any repo gets no git server', (t) => {
   const { servers } = new HiveManager(() => office).buildDefaultMcpServers(office, {}, undefined, 'god');
   assert.equal(enclosingGitRepo(office), null);
   assert.equal(servers['munder-git'], undefined);
-  assert.ok(servers['munder-time'] || servers['munder-fetch'], 'the other default servers stay');
+  assert.ok(servers['munder-context7'], 'the other default servers stay');
 });
 
 test('a folder inside a repo gets it, pointed at the repo root', (t) => {

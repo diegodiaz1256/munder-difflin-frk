@@ -9,7 +9,7 @@ import {
   providerPreset,
   type AgentProvider
 } from '../shared/agentProvider';
-import { defaultMcpDefaults } from '../shared/mcpCatalog';
+import { defaultMcpDefaults, trimRedundantMcp } from '../shared/mcpCatalog';
 import { MAX_AGENT_TOKEN_CAP } from '../shared/tokenCaps';
 import { cleanServerList } from '../shared/roleBundles';
 import { cleanAccessMap, isAccess, type Access } from '../shared/connectionAccess';
@@ -473,6 +473,8 @@ export interface HarnessConfig {
   /** One-time guard for `migrateTriggersV1` (legacy webhook → webhookTriggers,
    *  1h → 2h compact cadence). Set once the migration has run to completion. */
   triggersMigratedV1?: boolean;
+  /** One-time guard for `migrateMcpTrimV1` (redundant MCP servers off). */
+  mcpTrimmedV1?: boolean;
 
   // ─── Memory reflection (the janitor's condense half) ───────────────────────
   /** Master toggle for the in-process MemoryReflector. Default on. */
@@ -590,6 +592,21 @@ function withTriggerDefaults(cfg: HarnessConfig): HarnessConfig {
       ? cfg.webhookTriggers.map((t) => ({ ...t }))
       : []
   };
+}
+
+let mcpTrimRan = false;
+
+/** Switch the MCP servers that repeat Claude Code's own tools off once
+ *  (shared/mcpCatalog.ts REDUNDANT_MCP_SERVERS): every config saved before had
+ *  them on from the old defaults, a process tree and tool schemas per agent. */
+function migrateMcpTrimV1(cfg: HarnessConfig): HarnessConfig {
+  if (cfg.mcpTrimmedV1 || mcpTrimRan) return cfg;
+  mcpTrimRan = true;
+  try {
+    const next: HarnessConfig = { ...cfg, mcpTrimmedV1: true, mcpDefaults: trimRedundantMcp(cfg.mcpDefaults) };
+    persistConfig(next);
+    return next;
+  } catch { return cfg; }
 }
 
 /** Set once `migrateTriggersV1` has run in THIS process. `writeConfig` reads
@@ -717,7 +734,7 @@ export function readConfig(): HarnessConfig {
       try { writeConfigFiles(p, mergeSecrets(parsed, readSecretsFile(), codec)); } catch { /* retried next launch */ }
     }
     const withSecrets = mergeSecrets(parsed, readSecretsFile(), codec);
-    return normalizeStoredHomes(migrateTriggersV1(withTriggerDefaults({ ...DEFAULTS, ...withSecrets })));
+    return normalizeStoredHomes(migrateMcpTrimV1(migrateTriggersV1(withTriggerDefaults({ ...DEFAULTS, ...withSecrets }))));
   } catch {
     return withTriggerDefaults({ ...DEFAULTS });
   }

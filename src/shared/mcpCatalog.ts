@@ -81,7 +81,7 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
     description: 'Structured step-by-step reasoning scratchpad. No I/O, no secrets.',
     spec: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-sequential-thinking'] },
     tier: 'safe-readonly',
-    defaultEnabled: true
+    defaultEnabled: false
   },
   {
     id: 'time',
@@ -90,7 +90,7 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
     // Reference time server ships as Python. // TODO-verify transport (uvx vs an npm port)
     spec: { command: 'uvx', args: ['mcp-server-time'] },
     tier: 'safe-readonly',
-    defaultEnabled: true
+    defaultEnabled: false
   },
   {
     id: 'fetch',
@@ -99,7 +99,7 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
     // Reference fetch server ships as Python. // TODO-verify transport (uvx vs an npm port)
     spec: { command: 'uvx', args: ['mcp-server-fetch'] },
     tier: 'safe-readonly',
-    defaultEnabled: true
+    defaultEnabled: false
   },
   {
     id: 'context7',
@@ -117,13 +117,13 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
     // with the agent cwd at merge time so it is NEVER whole-disk.
     spec: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '<cwd>'] },
     tier: 'safe-readonly',
-    defaultEnabled: true
+    defaultEnabled: false
   },
   {
     id: 'git',
     label: 'Git (cwd)',
     // Also the switch for git in the agent's shell: off, toolGuard.ts refuses it.
-    description: 'git in the workspace repo: the Git server and git commands in its shell. Off: the agent cannot run git at all.',
+    description: 'git in the workspace repo: the Git server and git commands in its shell. Off: the agent cannot run git at all. Applies at once.',
     // Reference git server ships as Python; `--repository <cwd>` is set at merge time.
     // TODO-verify transport (uvx vs an npm port).
     spec: { command: 'uvx', args: ['mcp-server-git', '--repository', '<cwd>'] },
@@ -258,6 +258,24 @@ export function isSafeReadonlyMcp(id: string): boolean {
 
 /** Seed for `DEFAULTS.mcpDefaults` — derived from the catalog so the two never
  *  drift (safe-readonly ON, write/secret OFF). */
+/**
+ * Servers that only repeat what Claude Code already has: its own Read/Edit/
+ * Glob (filesystem), WebFetch and the office browser (fetch), its thinking
+ * (sequential-thinking) and the date in its context (time). Each one was a
+ * process tree per agent (npx/uvx + cmd + node/python, ~70 MB) and its tool
+ * schemas in every session's context. Off by default since 0.4.6-fork.35, and
+ * switched off once for configs that still had them on from the old defaults
+ * (config.ts migrateMcpTrimV1); anyone can switch them back on in MCP.
+ */
+export const REDUNDANT_MCP_SERVERS: readonly string[] = ['filesystem', 'fetch', 'sequential-thinking', 'time'];
+
+/** The consent map with the redundant servers switched off. */
+export function trimRedundantMcp(map: Record<string, { enabled: boolean }> | undefined): Record<string, { enabled: boolean }> {
+  const out = { ...(map ?? {}) };
+  for (const id of REDUNDANT_MCP_SERVERS) if (out[id]?.enabled !== false) out[id] = { enabled: false };
+  return out;
+}
+
 export function defaultMcpDefaults(): Record<string, { enabled: boolean }> {
   const out: Record<string, { enabled: boolean }> = {};
   for (const e of MCP_CATALOG) out[e.id] = { enabled: e.defaultEnabled };
