@@ -64,7 +64,7 @@ test('a keyed server without its key is left out (it could only fail)', (t) => {
   assert.equal(servers['munder-notion'], undefined);
   assert.equal(servers['munder-search-with-key'], undefined);
   assert.deepEqual(env, {});
-  assert.ok(servers['munder-time'], 'the safe defaults still ride along');
+  assert.ok(servers['munder-context7'], 'the safe defaults still ride along');
 });
 
 test('"Choose agents" limits a server to its list', (t) => {
