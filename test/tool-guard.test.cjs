@@ -1,0 +1,101 @@
+'use strict';
+// Capabilities said "no git" but the agent kept running git in its shell, and
+// any agent could write anywhere on the disk. The PreToolUse guard refuses both.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const loadTs = require('./load-ts.cjs');
+const { guardToolCall, normPath, within, splitCommands } = loadTs('src/shared/toolGuard.ts');
+
+const r = String.raw;
+const WIN = { cwd: r`C:\work\shop`, roots: [r`C:\work\shop`, r`G:\office\hive`, r`C:\Temp`], git: true, contained: true };
+const bash = (command, p = WIN) => guardToolCall('Bash', { command }, p, r`C:\Users\me`);
+
+test('path spellings fold together', () => {
+  assert.equal(normPath(r`C:\Work\Shop\ `.trim()), '/c/work/shop');
+  assert.equal(normPath('/mnt/c/work/shop'), '/c/work/shop');
+  assert.equal(normPath('/c/work/shop/../x'), '/c/work/x');
+  assert.ok(within('/c/WORK/shop/src/a.ts', r`C:\work\shop`));
+  assert.ok(!within(r`C:\work\shopping`, r`C:\work\shop`));
+});
+
+test('git off: git in the shell is refused, however it is spelled', () => {
+  const p = { ...WIN, git: false };
+  for (const c of ['git status', 'cd src && git commit -m x', 'GIT_DIR=x git log', r`"C:\Program Files\Git\bin\git.exe" push`, 'echo hi; git push', 'ls | git hash-object --stdin']) {
+    assert.ok(bash(c, p), c);
+  }
+  assert.equal(bash('echo git is great', p), null);
+  assert.equal(bash('npm test', p), null);
+  assert.equal(guardToolCall('PowerShell', { command: 'git status' }, WIN), null, 'git on: allowed');
+  assert.ok(guardToolCall('PowerShell', { command: 'git status' }, p));
+});
+
+test('contained: file tools write only inside its folders', () => {
+  assert.equal(guardToolCall('Write', { file_path: r`C:\work\shop\a.ts` }, WIN), null);
+  assert.equal(guardToolCall('Edit', { file_path: 'src/a.ts' }, WIN), null, 'relative to cwd');
+  assert.equal(guardToolCall('Write', { file_path: 'G:/office/hive/agents/jim/outbox/m.json' }, WIN), null);
+  assert.ok(guardToolCall('Write', { file_path: r`C:\Users\me\.bashrc` }, WIN));
+  assert.ok(guardToolCall('Edit', { file_path: r`..\other\a.ts` }, WIN), 'escapes with ..');
+  assert.ok(guardToolCall('write', { filePath: r`D:\x.txt` }, WIN), 'OpenCode spelling');
+  assert.equal(guardToolCall('Read', { file_path: r`D:\x.txt` }, WIN), null, 'reading elsewhere is fine');
+});
+
+test('contained: the shell may not move to, write to or delete from outside', () => {
+  for (const c of [r`cd D:\other && npm i`, 'cd .. && rm -rf shop', r`echo x > C:\Users\me\a.txt`, 'rm -rf /c/Users/me', r`Remove-Item -Recurse D:\data`, 'mv a.ts ../elsewhere/', r`cp src/a.ts D:\backup\ `.trim(), r`git -C D:\other status`, r`Set-Location ~\Desktop`, 'echo hi >> ~/notes.md']) {
+    assert.ok(bash(c), c);
+  }
+  for (const c of ['npm test 2>&1', r`cat D:\other\README.md`, r`cp D:\other\seed.json ./fixtures/`, 'ls /c/Users', 'rm -rf node_modules', 'echo x > /dev/null', 'cd src && npm run build > out.log', r`echo x > C:\Temp\scratch.txt`, 'node -e "1>2"']) {
+    assert.equal(bash(c), null, c);
+  }
+});
+
+test('let out: no fence, git rule still applies', () => {
+  const free = { ...WIN, contained: false };
+  assert.equal(guardToolCall('Write', { file_path: r`D:\x.txt` }, free), null);
+  assert.equal(bash(r`cd D:\other`, free), null);
+  assert.ok(bash('git push', { ...free, git: false }));
+});
+
+test('commands split on separators but not inside quotes or 2>&1', () => {
+  assert.deepEqual(splitCommands('a "b && c" && d 2>&1 | e'), [['a', 'b && c'], ['d', '2>&1'], ['e']]);
+});
+
+test('other CLIs: a Codex patch or an agy write outside is refused too', () => {
+  assert.ok(guardToolCall('apply_patch', { input: '*** Begin Patch\n*** Add File: ../../evil.md\n+x\n*** End Patch' }, WIN));
+  assert.ok(guardToolCall('write_to_file', { TargetFile: r`D:\x.md`, CodeContent: 'x' }, WIN));
+  assert.equal(guardToolCall('apply_patch', { input: '*** Begin Patch\n*** Add File: research/r.md\n+x\n*** End Patch' }, WIN), null);
+});
+
+test('through the real hook server: Git off in Capabilities refuses git, the prompt says so', async (t) => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const electron = require.resolve('electron');
+  require.cache[electron] = { id: electron, filename: electron, loaded: true, exports: { Notification: class { show() {} static isSupported() { return false; } } } };
+  const { HiveManager } = loadTs('src/main/hive.ts');
+  const { HookServer } = loadTs('src/main/hooks.ts');
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'md-guard-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const hive = new HiveManager(() => home);
+  const cwd = path.join(home, 'work');
+  fs.mkdirSync(cwd, { recursive: true });
+  // A grant without the Git server: git is off for this agent.
+  const inj = await hive.ensureAgent({ id: 'g1', name: 'G', provider: 'claude', cwd }, { mcpGrant: ['filesystem'] });
+  const prompt = inj.args[inj.args.indexOf('--append-system-prompt') + 1];
+  assert.match(prompt, /LIMITS: write only inside your folders/);
+  assert.match(prompt, /git is switched off for you/);
+  const server = new HookServer(hive, () => null, () => ({}), undefined, undefined);
+  const ask = (tool_name, tool_input) => server.handle({ agent_id: 'g1', session_id: 's', hook_event_name: 'PreToolUse', tool_name, tool_input });
+  assert.equal((await ask('Bash', { command: 'git push' })).hookSpecificOutput?.permissionDecision, 'deny');
+  assert.equal((await ask('Write', { file_path: path.join(os.homedir(), 'x.txt') })).hookSpecificOutput?.permissionDecision, 'deny');
+  assert.equal((await ask('Write', { file_path: path.join(cwd, 'ok.txt') })).hookSpecificOutput, undefined);
+  assert.equal((await ask('Bash', { command: 'npm test' })).hookSpecificOutput, undefined);
+  // Switched back on in Capabilities: the running agent gets it at once.
+  hive.refreshGuards({ agentMcpGrants: { g1: ['filesystem', 'git'] } });
+  assert.equal((await ask('Bash', { command: 'git push' })).hookSpecificOutput, undefined);
+  hive.refreshGuards({ agentMcpGrants: { g1: ['filesystem'] }, agentRoam: ['g1'] });
+  assert.equal((await ask('Write', { file_path: path.join(os.homedir(), 'x.txt') })).hookSpecificOutput, undefined, 'let out');
+  // Default (no grant): git stays on.
+  await hive.ensureAgent({ id: 'g2', name: 'H', provider: 'claude', cwd }, {});
+  const ok = await server.handle({ agent_id: 'g2', session_id: 's', hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'git status' } });
+  assert.equal(ok.hookSpecificOutput, undefined);
+});

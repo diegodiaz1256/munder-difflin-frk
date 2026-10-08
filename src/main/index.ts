@@ -3616,7 +3616,11 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           skillsDir: skillsResourceDir(),
           // The shared palace is mutated by the agent's own `mempalace` calls, so
           // the OS sandbox must let it through (empty when memory is off).
-          extraWritableDirs: [memory.env().MEMPALACE_PALACE_PATH].filter((p): p is string => !!p)
+          extraWritableDirs: [memory.env().MEMPALACE_PALACE_PATH].filter((p): p is string => !!p),
+          // Its folders (toolGuard.ts): the orchestrator also writes in the
+          // office's repos (it integrates branches); the human may let anyone out.
+          writableRoots: opts.hive.isGod ? (readConfig().registeredRepos ?? []) : [],
+          roam: (readConfig().agentRoam ?? []).includes(opts.hive.id)
         }
       );
       opts.args = [...(opts.args ?? []), ...inj.args];
@@ -7487,6 +7491,7 @@ app.on('before-quit', (e) => {
 // setting is saved — a floor left out would keep showing what it opened with.
 onConfigWritten((config) => {
   writeMissionsMirror(config.missions ?? []);
+  hive.refreshGuards(config);
   for (const w of allWindows) {
     if (w.isDestroyed() || w.webContents.isDestroyed()) continue;
     w.webContents.send('config:changed', config);

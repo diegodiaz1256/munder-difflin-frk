@@ -122,7 +122,8 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
   {
     id: 'git',
     label: 'Git (cwd)',
-    description: 'Inspect git status/log/diff for the workspace repo (scoped to cwd at spawn).',
+    // Also the switch for git in the agent's shell: off, toolGuard.ts refuses it.
+    description: 'git in the workspace repo: the Git server and git commands in its shell. Off: the agent cannot run git at all.',
     // Reference git server ships as Python; `--repository <cwd>` is set at merge time.
     // TODO-verify transport (uvx vs an npm port).
     spec: { command: 'uvx', args: ['mcp-server-git', '--repository', '<cwd>'] },

@@ -25,6 +25,8 @@ import { isAbsolute, join as joinPath } from 'node:path';
 import { parseRateLimits, type RateLimits } from '../shared/rateLimits';
 import { WEB_FETCH_HINT, webFetchFailed } from '../shared/browsePage';
 import { rosterSignature } from '../shared/tokenDiet';
+import { guardToolCall } from '../shared/toolGuard';
+import { homedir } from 'node:os';
 
 /** Maximum JSON payload bytes in one newline-delimited hook frame. */
 const MAX_HOOK_FRAME_BYTES = 256 * 1024;
@@ -539,6 +541,24 @@ export class HookServer {
       this.notify(agentId ?? 'Agent', 'finished — idle', agentId);
       this.emit(agentId, event, p);
       return {};
+    }
+
+    // Git off and its folders (Capabilities): refused here, for every CLI whose
+    // hook can refuse a call, before the operator gate below.
+    if (event === 'PreToolUse' && agentId) {
+      const policy = this.hive.guardFor?.(agentId);
+      const v = policy ? guardToolCall(p.tool_name, p.tool_input, policy, homedir()) : null;
+      if (v) {
+        this.emitControl(agentId, p.tool_name, v.reason);
+        this.emit(agentId, event, p, true);
+        return {
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            permissionDecision: 'deny',
+            permissionDecisionReason: v.reason
+          }
+        };
+      }
     }
 
     // 7C.1 — HITL gate: deny a tool call at the PreToolUse boundary when the

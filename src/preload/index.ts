@@ -422,6 +422,7 @@ export interface HarnessConfig {
   agentMcpAccess?: Record<string, Record<string, 'none' | 'read' | 'readwrite'>>;
   /** Claude Code tool groups taken from an agent (Capabilities): agent id → group ids (shared/nativeTools.ts). */
   agentToolBlocks?: Record<string, string[]>;
+  agentRoam?: string[];
   autoDeliveryPausedAgents?: string[];
   maxTurns?: number;
   circuitBreaker?: CircuitBreakerConfig;
