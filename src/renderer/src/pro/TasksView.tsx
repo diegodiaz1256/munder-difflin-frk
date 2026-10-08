@@ -4,6 +4,7 @@ import { useStore, type Agent } from '@/store/store';
 import { openQuestion, waitsOnHuman } from '@/components/TasksKanban';
 import { describeTaskEvent, useAgentName } from '@/components/TaskTimeline';
 import { statusSince, type TaskEvent } from '@shared/taskHistory';
+import { columnRoots, subtasksIn } from '@shared/taskBoard';
 import { deliverablePaths, splitPath } from '@shared/deliverables';
 import { FileTypeBadge } from '@/components/FileTypeBadge';
 import { ProIcon } from './ProIcon';
@@ -27,6 +28,7 @@ type Filter = 'all' | 'asks' | 'unassigned';
 
 /** Board columns; their names are `pro.tasks.col_<status>`. */
 const COLUMNS: { status: KeyedTask['status']; color: string }[] = [
+  { status: 'backlog', color: 'var(--cth-ink-300)' },
   { status: 'todo', color: 'var(--cth-sky)' },
   { status: 'doing', color: 'var(--cth-mint)' },
   { status: 'blocked', color: 'var(--cth-coral)' },
@@ -89,7 +91,7 @@ export function TasksView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agent
   const renderCard = (t: KeyedTask, nested = false) => {
     const owner = t.assignee ? byId.get(t.assignee) : undefined;
     return (
-      <button key={t.id} className="pro-card" style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6, ...(nested ? { width: '100%' } : {}) }}
+      <button key={t.id} className="pro-card pro-task-card" style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6, ...(nested ? { width: '100%' } : {}) }}
         onClick={() => useStore.getState().openTaskDetail(t.id)}>
         <span className="pro-row" style={{ justifyContent: 'space-between', gap: 6 }}>
           <span className="pro-ticket">{t.key ?? t.id}</span>
@@ -101,7 +103,7 @@ export function TasksView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agent
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{byTask.get(t.parent)!.title}</span>
       </span>
     )}
-    <span style={{ fontSize: 13, lineHeight: '18px' }}>{t.title}</span>
+    <span className="pro-task-title" title={t.title}>{t.title}</span>
     {(childrenOf.get(t.id)?.length ?? 0) > 0 && (() => {
       const kids = childrenOf.get(t.id)!;
       const done = kids.filter((k) => k.status === 'done').length;
@@ -144,10 +146,25 @@ export function TasksView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agent
           {waitsOnHuman(t)
             ? <span className="pro-badge" style={{ background: 'var(--cth-peach-light)' }}>{tr('pro.tasks.asksYou')}</span>
             : t.status === 'done' ? <span className="pro-badge" style={{ background: 'var(--cth-mint-light)' }}>{tr('pro.state.done')}</span> : <span />}
-          {owner ? <span className="pro-row" style={{ gap: 4, fontSize: 11 }} title={owner.name}><Avatar agent={owner} />{owner.name}</span>
+          {/* Parked: nobody is on it, so no face on the card (the owner stays in the ledger). */}
+          {t.status === 'backlog' ? <span className="pro-sub" style={{ fontSize: 11 }} title={owner?.name ?? t.assignee}>{tr('pro.tasks.parked')}</span>
+            : owner ? <span className="pro-row" style={{ gap: 4, fontSize: 11, minWidth: 0 }} title={owner.name}><Avatar agent={owner} /><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{owner.name}</span></span>
             : <span className="pro-sub" style={{ fontSize: 11 }}>{t.assignee ?? tr('pro.tasks.unassigned')}</span>}
         </span>
       </button>
+    );
+  };
+
+  /** A card with the subtasks that sit in the same column hanging under it
+   *  (the others keep their "↳ parent" line in their own column). */
+  const renderTree = (t: KeyedTask, pool: KeyedTask[], depth = 0): JSX.Element => {
+    const kids = depth < 4 ? subtasksIn(pool, t.id) : [];
+    if (!kids.length) return renderCard(t, depth > 0);
+    return (
+      <div key={t.id} className="pro-task-group">
+        {renderCard(t, depth > 0)}
+        <div className="pro-task-kids">{kids.map((k) => renderTree(k, pool, depth + 1))}</div>
+      </div>
     );
   };
 
@@ -247,13 +264,14 @@ export function TasksView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agent
         {COLUMNS.map((col) => {
           const all = shown.filter((t) => t.status === col.status)
             .sort((a, b) => a.priority - b.priority || b.createdAt.localeCompare(a.createdAt));
+          const roots = columnRoots(all);
           // Done piles up and buries the board: the latest few, the rest on demand.
-          const cards = col.status === 'done' && !showDone ? all.slice(0, 8) : all;
+          const cards = col.status === 'done' && !showDone ? roots.slice(0, 8) : roots;
           return (
             <section key={col.status} className="pro-col" aria-label={tr(`pro.tasks.col_${col.status}`)}>
               <div className="pro-col-head"><span className="pro-dot" style={{ background: col.color }} />{tr(`pro.tasks.col_${col.status}`)}<span className="pro-sub">{all.length}</span></div>
-              {cards.map((t) => renderCard(t))}
-              {col.status === 'done' && all.length > 8 && (
+              {cards.map((t) => renderTree(t, all))}
+              {col.status === 'done' && roots.length > 8 && (
                 <button className="pro-btn" style={{ alignSelf: 'center' }} onClick={() => setShowDone((v) => !v)}>
                   {showDone ? tr('pro.tasks.fewerDone') : tr('pro.tasks.allDone', { count: all.length })}
                 </button>

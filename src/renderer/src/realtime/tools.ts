@@ -155,7 +155,7 @@ export function realtimeReadTools(): ReturnType<typeof tool>[] {
         properties: {
           status: {
             type: 'string',
-            enum: ['todo', 'doing', 'blocked', 'done'],
+            enum: ['backlog', 'todo', 'doing', 'blocked', 'done'],
             description: 'Optional. Restrict the answer to one status.'
           }
         },

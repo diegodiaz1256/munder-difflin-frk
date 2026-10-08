@@ -75,9 +75,10 @@ The harness fills in \`id\`, \`from\`, \`hops\`, and timestamps.
     when: 'board.md vs tasks.json, and who may edit them',
     body: `Two shared surfaces, both in the hive root:
 - \`board.md\` — the freeform narrative plan. God is its sole scribe; others \`propose\` edits to god.
-- \`tasks.json\` — the task cards (a kanban: \`todo / doing / blocked / done\`, with title, assignee,
+- \`tasks.json\` — the task cards (a kanban: \`backlog / todo / doing / blocked / done\`, with title, assignee,
   priority, deps, \`deliverable\`, and \`parent\` on a subtask: the id of the card it is a piece of).
-  Keep the card you're working on in the right status.`
+  Keep the card you're working on in the right status. \`backlog\` is parked work nobody is on
+  right now: move a card there when it waits for later, and back to \`todo\`/\`doing\` when picked up.`
   },
   {
     file: 'services.md',
