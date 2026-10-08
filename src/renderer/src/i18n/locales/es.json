@@ -1898,7 +1898,9 @@
         "shell": "Shell",
         "shellDesc": "Ejecutar comandos (Bash, PowerShell)",
         "subagents": "Subagentes",
-        "subagentsDesc": "Ayudantes propios de Claude dentro de la sesión, que la oficina nunca ve (Agent, Task)"
+        "subagentsDesc": "Ayudantes propios de Claude dentro de la sesión, que la oficina nunca ve (Agent, Task)",
+        "roam": "Fuera de sus carpetas",
+        "roamDesc": "Apagado: solo escribe en su espacio de trabajo, su carpeta de la colmena, la colmena y la carpeta temporal (el orquestador también en los repos de la oficina). Encendido: en cualquier parte del disco. Se aplica al momento."
       },
       "accessRead": "Solo lectura",
       "accessWrite": "Lectura y escritura",
@@ -2484,7 +2486,7 @@
       "desc": "Leer y editar archivos solo dentro del espacio del agente (limitado a su carpeta al arrancar)."
     },
     "git": {
-      "desc": "Ver status/log/diff de git del repositorio del agente (limitado a su carpeta al arrancar)."
+      "desc": "git en el repositorio del agente: el servidor Git y los comandos git en su terminal. Apagado: el agente no puede usar git. Se aplica al momento."
     },
     "github-token": {
       "desc": "Leer y escribir issues, PRs y repositorios de GitHub. Necesita un token de acceso personal.",

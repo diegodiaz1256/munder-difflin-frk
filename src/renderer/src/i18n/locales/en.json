@@ -1898,7 +1898,9 @@
         "shell": "Shell",
         "shellDesc": "Run commands (Bash, PowerShell)",
         "subagents": "Sub-agents",
-        "subagentsDesc": "Claude's own helpers inside the session, which the office never sees (Agent, Task)"
+        "subagentsDesc": "Claude's own helpers inside the session, which the office never sees (Agent, Task)",
+        "roam": "Outside its folders",
+        "roamDesc": "Off: it writes only in its workspace, its hive folder, the hive and the temp dir (the orchestrator also in the office repos). On: anywhere on the disk. Applies at once."
       },
       "accessRead": "Read only",
       "accessWrite": "Read & write",
@@ -2484,7 +2486,7 @@
       "desc": "Read/edit files within the agent workspace only (scoped to cwd at spawn)."
     },
     "git": {
-      "desc": "Inspect git status/log/diff for the workspace repo (scoped to cwd at spawn)."
+      "desc": "git in the workspace repo: the Git server and git commands in its shell. Off: the agent cannot run git at all. Applies at once."
     },
     "github-token": {
       "desc": "Read/write GitHub issues, PRs, and repos. Requires a personal access token.",

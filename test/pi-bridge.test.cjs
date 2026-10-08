@@ -47,11 +47,23 @@ function runBridge(source, options = {}) {
   const frames = [];
   const handlers = new Map();
   let connections = 0;
+  const listeners = {};
   const socket = {
     end(data) {
       frames.push(JSON.parse(String(data).trim()));
     },
+    // PreToolUse asks and waits: the hook server answers, then closes.
+    write(data) {
+      frames.push(JSON.parse(String(data).trim()));
+      process.nextTick(() => {
+        if (options.answer && listeners.data) listeners.data(JSON.stringify(options.answer));
+        if (listeners.end) listeners.end();
+      });
+    },
+    setEncoding() {},
+    destroy() {},
     on(event, listener) {
+      listeners[event] = listener;
       if (event === 'error' && options.socketError) process.nextTick(listener);
       return this;
     }
@@ -85,6 +97,7 @@ function runBridge(source, options = {}) {
       throw new Error(`unexpected require: ${request}`);
     },
     process: { env },
+    setTimeout,
     globalThis: { pi }
   }, { filename: 'hive-bridge.js', timeout: 1000 });
 
@@ -226,7 +239,7 @@ test('generated Pi bridge preserves tool identity and breaker semantics', async 
     const cyclic = {};
     cyclic.self = cyclic;
     const bridge = runBridge(source, { autoApprove: true });
-    const result = bridge.handlers.get('tool_call')({
+    const result = await bridge.handlers.get('tool_call')({
       toolName: 'write',
       input: cyclic,
       approve() { throw new Error('approval callback failed'); }
@@ -284,6 +297,15 @@ test('generated Pi bridge preserves tool identity and breaker semantics', async 
     assert.equal(second.state.level, 'constrained');
     assert.match(second.state.reason, /8× identical tool call \(bash\)/);
   });
+});
+
+test('Pi bridge refuses a tool call the office refuses (git off, outside its folders)', async (t) => {
+  const { source } = await installedPiBridge(t);
+  const refusing = runBridge(source, { answer: { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'Refused: git is switched off for you' } } });
+  const r = await refusing.handlers.get('tool_call')({ toolName: 'bash', input: { command: 'git push' } });
+  assert.deepEqual({ ...r }, { block: true, reason: 'Refused: git is switched off for you' });
+  const allowing = runBridge(source, { answer: {} });
+  assert.equal(await allowing.handlers.get('tool_call')({ toolName: 'bash', input: { command: 'ls' } }), undefined);
 });
 
 test('Pi bridge reports its session id and a cost row per response', async (t) => {

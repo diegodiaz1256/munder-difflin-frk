@@ -24,7 +24,8 @@ async function floor(t, provider) {
   const hive = new HiveManager(() => home);
   const cwd = path.join(home, 'work');
   fs.mkdirSync(cwd, { recursive: true });
-  await hive.ensureAgent({ id: 'a1', name: 'A', provider, cwd });
+  // Let out of its folders: these check the paths read, not the fence (tool-guard.test.cjs).
+  await hive.ensureAgent({ id: 'a1', name: 'A', provider, cwd }, { roam: true });
   const server = new HookServer(hive, () => null, () => ({}), undefined, undefined);
   const seen = [];
   server.onStep = (_id, e) => seen.push(e);

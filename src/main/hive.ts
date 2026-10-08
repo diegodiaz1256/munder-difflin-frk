@@ -52,6 +52,7 @@ import { cleanServerList } from '../shared/roleBundles';
 import { detectProjectType, memoryInstruction, memoryTemplate, parseMemory, type ProjectType } from '../shared/memorySections';
 import { listsInstruction, parseList } from '../shared/lists';
 import { blockedMcpServers, cleanToolBlocks, disallowedTools } from '../shared/nativeTools';
+import type { GuardPolicy } from '../shared/toolGuard';
 import { MD_BROWSE } from './browseCli';
 import { MD_LISTS_MCP } from './listsMcp';
 
@@ -725,6 +726,9 @@ export class HiveManager {
 
   /** The loopback port of each agent's proxy sidecar (bridged into WSL). */
   private proxyPorts = new Map<string, number>();
+  /** What each agent may do beyond its CLI's own rules (git, its folders),
+   *  set at spawn and read by the hook server at PreToolUse (toolGuard.ts). */
+  private guardPolicies = new Map<string, GuardPolicy>();
   proxyPortFor(agentId: string): number | undefined { return this.proxyPorts.get(agentId); }
 
   private distroHomes = new Map<string, string>();
@@ -941,6 +945,11 @@ export class HiveManager {
        *  MemPalace dir, which `mempalace` mutates). Absolute paths; ignored
        *  for providers without a sandbox. */
       extraWritableDirs?: string[];
+      /** More folders this agent may write in (the orchestrator: the office's
+       *  registered repos). */
+      writableRoots?: string[];
+      /** The human let this agent write outside its folders (Capabilities). */
+      roam?: boolean;
     } = {}
   ): Promise<SpawnInjection> {
     const root = this.root();
@@ -1037,6 +1046,15 @@ export class HiveManager {
     if (opts.theme) env.COLORFGBG = opts.theme === 'dark' ? '15;0' : '0;15';
 
     const claudeProvider = isClaudeProvider(meta.provider ?? 'claude');
+
+    // Git and its folders, enforced at PreToolUse (hooks.ts -> toolGuard.ts).
+    this.guardPolicies.set(meta.id, {
+      cwd: meta.cwd || dir,
+      roots: [...new Set([meta.cwd, ...this.sandboxWritableDirs(meta, dir, root, opts.extraWritableDirs), ...(opts.writableRoots ?? []),
+        tmpdir(), '/tmp', join(homedir(), '.claude', 'projects')].filter((d): d is string => typeof d === 'string' && d.length > 0))],
+      git: gitAllowed(opts.mcpDefaults, opts.mcpGrant),
+      contained: !opts.roam
+    });
 
     // Non-hive-aware providers (for example Antigravity, Codex, Grok and Pi) don't
     // understand Claude Code's flags (no `--append-system-prompt`, no telemetry,
@@ -1505,6 +1523,19 @@ export class HiveManager {
   private sandboxWritableDirs(meta: AgentMeta, dir: string, root: string, extra?: string[]): string[] {
     const out = [dir, root, ...(extra ?? [])].filter((d) => typeof d === 'string' && d.length > 0);
     return Array.from(new Set(out));
+  }
+
+  /** The PreToolUse guard for an agent spawned in this run (undefined: none yet). */
+  guardFor(agentId: string): GuardPolicy | undefined {
+    return this.guardPolicies.get(agentId);
+  }
+
+  /** Git and "outside its folders" changed in Capabilities: the running
+   *  agents get it on their next tool call, no restart (the folders stay). */
+  refreshGuards(cfg: { mcpDefaults?: { [id: string]: { enabled: boolean } }; agentMcpGrants?: Record<string, string[]>; agentRoam?: string[] }): void {
+    for (const [id, g] of this.guardPolicies) {
+      this.guardPolicies.set(id, { ...g, git: gitAllowed(cfg.mcpDefaults, cfg.agentMcpGrants?.[id]), contained: !(cfg.agentRoam ?? []).includes(id) });
+    }
   }
 
   private hookSettings(shim: string, theme?: 'light' | 'dark', writableDirs: string[] = []): unknown {
@@ -2109,6 +2140,7 @@ export class HiveManager {
       slackLine,
       // Only the orchestrator routes work; the line meant nothing to a worker.
       meta.isGod ? ctxLine : '',
+      fenceLine(this.guardPolicies.get(meta.id)),
       `Env vars available to you: AGENT_ID, AGENT_NAME, HIVE_ROOT, AGENT_DIR.`
     ].filter(Boolean).join('\n');
   }
@@ -3826,6 +3858,23 @@ process.stdin.on('end', () => {
 // agent_end→Stop keeps the harness status in step (→ idle) so the renderer idle
 // inbox-wake nudge can deliver mail. Fully wrapped so a wrong API guess can never
 // break the spawn. LIVE-UNVERIFIED (Pi's exact extension surface needs BYOK keys).
+/** Git follows the Git capability (Capabilities -> Who has what): the same
+ *  rule that decides whether the agent gets the Git server. */
+export function gitAllowed(cfg?: { [id: string]: { enabled: boolean } }, grant?: string[]): boolean {
+  if (grant) return cleanServerList(grant).includes('git');
+  return cfg?.git?.enabled ?? MCP_CATALOG.find((e) => e.id === 'git')?.defaultEnabled ?? true;
+}
+
+/** One prompt line for what the guard enforces, so the agent does not learn
+ *  it by being refused. Nothing when it may do everything. */
+export function fenceLine(g: GuardPolicy | undefined): string {
+  if (!g) return '';
+  const parts: string[] = [];
+  if (g.contained) parts.push(`write only inside your folders (${g.cwd}, your hive folder, the hive, the temp dir): writes, moves and deletes elsewhere are refused; reading is fine`);
+  if (!g.git) parts.push('git is switched off for you: do not run git; ask the orchestrator if something needs it');
+  return parts.length ? `LIMITS: ${parts.join('. ')}.` : '';
+}
+
 const PI_EXTENSION = `'use strict';
 var net = require('node:net');
 var SOCK = process.env.HIVE_SOCK;
@@ -3842,6 +3891,27 @@ function post(payload) {
     var c = net.createConnection((String(SOCK).startsWith('tcp://') ? { host: '127.0.0.1', port: Number(String(SOCK).slice(String(SOCK).lastIndexOf(':') + 1)) } : SOCK), function () { try { c.end(JSON.stringify(payload) + '\\n'); } catch (e) {} });
     c.on('error', function () {});
   } catch (e) {}
+}
+// PreToolUse waits for the answer: the office may refuse a call (git off, a
+// write outside the agent's folders). No answer in 3 s: the call goes ahead.
+function ask(payload) {
+  return new Promise(function (resolve) {
+    var done = false, resp = '';
+    function finish(v) { if (!done) { done = true; resolve(v); } }
+    try {
+      if (!SOCK) return finish(null);
+      payload.agent_id = payload.agent_id || AGENT;
+      if (SID && !payload.session_id) payload.session_id = SID;
+      var c = net.createConnection((String(SOCK).startsWith('tcp://') ? { host: '127.0.0.1', port: Number(String(SOCK).slice(String(SOCK).lastIndexOf(':') + 1)) } : SOCK), function () { try { c.write(JSON.stringify(payload) + '\\n'); } catch (e) {} });
+      c.setEncoding('utf8');
+      c.on('data', function (d) { resp += d; });
+      c.on('end', function () {
+        try { var r = JSON.parse(resp || '{}'); var h = r.hookSpecificOutput; finish(h && h.permissionDecision === 'deny' ? (h.permissionDecisionReason || 'Refused by the office.') : null); } catch (e) { finish(null); }
+      });
+      c.on('error', function () { finish(null); });
+      setTimeout(function () { try { c.destroy(); } catch (e) {} finish(null); }, 3000);
+    } catch (e) { finish(null); }
+  });
 }
 function firstDefined(primary, fallback) {
   return primary !== undefined && primary !== null ? primary : fallback;
@@ -3866,8 +3936,9 @@ function piToolPayload(hookEventName, ev) {
 function register(pi) {
   if (!pi || typeof pi.on !== 'function') return false;
   try {
-    pi.on('tool_call', function (ev) {
-      post(piToolPayload('PreToolUse', ev));
+    pi.on('tool_call', async function (ev) {
+      var refused = await ask(piToolPayload('PreToolUse', ev));
+      if (refused) return { block: true, reason: refused };
       if (AUTO) { try { if (ev && typeof ev.approve === 'function') ev.approve(); } catch (e) {} return { approve: true }; }
       return undefined;
     });
@@ -3924,6 +3995,28 @@ function post(payload) {
     c.on('error', () => {});
   } catch (e) {}
 }
+// PreToolUse waits for the answer: the office may refuse a call (git off, a
+// write outside the agent's folders). No answer in 3 s: the call goes ahead.
+function ask(payload) {
+  return new Promise((resolve) => {
+    let done = false;
+    let resp = '';
+    const finish = (v) => { if (!done) { done = true; resolve(v); } };
+    try {
+      if (!SOCK) return finish(null);
+      payload.agent_id = payload.agent_id || AGENT;
+      if (SID && !payload.session_id) payload.session_id = SID;
+      const c = createConnection((String(SOCK).startsWith('tcp://') ? { host: '127.0.0.1', port: Number(String(SOCK).slice(String(SOCK).lastIndexOf(':') + 1)) } : SOCK), () => { try { c.write(JSON.stringify(payload) + '\\n'); } catch (e) {} });
+      c.setEncoding('utf8');
+      c.on('data', (d) => { resp += d; });
+      c.on('end', () => {
+        try { const h = JSON.parse(resp || '{}').hookSpecificOutput; finish(h && h.permissionDecision === 'deny' ? (h.permissionDecisionReason || 'Refused by the office.') : null); } catch (e) { finish(null); }
+      });
+      c.on('error', () => finish(null));
+      setTimeout(() => { try { c.destroy(); } catch (e) {} finish(null); }, 3000);
+    } catch (e) { finish(null); }
+  });
+}
 export const HiveBridge = async () => {
   // The app writes this file to plugin/ and plugins/ (older and newer OpenCode
   // read one or the other); OpenCode 1.18 loads both, which sent every event
@@ -3954,8 +4047,11 @@ export const HiveBridge = async () => {
     },
     // The arguments (output.args) too: which file a write touches, which command
     // ran — the steps timeline and Deliverables read them, as for every other CLI.
+    // Throwing is how a plugin refuses a tool call in OpenCode.
     'tool.execute.before': async (input, output) => {
-      try { post({ hook_event_name: 'PreToolUse', tool_name: input && (input.tool || input.name), tool_input: output && output.args }); } catch (e) {}
+      let refused = null;
+      try { refused = await ask({ hook_event_name: 'PreToolUse', tool_name: input && (input.tool || input.name), tool_input: output && output.args }); } catch (e) {}
+      if (refused) throw new Error(refused);
     },
     'tool.execute.after': async (input) => {
       try { post({ hook_event_name: 'PostToolUse', tool_name: input && (input.tool || input.name) }); } catch (e) {}

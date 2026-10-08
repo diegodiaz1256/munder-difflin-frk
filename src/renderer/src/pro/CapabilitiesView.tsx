@@ -80,6 +80,22 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
     }
   };
 
+  /** Let an agent write outside its folders, or fence it back in. */
+  const toggleRoam = async (agentId: string) => {
+    const cur = config.agentRoam ?? [];
+    const next = cur.includes(agentId) ? cur.filter((x) => x !== agentId) : [...cur, agentId];
+    setSaving(true);
+    try {
+      await window.cth.updateConfig({ agentRoam: next });
+      const who = roster.find((a) => a.id === agentId)?.name ?? agentId;
+      setNote(t('pro.caps.saved', { name: who }));
+    } catch (e) {
+      setNote(String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const toggle = (agentId: string, id: string) => {
     const cur = effectiveServers(config, agentId);
     // The levels already given stay; a service added by hand starts read-only.
@@ -214,6 +230,15 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
                       </button>
                     );
                   })}
+                  {(() => {
+                    const on = (config.agentRoam ?? []).includes(a.id);
+                    return (
+                      <button className={`pro-chip${on ? ' pro-chip-on' : ' pro-chip-off'}`} style={{ cursor: 'pointer' }}
+                        title={t('pro.caps.tool.roamDesc')} disabled={saving} onClick={() => void toggleRoam(a.id)}>
+                        {t('pro.caps.tool.roam')}
+                      </button>
+                    );
+                  })()}
                   <span style={{ width: 1, alignSelf: 'stretch', background: 'var(--cth-ink-100)' }} />
                   {MCP_CATALOG.map((e) => {
                     const on = has.includes(e.id);
