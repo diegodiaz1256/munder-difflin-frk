@@ -2397,7 +2397,14 @@
       "searchTicket": "Buscar, o un ticket (DUN-12)",
       "changes": "Cambios",
       "changesBy": "Lo que cambió {{who}} · {{when}}",
-      "noChanges": "Esta versión no cambia texto."
+      "noChanges": "Esta versión no cambia texto.",
+      "pdfPage": "{{page}} / {{count}}",
+      "pdfPrev": "Página anterior",
+      "pdfNext": "Página siguiente",
+      "pdfZoomIn": "Ampliar",
+      "pdfZoomOut": "Reducir",
+      "pdfFit": "Ajustar al ancho",
+      "pdfFailed": "No se pudo leer este PDF: {{error}}"
     },
     "engines": {
       "title": "Motores",

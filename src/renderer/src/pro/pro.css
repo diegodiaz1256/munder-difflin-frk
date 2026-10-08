@@ -90,6 +90,17 @@ button.pro-card:hover { border-color: var(--pro-line-strong); }
 }
 .pro-chip-on { border-color: var(--pro-green); color: var(--cth-ink-900); }
 .pro-chip-off { opacity: .5; }
+/* PDF deliverables (PdfPreview): the app's own toolbar over its own page backdrop. */
+.pro-pdf { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.pro-pdf-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pro-pdf-bar .pro-btn { padding: 2px 10px; }
+.pro-pdf-count { font-size: 12px; color: var(--pro-muted); min-width: 56px; text-align: center; font-variant-numeric: tabular-nums; }
+.pro-pdf-gap { flex: 1; }
+.pro-pdf-pages {
+  flex: 1; min-height: 0; overflow: auto; padding: 16px; border-radius: var(--pro-radius);
+  background: var(--cth-cream-200); display: flex; flex-direction: column; align-items: center; gap: 14px;
+}
+.pro-pdf-page { flex-shrink: 0; background: var(--cth-page); box-shadow: var(--cth-shadow-hard); }
 .pro-badge {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 11px; line-height: 20px; padding: 0 8px; border-radius: 6px; white-space: nowrap;
