@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MarkdownPreview } from '@/markdown/MarkdownPreview';
+import { MermaidDiagram } from '@/markdown/MermaidDiagram';
+import { confluenceToMarkdown } from '@shared/confluenceWiki';
+import { DELIVERABLE_SORTS, sortDeliverables, ticketQuery, type DeliverableSort } from '@shared/deliverableSort';
 import { canOpenExternally, deliverablePaths, parseDelimited, previewKind, splitPath, extOf } from '@shared/deliverables';
 import { useStore, type Agent } from '@/store/store';
 import type { KeyedTask } from './data';
@@ -30,7 +33,12 @@ interface Item {
   authors: string[];
   hidden?: boolean;
 }
-interface Group { key: string; label: string; kind: 'task' | 'office' | 'agents'; status?: string; owner?: string; items: Item[] }
+interface Group { key: string; label: string; kind: 'task' | 'office' | 'agents'; ticket?: string; status?: string; owner?: string; items: Item[] }
+
+const LS_SORT = 'cth.dlv.sort';
+const readSort = (): DeliverableSort => {
+  try { const s = window.localStorage.getItem(LS_SORT) as DeliverableSort | null; return s && DELIVERABLE_SORTS.includes(s) ? s : 'recent'; } catch { return 'recent'; }
+};
 
 const LS_COLLAPSED = 'cth.dlv.collapsed';
 const readCollapsed = (): Record<string, boolean> => {
@@ -120,7 +128,7 @@ export function DeliverablesView({ tasks, roster }: { tasks: KeyedTask[]; roster
         placed.add(k);
       }
       const visible = keep(items);
-      if (visible.length) out.push({ key: `task:${task.id}`, kind: 'task', label: [task.key, task.title].filter(Boolean).join(' · '), status: task.status, owner: task.assignee && who(task.assignee), items: visible });
+      if (visible.length) out.push({ key: `task:${task.id}`, kind: 'task', ticket: (task.key ?? task.id).toLowerCase(), label: [task.key, task.title].filter(Boolean).join(' · '), status: task.status, owner: task.assignee && who(task.assignee), items: visible });
     }
     // The rest of research/, one section per top folder (handoffs/, reports/…).
     const byFolder = new Map<string, Item[]>();
@@ -153,8 +161,12 @@ export function DeliverablesView({ tasks, roster }: { tasks: KeyedTask[]; roster
     try { window.localStorage.setItem(LS_COLLAPSED, JSON.stringify(next)); } catch { /* noop */ }
     return next;
   });
-  // A section is open unless closed by hand; a long research/ folder starts closed.
-  const isOpen = (g: Group) => (g.key in collapsed ? !collapsed[g.key] : !(g.kind === 'office' && g.items.length > 6));
+  // An accordion: with more than a few sections they start closed, except the
+  // one holding the file being read; one opened or closed by hand stays so.
+  const isOpen = (g: Group) => (g.key in collapsed ? !collapsed[g.key]
+    : groups.length <= 3 || (!!current && g.items.some((i) => i.abs === current)));
+  const [sort, setSortState] = useState<DeliverableSort>(readSort);
+  const setSort = (s: DeliverableSort) => { setSortState(s); try { window.localStorage.setItem(LS_SORT, s); } catch { /* noop */ } };
   const setAll = (open: boolean) => {
     const next = Object.fromEntries(groups.map((g) => [g.key, !open]));
     setCollapsed(next);
@@ -162,11 +174,14 @@ export function DeliverablesView({ tasks, roster }: { tasks: KeyedTask[]; roster
   };
 
   const q = query.trim().toLowerCase();
+  // "DUN-12" in the search: that ticket's deliverables, not DUN-120's too.
+  const ticket = ticketQuery(q);
   const filtering = !!(q || typeFilter || byFilter);
-  const shown = groups
+  const shown = sortDeliverables(groups, sort)
     .filter((g) => !focusTask || g.key === `task:${focusTask}`)
+    .filter((g) => !ticket || g.ticket === ticket)
     .map((g) => ({ ...g, items: g.items.filter((i) =>
-      (!q || `${g.label} ${i.name} ${i.folder} ${i.by ?? ''} ${i.abs}`.toLowerCase().includes(q))
+      (!q || ticket || `${g.label} ${i.name} ${i.folder} ${i.by ?? ''} ${i.abs}`.toLowerCase().includes(q))
       && (!typeFilter || (extOf(i.name) || 'file') === typeFilter)
       && (!byFilter || i.authors.includes(byFilter))) }))
     .filter((g) => g.items.length);
@@ -200,7 +215,7 @@ export function DeliverablesView({ tasks, roster }: { tasks: KeyedTask[]; roster
         // squeezing side by side.
         <div style={{ flex: 1, minHeight: 0, display: 'flex', flexWrap: 'wrap', gap: 12 }}>
           <aside style={{ flex: '1 1 260px', maxWidth: 340, minWidth: 0, maxHeight: '100%', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 220 }}>
-            <input className="pro-input" placeholder={t('pro.dlv.search')} value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input className="pro-input" placeholder={t('pro.dlv.searchTicket')} value={query} onChange={(e) => setQuery(e.target.value)} />
             <div className="pro-row" style={{ gap: 6, flexWrap: 'wrap' }}>
               <select className="pro-input" style={{ flex: '1 1 90px', minWidth: 0 }} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} aria-label={t('pro.dlv.filterType')}>
                 <option value="">{t('pro.dlv.allTypes')}</option>
@@ -209,6 +224,9 @@ export function DeliverablesView({ tasks, roster }: { tasks: KeyedTask[]; roster
               <select className="pro-input" style={{ flex: '1 1 110px', minWidth: 0 }} value={byFilter} onChange={(e) => setByFilter(e.target.value)} aria-label={t('pro.dlv.filterBy')}>
                 <option value="">{t('pro.dlv.everyone')}</option>
                 {writers.map((x) => <option key={x} value={x}>{x}</option>)}
+              </select>
+              <select className="pro-input" style={{ flex: '1 1 110px', minWidth: 0 }} value={sort} onChange={(e) => setSort(e.target.value as DeliverableSort)} aria-label={t('pro.dlv.sortBy')}>
+                {DELIVERABLE_SORTS.map((s) => <option key={s} value={s}>{t(`pro.dlv.sort_${s}`)}</option>)}
               </select>
               <button className="pro-btn" style={{ padding: '2px 8px' }} onClick={() => setAll(shown.some((g) => !isOpen(g)))}>
                 {shown.some((g) => !isOpen(g)) ? t('pro.dlv.expandAll') : t('pro.dlv.collapseAll')}
@@ -293,8 +311,15 @@ function Preview({ abs, meta, tasks, hidden, deletable, onChanged }: { abs: stri
   // History: the file's committed versions, and one picked to read.
   const [history, setHistory] = useState<Array<{ hash: string; ts: string; author: string; subject: string }> | null>(null);
   const [version, setVersion] = useState<{ hash: string; ts: string; author: string; text: string } | null>(null);
+  // What one version changed (its diff against the version before).
+  const [diff, setDiff] = useState<{ hash: string; ts: string; author: string; text: string } | null>(null);
+  const showDiff = async (v: { hash: string; ts: string; author: string }) => {
+    if (diff?.hash === v.hash) { setDiff(null); return; }
+    const r = await window.cth.deliverablesDiff(abs, v.hash);
+    if (r.ok && r.diff !== undefined) setDiff({ ...v, text: r.diff }); else setOpenError(r.error ?? t('pro.dlv.actionFailed'));
+  };
   const toggleHistory = async () => {
-    if (history) { setHistory(null); setVersion(null); return; }
+    if (history) { setHistory(null); setVersion(null); setDiff(null); return; }
     setHistory(await window.cth.deliverablesHistory(abs));
   };
   const pickVersion = async (v: { hash: string; ts: string; author: string }, i: number) => {
@@ -348,7 +373,7 @@ function Preview({ abs, meta, tasks, hidden, deletable, onChanged }: { abs: stri
         <strong style={{ fontSize: 14, overflowWrap: 'anywhere' }}>{name}</strong>
         <span className="pro-sub pro-mono" style={{ fontSize: 11, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={abs}>{abs}</span>
         <button className="pro-btn" onClick={() => { void navigator.clipboard.writeText(abs).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }); }}>{copied ? t('pro.conn.copied') : t('pro.dlv.copyPath')}</button>
-        {(kind === 'markdown' || kind === 'csv' || kind === 'json') && loaded.state === 'text' && (
+        {(kind === 'markdown' || kind === 'wiki' || kind === 'mermaid' || kind === 'csv' || kind === 'json') && loaded.state === 'text' && (
           <div className="pro-switch" role="group" aria-label={t('pro.dlv.view')}>
             <button aria-pressed={!source} onClick={() => setSource(false)}>{t('pro.dlv.rendered')}</button>
             <button aria-pressed={source} onClick={() => setSource(true)}>{t('pro.dlv.source')}</button>
@@ -393,6 +418,12 @@ function Preview({ abs, meta, tasks, hidden, deletable, onChanged }: { abs: stri
                 <span className="pro-sub" style={{ fontSize: 11.5, flexShrink: 0 }}>{fmtWhen(new Date(v.ts).getTime())}</span>
                 <span className="pro-mono pro-sub" style={{ fontSize: 10.5, flexShrink: 0 }}>{v.hash.slice(0, 7)}</span>
                 {i === 0 && <span className="pro-chip" style={{ fontSize: 10 }}>{t('pro.dlv.current')}</span>}
+                <span style={{ flex: 1 }} />
+                {/* A span: the row is already a button. */}
+                <span role="button" tabIndex={0} className="pro-chip" aria-pressed={diff?.hash === v.hash}
+                  style={{ fontSize: 10.5, cursor: 'pointer', ...(diff?.hash === v.hash ? { background: 'var(--cth-lemon-light)' } : {}) }}
+                  onClick={(e) => { e.stopPropagation(); void showDiff(v); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); void showDiff(v); } }}>{t('pro.dlv.changes')}</span>
               </button>
             );
           })}
@@ -405,7 +436,8 @@ function Preview({ abs, meta, tasks, hidden, deletable, onChanged }: { abs: stri
         </div>
       )}
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '4px 18px 18px' }}>
-        {version ? <TextPreview kind={source ? 'text' : kind} text={version.text} dir={dir} name={name} /> : <>
+        {diff ? <DiffView text={diff.text} label={t('pro.dlv.changesBy', { who: diff.author === 'Hive' ? t('pro.dlv.app') : diff.author, when: fmtWhen(new Date(diff.ts).getTime()) })} onClose={() => setDiff(null)} />
+        : version ? <TextPreview kind={source ? 'text' : kind} text={version.text} dir={dir} name={name} /> : <>
         {loaded.state === 'loading' && <p className="pro-sub">{t('pro.dlv.loading')}</p>}
         {loaded.state === 'none' && <p className="pro-sub">{loaded.reason}</p>}
         {loaded.state === 'image' && <img src={loaded.url} alt={name} style={{ maxWidth: '100%', imageRendering: 'auto' }} />}
@@ -416,9 +448,33 @@ function Preview({ abs, meta, tasks, hidden, deletable, onChanged }: { abs: stri
   );
 }
 
+/** A unified diff, added lines green and removed ones red. */
+function DiffView({ text, label, onClose }: { text: string; label: string; onClose: () => void }) {
+  const { t } = useTranslation();
+  // Drop git's file header; keep the hunks.
+  const lines = text.split('\n').filter((l) => !/^(diff --git|index |--- |\+\+\+ |new file mode|deleted file mode|similarity index|rename (from|to)|\\ No newline)/.test(l));
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div className="pro-row" style={{ gap: 8, fontSize: 12, marginBottom: 6 }}>
+        <span style={{ flex: 1 }}>{label}</span>
+        <button className="pro-btn" style={{ padding: '1px 8px' }} onClick={onClose}>{t('pro.dlv.backToCurrent')}</button>
+      </div>
+      {!lines.some((l) => /^[+-]/.test(l)) ? <p className="pro-sub" style={{ fontSize: 12 }}>{t('pro.dlv.noChanges')}</p> : (
+        <pre className="pro-mono" style={{ fontSize: 12, margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+          {lines.map((l, i) => (
+            <div key={i} style={l.startsWith('+') ? { background: 'var(--cth-mint-light)' } : l.startsWith('-') ? { background: 'var(--cth-coral-light)' } : l.startsWith('@@') ? { color: 'var(--pro-muted)' } : undefined}>{l || ' '}</div>
+          ))}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 function TextPreview({ kind, text, dir, name }: { kind: ReturnType<typeof previewKind>; text: string; dir: string; name: string }) {
   const { t } = useTranslation();
   if (kind === 'markdown') return <MarkdownPreview source={text} root={dir} baseRel={name} />;
+  if (kind === 'wiki') return <MarkdownPreview source={confluenceToMarkdown(text)} root={dir} baseRel={name} />;
+  if (kind === 'mermaid') return <MermaidDiagram source={text} />;
   if (kind === 'csv') {
     const rows = parseDelimited(text, extOf(name) === 'tsv' ? '\t' : ',');
     if (!rows.length) return <p className="pro-sub">{t('pro.dlv.emptyFile')}</p>;

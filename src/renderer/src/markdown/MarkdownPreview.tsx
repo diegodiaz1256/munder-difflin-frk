@@ -27,6 +27,8 @@ import { useRtl } from '@/i18n/useDirection';
  *  - `card`: markdown INSIDE another surface (an ASK ME question, a Q&A entry).
  *    Inherits the host's font and size, drops the page chrome, and keeps a single
  *    newline as a line break the way the plain-text block it replaced did. */
+import { MermaidDiagram } from './MermaidDiagram';
+
 export type MarkdownVariant = 'document' | 'card';
 
 // Hoisted: a fresh array on every render would make react-markdown re-run the
@@ -100,6 +102,11 @@ export const MarkdownPreview = memo(function MarkdownPreview({
           // every image was a chip, which meant an agent's report saying "see
           // the screenshot below" showed a pill reading "🖼 screenshot" and the
           // evidence was unviewable anywhere in the app.
+          // ```mermaid blocks draw as diagrams (loaded on first use).
+          code: ({ className, children, ...rest }) => {
+            if (/\blanguage-mermaid\b/.test(className ?? '')) return <MermaidDiagram source={String(children ?? '')} />;
+            return <code className={className} {...rest}>{children}</code>;
+          },
           img: ({ alt, src }) => {
             const s = typeof src === 'string' ? src : undefined;
             const rel = root ? resolveLocalImageRel(baseRel, s) : null;

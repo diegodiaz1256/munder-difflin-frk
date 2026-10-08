@@ -2382,7 +2382,18 @@
       "viewingVersion": "Viewing the version {{who}} saved on {{when}}.",
       "backToCurrent": "Back to current",
       "openTask": "Open this task",
-      "noAuthor": "No recorded author: written outside an agent, or before the app kept who changed each file."
+      "noAuthor": "No recorded author: written outside an agent, or before the app kept who changed each file.",
+      "sortBy": "Sort",
+      "sort_recent": "Newest",
+      "sort_oldest": "Oldest",
+      "sort_name": "Name",
+      "sort_type": "Type",
+      "sort_author": "Author",
+      "sort_ticket": "Ticket",
+      "searchTicket": "Search, or a ticket (DUN-12)",
+      "changes": "Changes",
+      "changesBy": "What {{who}} changed · {{when}}",
+      "noChanges": "No text changes in this version."
     },
     "engines": {
       "title": "Engines",

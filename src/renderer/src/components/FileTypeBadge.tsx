@@ -3,6 +3,8 @@ import { extOf, previewKind } from '@shared/deliverables';
 /** Background per kind of file, from the design tokens. */
 const TONE: Record<string, string> = {
   markdown: 'var(--cth-sky-light)',
+  wiki: 'var(--cth-sky-light)',
+  mermaid: 'var(--cth-lilac-light)',
   csv: 'var(--cth-mint-light)',
   json: 'var(--cth-lilac-light)',
   html: 'var(--cth-peach-light)',

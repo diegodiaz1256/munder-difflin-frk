@@ -4888,6 +4888,7 @@ function hiveRel(root: string, abs: string): string {
 function queueDeliverableCommit(agentId: string, root: string, abs: string[]): void {
   const entry = pendingDeliverableCommits.get(agentId) ?? { rels: new Set<string>(), timer: undefined as unknown as ReturnType<typeof setTimeout> };
   for (const p of abs) entry.rels.add(hiveRel(root, p));
+  hive.holdDeliverables([...entry.rels]);
   clearTimeout(entry.timer);
   entry.timer = setTimeout(() => {
     pendingDeliverableCommits.delete(agentId);
@@ -4969,6 +4970,12 @@ function deliverableRel(p: unknown): string | null {
 ipcMain.handle('deliverables:history', (_evt, p: unknown) => {
   const rel = deliverableRel(p);
   return rel ? hive.fileHistory(rel) : [];
+});
+ipcMain.handle('deliverables:diff', (_evt, p: unknown, hash: unknown) => {
+  const rel = deliverableRel(p);
+  if (!rel || typeof hash !== 'string') return { ok: false, error: 'bad request' };
+  const diff = hive.fileDiff(rel, hash);
+  return diff === null ? { ok: false, error: 'that version is not in the history' } : { ok: true, diff };
 });
 ipcMain.handle('deliverables:version', (_evt, p: unknown, hash: unknown) => {
   const rel = deliverableRel(p);

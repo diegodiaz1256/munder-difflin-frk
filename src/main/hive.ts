@@ -3563,6 +3563,16 @@ export class HiveManager {
     console.warn('[hive] untracked previously-committed Codex homes from the hive repo');
   }
 
+  /** Deliverables an agent just wrote, waiting a few seconds for their own
+   *  commit as that agent (commitDeliverables). The app's batched commit leaves
+   *  them out: it used to sweep them in first, so their history said "App". */
+  private heldDeliverables = new Map<string, number>();
+
+  holdDeliverables(rels: string[]): void {
+    const until = Date.now() + 60_000;
+    for (const r of rels) this.heldDeliverables.set(r, until);
+  }
+
   /** Commit all hive changes. No-op if there is nothing staged. */
   commit(message: string): void {
     const root = this.root();
@@ -3572,6 +3582,11 @@ export class HiveManager {
     for (let attempt = 0; attempt < 5; attempt++) {
       this.clearStaleLock(root);
       const add = this.git(['add', '-A'], root);
+      // A held deliverable waits for its author's commit (expired holds lapse:
+      // a lost timer must not keep a file out of the history for good).
+      const now = Date.now();
+      for (const [r, until] of this.heldDeliverables) if (until < now) this.heldDeliverables.delete(r);
+      if (this.heldDeliverables.size) this.git(['reset', '-q', '--', ...this.heldDeliverables.keys()], root);
       const commit = this.git(['commit', '-q', '-m', message], root);
       if (commit.ok) return;
       if (/nothing to commit/i.test(commit.out + commit.err)) return;
@@ -3598,7 +3613,10 @@ export class HiveManager {
       this.clearStaleLock(root);
       const add = this.git(['add', '-A', '--', ...rels], root);
       const commit = this.git(['commit', '-q', `--author=${who}`, '-m', msg, '--', ...rels], root);
-      if (commit.ok || /nothing (added )?to commit|no changes added/i.test(commit.out + commit.err)) return;
+      if (commit.ok || /nothing (added )?to commit|no changes added/i.test(commit.out + commit.err)) {
+        for (const r of rels) this.heldDeliverables.delete(r);
+        return;
+      }
       if (!add.ok || /index\.lock/i.test(commit.err)) { sleepSync(50 * (attempt + 1)); continue; }
       console.warn('[hive] deliverable commit failed:', commit.err || commit.out);
       return;
@@ -3616,6 +3634,15 @@ export class HiveManager {
       const [hash, ts, author, subject] = l.split('\x1f');
       return { hash, ts, author, subject: subject ?? '' };
     }).filter((v) => /^[0-9a-f]{40}$/.test(v.hash));
+  }
+
+  /** What one commit changed in a hive file, as a unified diff (capped), or
+   *  null. The first version of a file diffs against nothing. */
+  fileDiff(rel: string, hash: string): string | null {
+    const root = this.root();
+    if (!root || !/^[0-9a-f]{7,40}$/.test(hash) || rel.includes('..')) return null;
+    const r = this.git(['show', '--format=', '--no-color', '--no-ext-diff', '-U3', hash, '--', rel], root);
+    return r.ok ? r.out.slice(0, 400_000) : null;
   }
 
   /** A hive file as it was in one commit (text, capped), or null. */

@@ -1043,6 +1043,8 @@ const api = {
   deliverablesHistory: (path: string): Promise<Array<{ hash: string; ts: string; author: string; subject: string }>> => ipcRenderer.invoke('deliverables:history', path),
   /** A deliverable's text as it was in one of those versions. */
   deliverablesVersion: (path: string, hash: string): Promise<{ ok: boolean; text?: string; error?: string }> => ipcRenderer.invoke('deliverables:version', path, hash),
+  /** What one version changed in a deliverable (unified diff). */
+  deliverablesDiff: (path: string, hash: string): Promise<{ ok: boolean; diff?: string; error?: string }> => ipcRenderer.invoke('deliverables:diff', path, hash),
   /** Hide a deliverable from the listing (or show it again). The file stays. */
   deliverablesSetHidden: (path: string, hidden: boolean): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('deliverables:setHidden', path, hidden),
   /** Delete a file in the office's research/ folder: to the trash, or for good

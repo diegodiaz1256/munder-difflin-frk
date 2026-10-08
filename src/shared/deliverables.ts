@@ -9,10 +9,13 @@
 /** The office folder, under the hive root, where agents put deliverables. */
 export const DELIVERABLES_DIR = 'research';
 
-export type PreviewKind = 'markdown' | 'image' | 'csv' | 'json' | 'html' | 'text' | 'pdf' | 'binary';
+export type PreviewKind = 'markdown' | 'wiki' | 'mermaid' | 'image' | 'csv' | 'json' | 'html' | 'text' | 'pdf' | 'binary';
 
 const EXT: Record<string, PreviewKind> = {
   md: 'markdown', markdown: 'markdown', mdx: 'markdown',
+  // Confluence wiki markup, and Mermaid diagrams.
+  wiki: 'wiki', confluence: 'wiki', jira: 'wiki',
+  mmd: 'mermaid', mermaid: 'mermaid',
   png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', svg: 'image', bmp: 'image',
   csv: 'csv', tsv: 'csv',
   json: 'json', jsonl: 'text',
@@ -135,7 +138,7 @@ const CLAUDE_WRITES = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
  * agent, and opening one of those would be running it.
  */
 const OPEN_EXTERNALLY = new Set([
-  'md', 'markdown', 'txt', 'log', 'csv', 'tsv', 'json', 'yaml', 'yml', 'xml', 'toml',
+  'md', 'markdown', 'wiki', 'mmd', 'txt', 'log', 'csv', 'tsv', 'json', 'yaml', 'yml', 'xml', 'toml',
   'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg',
   'docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp', 'rtf',
   'html', 'htm', 'mp4', 'mov', 'webm', 'mp3', 'wav'
