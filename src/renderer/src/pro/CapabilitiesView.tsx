@@ -150,7 +150,10 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
       </div>
 
       {tab === 'skills' ? (
-        <div className="pro-card pro-embed" style={{ padding: 0, minHeight: 420 }}><SkillsTab agentCwd={targetAgent?.cwd} /></div>
+        <>
+          <OfficeSkills config={config} roster={roster} />
+          <div className="pro-card pro-embed" style={{ padding: 0, minHeight: 420 }}><SkillsTab agentCwd={targetAgent?.cwd} /></div>
+        </>
       ) : (
         <>
           <div className="pro-row">
@@ -267,6 +270,41 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
           </p>
         </>
       )}
+    </div>
+  );
+}
+
+/** What the orchestrator may add as skills, and what it has given whom. */
+function OfficeSkills({ config, roster }: { config: HarnessConfig; roster: Agent[] }) {
+  const { t } = useTranslation();
+  const [state, setState] = useState<Awaited<ReturnType<typeof window.cth.skillsOffice>> | null>(null);
+  const load = () => { void window.cth.skillsOffice?.().then(setState).catch(() => setState({ skills: {} })); };
+  useEffect(load, []);
+  const policy = config.orchestratorSkills ?? 'official';
+  const nameOf = (id: string) => (id === '*' ? t('pro.caps.skills.everyone') : roster.find((a) => a.id === id)?.name ?? id);
+  const rows = Object.entries(state?.skills ?? {});
+  return (
+    <div className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <span className="pro-row" style={{ flexWrap: 'wrap' }}>
+        <strong style={{ fontSize: 14 }}>{t('pro.caps.skills.title')}</strong>
+        <span className="pro-sub" style={{ fontSize: 12, flex: 1, minWidth: 200 }}>{t('pro.caps.skills.sub')}</span>
+        <select className="pro-input" value={policy} aria-label={t('pro.caps.skills.policy')}
+          onChange={(e) => void window.cth.updateConfig({ orchestratorSkills: e.target.value as 'off' | 'official' | 'catalog' })}>
+          <option value="off">{t('pro.caps.skills.policy_off')}</option>
+          <option value="official">{t('pro.caps.skills.policy_official')}</option>
+          <option value="catalog">{t('pro.caps.skills.policy_catalog')}</option>
+        </select>
+      </span>
+      {rows.length === 0
+        ? <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.caps.skills.none')}</span>
+        : rows.map(([name, s]) => (
+          <span key={name} className="pro-row" style={{ flexWrap: 'wrap', gap: 8 }}>
+            <strong style={{ fontSize: 13 }}>{name}</strong>
+            <span className="pro-chip">{s.owner}</span>
+            <span className="pro-sub" style={{ fontSize: 12, flex: 1 }}>{s.agents.map(nameOf).join(', ')}</span>
+            <button className="pro-btn" onClick={() => void window.cth.skillsOfficeRemove(name).then(load)}>{t('pro.caps.skills.remove')}</button>
+          </span>
+        ))}
     </div>
   );
 }

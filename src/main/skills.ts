@@ -399,7 +399,10 @@ export async function installSkill(
   entryUrl: string,
   entryName: string,
   /** The agents' home: the Windows profile, or the distro's on a WSL floor. */
-  home: string = homedir()
+  home: string = homedir(),
+  /** Install into this folder instead of <home>/.claude/skills (the office
+   *  skill store), under this folder name. */
+  into?: { root: string; dir: string }
 ): Promise<{ ok: true; path: string } | { ok: false; error: string; unsupported?: boolean }> {
   const source = await resolveSourceUrl(entryUrl);
   if (!source) {
@@ -428,10 +431,10 @@ export async function installSkill(
     skillPath = resolved.path;
   }
 
-  const dirName = safeSkillDirName(skillPath || entryName);
+  const dirName = into ? safeSkillDirName(into.dir) : safeSkillDirName(skillPath || entryName);
   if (!dirName) return { ok: false, error: 'That skill has a name this app will not create a folder for.' };
 
-  const root = join(home, '.claude', 'skills');
+  const root = into ? into.root : join(home, '.claude', 'skills');
   const dest = join(root, dirName);
   if (existsSync(dest)) return { ok: false, error: `Already installed at ${dest}` };
 

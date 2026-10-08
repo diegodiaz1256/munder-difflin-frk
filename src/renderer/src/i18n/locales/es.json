@@ -1910,7 +1910,18 @@
       "accessReadShort": "lectura",
       "accessWriteShort": "lectura y escritura",
       "accessHelp": "Lo que este rol puede hacer con cada conexión. El límite de la propia conexión (Connections) sigue mandando.",
-      "apiHelp": "Lo que este rol puede hacer con cada API REST (Connections → APIs REST). Sin definir es solo lectura."
+      "apiHelp": "Lo que este rol puede hacer con cada API REST (Connections → APIs REST). Sin definir es solo lectura.",
+      "skills": {
+        "title": "Skills de la oficina",
+        "sub": "El orquestador da skills del catálogo a los agentes y te lo cuenta en su bandeja. Elige qué puede añadir.",
+        "policy": "Qué puede añadir el orquestador",
+        "policy_off": "Nada",
+        "policy_official": "Solo las de Anthropic",
+        "policy_catalog": "Cualquiera del catálogo",
+        "none": "Ninguna todavía.",
+        "everyone": "todos los agentes",
+        "remove": "Quitar"
+      }
     },
     "conn": {
       "step1": "Elige un servicio y consigue su clave",

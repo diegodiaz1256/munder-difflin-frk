@@ -234,6 +234,9 @@ export interface HarnessConfig {
   agentToolBlocks?: Record<string, string[]>;
   /** Agents the human let write outside their own folders (Capabilities). Absent → none. */
   agentRoam?: string[];
+  /** What the orchestrator may add as office skills: nothing, Anthropic's own
+   *  (default), or anything in the catalog (shared/skillRequests.ts). */
+  orchestratorSkills?: 'off' | 'official' | 'catalog';
   /** Manager → Connections "Choose agents": a keyed MCP server listed here reaches
    *  only these agent ids (on their next spawn). Absent → every agent. */
   connectionScopes?: Record<string, string[]>;

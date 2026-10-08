@@ -124,7 +124,8 @@ import {
 import { buildMissingCliScript, chooseInstallRung } from './cliInstall';
 import { detectNodeVersion, nodeAtLeast, nodeIsUsable, resolveNodeInstaller } from './nodeInstall';
 import { toolCatalog, type ToolStatus } from '../shared/toolCatalog';
-import { listLocalSkills, loadCatalog, installSkill, uninstallSkill, type LocalSkill } from './skills';
+import { listLocalSkills, loadCatalog, installSkill, uninstallSkill, type LocalSkill, type CatalogSkill } from './skills';
+import { cleanSkillPolicy, planSkillRequest } from '../shared/skillRequests';
 import { loadHero } from './hero';
 import { loadModelCatalog } from './modelCatalog';
 import {
@@ -1018,6 +1019,62 @@ function processScheduleRequests(): void {
     try {
       hive.send({ to: 'god', act: 'inform', subject: `[automations ${result.ok ? 'updated' : 'request refused'}] ${f}`, body: result.message }, 'scheduler');
     } catch { /* best-effort */ }
+  }
+}
+
+/** Office skills: the orchestrator's requests in its own skills/ folder
+ *  (shared/skillRequests.ts). Installed once into the hive's store, copied to
+ *  the agents named, answered in its inbox. */
+const SKILL_CATALOG_CACHE = () => join(app.getPath('userData'), 'skill-catalog.json');
+let skillMirrorAt = 0;
+async function processSkillRequests(): Promise<void> {
+  const root = hive.root();
+  if (!root) return;
+  const policy = cleanSkillPolicy(readConfig().orchestratorSkills);
+  const dir = join(root, 'agents', hive.registry().godId ?? 'god', 'skills');
+  let files: string[] = [];
+  try { files = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.json')).sort() : []; } catch { files = []; }
+  // The catalog the orchestrator searches: refreshed when it is asked for
+  // (a request) and at most every hour otherwise. loadCatalog serves a day-old
+  // cache, so this rarely touches the network.
+  const stale = Date.now() - skillMirrorAt > 3_600_000 || !existsSync(join(root, 'skills', 'catalog.json'));
+  if (!files.length && !stale) return;
+  const catalog = await loadCatalog(SKILL_CATALOG_CACHE()).catch(() => ({ skills: [] as CatalogSkill[] }));
+  hive.writeSkillCatalogMirror(catalog.skills, policy);
+  skillMirrorAt = Date.now();
+  for (const f of files) {
+    const fp = join(dir, f);
+    let message: string;
+    let ok = false;
+    try {
+      const req = JSON.parse(readFileSync(fp, 'utf8')) as unknown;
+      const reg = hive.registry();
+      const agents = new Set<string>(Object.entries(reg.agents).filter(([, a]) => !a.archived).map(([id]) => id));
+      const plan = planSkillRequest(req, { state: hive.officeSkills(), catalog: catalog.skills, policy, agents });
+      message = plan.message;
+      if (plan.ok) {
+        const store = hive.officeSkillStore()!;
+        if (plan.install) {
+          const dest = plan.next.skills[plan.install.name].dir;
+          const r = existsSync(join(store, dest)) ? { ok: true as const } : await installSkill(plan.install.url, plan.install.name, agentsHome(), { root: store, dir: dest });
+          if (!r.ok) throw new Error(`could not install ${plan.install.name}: ${r.error}`);
+        }
+        hive.writeOfficeSkills(plan.next);
+        if (plan.drop) { try { rmSync(join(store, plan.drop), { recursive: true, force: true }); } catch { /* best-effort */ } }
+        for (const id of agents) hive.syncOfficeSkills(id);
+        ok = true;
+        try { liveWebContents()?.send('skills:officeChanged'); } catch { /* window gone */ }
+      }
+    } catch (e) {
+      message = `Could not apply ${f}: ${e instanceof Error ? e.message : String(e)}`;
+    }
+    try {
+      const sub = join(dir, ok ? '.done' : '.failed');
+      mkdirSync(sub, { recursive: true });
+      renameSync(fp, join(sub, f));
+    } catch { try { unlinkSync(fp); } catch { /* poison file must not loop */ } }
+    try { hive.appendLog({ kind: 'skill_request', file: f, ok, message }); } catch { /* best-effort */ }
+    try { hive.send({ to: 'god', act: 'inform', subject: `[skills ${ok ? 'updated' : 'request refused'}] ${f}`, body: message }, 'scheduler'); } catch { /* best-effort */ }
   }
 }
 
@@ -5177,6 +5234,21 @@ ipcMain.handle('skills:install', async (_evt, url: unknown, name: unknown) => {
   }
   return installSkill(url, name, agentsHome());
 });
+/** Office skills (given by the orchestrator, or taken away here by the human). */
+ipcMain.handle('skills:office', () => hive.officeSkills());
+ipcMain.handle('skills:officeRemove', (_evt, name: unknown) => {
+  if (typeof name !== 'string') return { ok: false };
+  const state = hive.officeSkills();
+  const cur = state.skills[name];
+  if (!cur) return { ok: false };
+  delete state.skills[name];
+  hive.writeOfficeSkills(state);
+  const store = hive.officeSkillStore();
+  if (store) { try { rmSync(join(store, cur.dir), { recursive: true, force: true }); } catch { /* best-effort */ } }
+  for (const id of Object.keys(hive.registry().agents)) hive.syncOfficeSkills(id);
+  return { ok: true };
+});
+
 /** Delete an installed skill. The guard rails live in uninstallSkill — it refuses
  *  any path it cannot prove is a skill folder inside a skills root. */
 ipcMain.handle('skills:uninstall', (_evt, path: unknown) => {
@@ -6918,6 +6990,7 @@ async function ephemeralWorkerTick(): Promise<void> {
     //      shows up in Automations and is reported back to the orchestrator.
     processScheduleRequests();
     await processTeamRequests();
+    await processSkillRequests().catch((e) => console.error('[skills] requests failed:', e));
 
     // (3) GC preserved worktrees whose work has since integrated. Throttled to
     //     GC_SWEEP_MS and a no-op when nothing is preserved (the common case).
@@ -7492,6 +7565,7 @@ app.on('before-quit', (e) => {
 onConfigWritten((config) => {
   writeMissionsMirror(config.missions ?? []);
   hive.refreshGuards(config);
+  skillMirrorAt = 0; // what the orchestrator may add can have changed
   for (const w of allWindows) {
     if (w.isDestroyed() || w.webContents.isDestroyed()) continue;
     w.webContents.send('config:changed', config);
