@@ -164,13 +164,21 @@ function Thread({ agent, god, messages, tasks, name }: { agent: Agent; god?: Age
               ...b.items.map((it, k) => <Item key={`r${bi}-${k}`} it={it} prev={k ? b.items[k - 1] : undefined} tasks={tasks} name={name} />)];
           }
           const people = [...new Set(b.items.flatMap((it) => (it.kind === 'message' ? [it.message.from, it.message.to] : [])).filter((x) => x !== 'broadcast'))];
+          // In this agent's chat: who it talked with ("with Dwight, Oscar and
+          // webhook"), not a chain that reads as Dwight talking to Oscar.
+          const others = people.includes(agent.id) ? people.filter((p) => p !== agent.id) : null;
+          const summary = others && others.length
+            ? t('pro.inbox.runWith', { count: b.items.length, people: listNames(others.map(name), t) })
+            : t('pro.inbox.runSummary', { count: b.items.length, people: people.map(name).join(' ↔ ') });
+          const from = time(first.ts);
+          const to = time(last.ts);
           return [sep, (
             <button key={`s${bi}`} onClick={() => setOpenRuns((s) => new Set(s).add(b.start))}
               style={{ display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'stretch', padding: '5px 10px', border: '1px dashed var(--pro-line)', borderRadius: 8, background: 'transparent', cursor: 'pointer', font: 'inherit', fontSize: 12, color: 'var(--pro-muted)', textAlign: 'start', minWidth: 0 }}>
               <span>▸</span>
-              <span style={{ flexShrink: 0 }}>{t('pro.inbox.runSummary', { count: b.items.length, people: people.map(name).join(' ↔ ') })}</span>
+              <span style={{ flexShrink: 0 }}>{summary}</span>
               {last.kind === 'message' && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>· {last.message.subject}</span>}
-              <span style={{ marginInlineStart: 'auto', flexShrink: 0, fontSize: 11 }}>{time(first.ts)}–{time(last.ts)}</span>
+              <span style={{ marginInlineStart: 'auto', flexShrink: 0, fontSize: 11 }}>{from === to ? from : `${from}–${to}`}</span>
             </button>
           )];
         })}
@@ -193,6 +201,12 @@ function jumpTo(anchor: string): void {
   if (!el) return;
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   el.animate([{ outline: '2px solid var(--cth-peach)' }, { outline: '2px solid transparent' }], { duration: 1600 });
+}
+
+/** "Dwight", "Dwight and Oscar", "Dwight, Oscar and webhook". */
+function listNames(names: string[], t: (k: string, o?: Record<string, unknown>) => string): string {
+  if (names.length <= 1) return names.join('');
+  return t('pro.inbox.listAnd', { list: names.slice(0, -1).join(', '), last: names[names.length - 1] });
 }
 
 const time = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };

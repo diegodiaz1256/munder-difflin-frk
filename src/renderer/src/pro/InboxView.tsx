@@ -24,6 +24,14 @@ const SYSTEM = new Set(['heartbeat', 'scheduler', 'breaker', 'system']);
  * threads waiting in the queue, webhook mail, and held webhook requests to
  * approve or reject (the trigger history, which owns that decision).
  */
+/** Today: "19:42". Before: "8 Oct, 19:42". The full date is in the tooltip. */
+function shortWhen(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const hm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return d.toDateString() === new Date().toDateString() ? hm : `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })}, ${hm}`;
+}
+
 export function InboxView({ tasks }: { tasks: KeyedTask[] }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('chats');
@@ -57,7 +65,7 @@ export function InboxView({ tasks }: { tasks: KeyedTask[] }) {
           <strong>{name(m.from)}</strong><span className="pro-sub">→ {name(m.to)}</span>
           <span className="pro-chip">{m.act}</span>
           {m.requires_reply && <span className="pro-badge" style={{ background: 'var(--cth-peach-light)' }}>{t('pro.inbox.needsReply')}</span>}
-          <span className="pro-sub" style={{ marginInlineStart: 'auto' }}>{new Date(m.created_at).toLocaleString()}</span>
+          <span className="pro-sub" style={{ marginInlineStart: 'auto' }} title={new Date(m.created_at).toLocaleString()}>{shortWhen(m.created_at)}</span>
         </div>
         <strong style={{ fontSize: 13 }}>{m.subject}</strong>
         {m.body && <div style={{ fontSize: 13, maxHeight: 160, overflow: 'auto' }}><MarkdownPreview source={m.body} variant="card" /></div>}
