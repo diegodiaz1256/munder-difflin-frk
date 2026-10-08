@@ -1,3 +1,3 @@
-- **Inbox** as a chat per agent; **task** history and subtasks.
-- **Deliverables** with authors and history; agents keep their conversation on restart.
-- Faces in notifications, optional **Fortress** browser engine.
+- **No freezes** on a busy floor, and **lighter agents** (a third of the memory each).
+- **Git off means no git**; agents write only in their own folders.
+- **Backlog** column, **diffs** in deliverable history, Confluence wiki and Mermaid.
