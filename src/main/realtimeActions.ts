@@ -446,7 +446,7 @@ function execUpdateTask(deps: RealtimeActionDeps, a: Record<string, unknown>): A
   }
   if (!card) return { ok: false, spoken: `I couldn't find a task matching "${ref}".` };
   const status = str(a.status);
-  const valid = ['todo', 'doing', 'blocked', 'done'];
+  const valid = ['backlog', 'todo', 'doing', 'blocked', 'done'];
   if (status && !valid.includes(status)) return { ok: false, spoken: `"${status}" isn't a valid status.` };
   const patch: Partial<Omit<HiveTask, 'id'>> = {};
   if (status) patch.status = status as HiveTask['status'];

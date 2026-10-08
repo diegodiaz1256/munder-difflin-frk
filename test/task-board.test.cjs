@@ -1,0 +1,25 @@
+'use strict';
+// Kanban: a subtask in the same column as its parent hangs under it instead of
+// standing as a loose card; parked work has its own column.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const loadTs = require('./load-ts.cjs');
+const { columnRoots, subtasksIn } = loadTs('src/shared/taskBoard.ts');
+
+test('subtasks in the parent column hang under it; others stand alone', () => {
+  const doing = [{ id: 'p' }, { id: 'a', parent: 'p' }, { id: 'b', parent: 'p' }, { id: 'c', parent: 'elsewhere' }, { id: 'self', parent: 'self' }];
+  assert.deepEqual(columnRoots(doing).map((c) => c.id), ['p', 'c', 'self']);
+  assert.deepEqual(subtasksIn(doing, 'p').map((c) => c.id), ['a', 'b']);
+  assert.deepEqual(subtasksIn(doing, 'self'), []);
+});
+
+test('backlog is a status the board, the parser and the agents know', () => {
+  const kanban = fs.readFileSync(path.join(__dirname, '..', 'src/renderer/src/components/TasksKanban.tsx'), 'utf8');
+  assert.match(kanban, /\(\['backlog', 'todo', 'doing', 'blocked', 'done'\] as const\)\.includes/, 'the parser keeps it');
+  const view = fs.readFileSync(path.join(__dirname, '..', 'src/renderer/src/pro/TasksView.tsx'), 'utf8');
+  assert.match(view, /status: 'backlog'/);
+  const docs = fs.readFileSync(path.join(__dirname, '..', 'src/main/protocolDocs.ts'), 'utf8');
+  assert.match(docs, /backlog \/ todo \/ doing \/ blocked \/ done/);
+});

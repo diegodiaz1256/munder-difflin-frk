@@ -1386,6 +1386,7 @@
   "kanban": {
     "count": "{{count}} tareas",
     "newWorkHint": "¿trabajo nuevo? encárgaselo a {{godName}} (pestaña monitor)",
+    "colBacklog": "BACKLOG",
     "colTodo": "PENDIENTE",
     "colDoing": "EN CURSO",
     "colBlocked": "BLOQUEADA",
@@ -1676,6 +1677,7 @@
       "new": "Nueva tarea",
       "describe": "Describe el trabajo; {{name}} lo convierte en una tarjeta con responsable",
       "sendTo": "Enviar a {{name}}",
+      "col_backlog": "Backlog",
       "col_todo": "Pendiente",
       "col_doing": "En curso",
       "col_blocked": "Bloqueada",
@@ -1690,7 +1692,8 @@
       "subtasks": "Subtareas {{done}}/{{total}}",
       "layout": "Vista",
       "layout_board": "Tablero",
-      "layout_tree": "Por petición"
+      "layout_tree": "Por petición",
+      "parked": "Aparcada"
     },
     "automations": {
       "rules": "Programaciones, contexto y webhooks",
@@ -2540,6 +2543,7 @@
     "result": "Resultado escrito",
     "removed": "Quitada del tablero",
     "message": "Mensaje de {{from}} a {{to}}",
+    "status_backlog": "en backlog",
     "status_todo": "por hacer",
     "status_doing": "en curso",
     "status_blocked": "bloqueada",

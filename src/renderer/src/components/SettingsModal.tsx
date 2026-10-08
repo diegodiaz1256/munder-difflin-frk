@@ -133,7 +133,7 @@ Trigger work (POST <tunnel>/<webhookId>):
 
 Check status (GET <tunnel>/<webhookId>):
   header  x-md-webhook-token: <token>     (or  ?token=<token>)
-  -> 200  {"ok": true, "status": "todo|doing|blocked|done",
+  -> 200  {"ok": true, "status": "backlog|todo|doing|blocked|done",
            "title": "...", "result": "<summary or null>"}
 
 The mode decides which of the two answers you get:

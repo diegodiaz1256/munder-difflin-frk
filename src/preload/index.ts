@@ -242,7 +242,7 @@ export interface HiveTask {
   title: string;
   description?: string;
   assignee?: string;
-  status: 'todo' | 'doing' | 'blocked' | 'done';
+  status: 'backlog' | 'todo' | 'doing' | 'blocked' | 'done';
   dependsOn: string[];
   priority: number;
   createdAt: string;

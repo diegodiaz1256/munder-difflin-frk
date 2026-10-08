@@ -32,7 +32,7 @@ export interface HiveTask {
   title: string;
   description?: string;
   assignee?: string;
-  status: 'todo' | 'doing' | 'blocked' | 'done';
+  status: 'backlog' | 'todo' | 'doing' | 'blocked' | 'done';
   dependsOn: string[];
   priority: number;
   createdAt: string;
@@ -66,6 +66,7 @@ export function waitsOnHuman(t: HiveTask): boolean {
 type Status = HiveTask['status'];
 
 const COLUMNS: { key: Status; labelKey: string; accent: string }[] = [
+  { key: 'backlog', labelKey: 'kanban.colBacklog', accent: 'var(--cth-ink-300)' },
   { key: 'todo',    labelKey: 'kanban.colTodo',    accent: 'var(--cth-sky)' },
   { key: 'doing',   labelKey: 'kanban.colDoing',   accent: 'var(--cth-lemon)' },
   { key: 'blocked', labelKey: 'kanban.colBlocked', accent: 'var(--cth-coral)' },
@@ -101,7 +102,7 @@ export function parseTasks(raw: unknown): HiveTask[] {
       title: typeof t.title === 'string' ? t.title : '(untitled)',
       description: typeof t.description === 'string' ? t.description : undefined,
       assignee: typeof t.assignee === 'string' ? t.assignee : undefined,
-      status: (['todo', 'doing', 'blocked', 'done'] as const).includes(t.status as Status)
+      status: (['backlog', 'todo', 'doing', 'blocked', 'done'] as const).includes(t.status as Status)
         ? (t.status as Status) : 'todo',
       dependsOn: Array.isArray(t.dependsOn) ? t.dependsOn.filter((d): d is string => typeof d === 'string') : [],
       priority: typeof t.priority === 'number' ? t.priority : 3,

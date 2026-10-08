@@ -1386,6 +1386,7 @@
   "kanban": {
     "count": "{{count}} tasks",
     "newWorkHint": "new work? dispatch it to {{godName}} (monitor tab)",
+    "colBacklog": "BACKLOG",
     "colTodo": "TODO",
     "colDoing": "DOING",
     "colBlocked": "BLOCKED",
@@ -1676,6 +1677,7 @@
       "new": "New task",
       "describe": "Describe the job; {{name}} turns it into a card and an owner",
       "sendTo": "Send to {{name}}",
+      "col_backlog": "Backlog",
       "col_todo": "To do",
       "col_doing": "Doing",
       "col_blocked": "Blocked",
@@ -1690,7 +1692,8 @@
       "subtasks": "Subtasks {{done}}/{{total}}",
       "layout": "Layout",
       "layout_board": "Board",
-      "layout_tree": "By request"
+      "layout_tree": "By request",
+      "parked": "Parked"
     },
     "automations": {
       "rules": "Schedules, context & webhooks",
@@ -2540,6 +2543,7 @@
     "result": "Result written",
     "removed": "Removed from the board",
     "message": "Message from {{from}} to {{to}}",
+    "status_backlog": "backlog",
     "status_todo": "to do",
     "status_doing": "doing",
     "status_blocked": "blocked",

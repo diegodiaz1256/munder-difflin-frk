@@ -130,10 +130,16 @@ button.pro-card:hover { border-color: var(--pro-line-strong); }
 .pro-tabs button[aria-selected='true'] { border-color: var(--pro-line-strong); background: var(--pro-card); color: var(--pro-text); }
 
 /* kanban */
-.pro-board { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(180px, 1fr)); align-items: start; min-height: 0; }
+.pro-board { display: grid; gap: 12px; grid-template-columns: repeat(5, minmax(160px, 1fr)); align-items: start; min-height: 0; }
+/* A column never grows past its track: a long title or a path without spaces wraps inside the card. */
+.pro-col > * { min-width: 0; max-width: 100%; }
+.pro-task-card { min-width: 0; overflow: hidden; overflow-wrap: anywhere; }
+.pro-task-title { font-size: 13px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.pro-task-group { display: flex; flex-direction: column; gap: 6px; }
+.pro-task-kids { display: flex; flex-direction: column; gap: 6px; padding-inline-start: 10px; margin-inline-start: 8px; border-inline-start: 2px solid var(--pro-line-strong); }
 .pro-col { background: var(--cth-cream-200); border-radius: var(--pro-radius); padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 120px; }
 .pro-col-head { font-family: var(--cth-font-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; display: flex; align-items: center; gap: 6px; padding: 2px 4px 4px; }
-.pro-ticket { font-family: var(--cth-font-mono); font-size: 11px; color: var(--pro-muted); }
+.pro-ticket { font-family: var(--cth-font-mono); font-size: 11px; color: var(--pro-muted); white-space: nowrap; flex-shrink: 0; }
 
 /* the old pixel panels keep working inside Pro: give them the room */
 .pro-embed { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -146,7 +152,7 @@ button.pro-card:hover { border-color: var(--pro-line-strong); }
 :root[data-cth-theme='dark'] .pro-switch button[aria-pressed='true'] { color: #1A1320; }
 
 @media (max-width: 900px) {
-  .pro-board { grid-template-columns: repeat(2, minmax(160px, 1fr)); }
+  .pro-board { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
   .pro-side { width: 168px; }
   .pro-page { padding: 12px 12px; }
 }
