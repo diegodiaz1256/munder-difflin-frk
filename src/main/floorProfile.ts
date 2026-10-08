@@ -63,8 +63,9 @@ export function seedFloor(id: string, from: string = app.getPath('userData')): s
 }
 
 /** argv for a floor process: ours, minus what must not repeat (another floor
- *  id, a debugging port already taken, a deep link already handled). */
-export function floorArgs(argv: readonly string[], id: string): string[] {
+ *  id, a debugging port already taken, a deep link already handled). A null
+ *  id starts the main profile. */
+export function floorArgs(argv: readonly string[], id: string | null): string[] {
   const keep = argv.slice(1).filter((a) => !a.startsWith(FLOOR_ARG) && !a.startsWith('--remote-debugging-port') && !a.startsWith('munderdifflin://'));
-  return [...keep, FLOOR_ARG + id];
+  return id ? [...keep, FLOOR_ARG + id] : keep;
 }

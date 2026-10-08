@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { APP_NAME, LAYOUT_LABELS } from '@shared/fork';
+import { FloorSwitcher } from './FloorSwitcher';
 import type { HarnessConfig } from '@/store/config';
 import { useStore } from '@/store/store';
 import { ProIcon, type ProIconName } from './ProIcon';
@@ -131,7 +132,7 @@ export function ProShell({ config }: { config: HarnessConfig }) {
           <Avatar agent={god} />
           <span style={{ display: 'flex', flexDirection: 'column', lineHeight: '15px' }}>
             <span>{APP_NAME}</span>
-            <span className="pro-sub" style={{ fontSize: 10 }}>Munder Difflin</span>
+            <FloorSwitcher office={config.harnessHome ?? null} enabled={config.multiWindow !== false} />
           </span>
           <button className="pro-side-toggle" title={t('pro.nav.hideMenu')} aria-label={t('pro.nav.hideMenu')} onClick={toggleSide}>«</button>
         </div>

@@ -66,3 +66,36 @@ test('release only removes our own claim', () => {
   releaseOffice(home);
   assert.equal(fs.existsSync(path.join(home, OFFICE_LOCK_FILE)), true);
 });
+
+test('a null floor id starts the main profile with our args', () => {
+  assert.deepEqual(floorArgs(['electron', '.', '--md-floor=aaaaaa'], null), ['.']);
+});
+
+const { listFloors, removeFloor } = loadTs('src/main/floors.ts');
+
+test('the floors list: main first, then the others, newest first, with their offices', () => {
+  const root = fs.mkdtempSync(path.join(base, 'list-'));
+  const write = (dir, cfg, t) => {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(cfg));
+    fs.utimesSync(path.join(dir, 'config.json'), t, t);
+  };
+  write(root, { harnessHome: path.join(root, 'Dunder') }, 1000);
+  write(path.join(root, 'floors', 'aaaaaaaaaa'), { harnessHome: path.join(root, 'Stamford') }, 2000);
+  write(path.join(root, 'floors', 'bbbbbbbbbb'), {}, 3000);
+  fs.mkdirSync(path.join(root, 'floors', 'not-a-floor'));
+  const running = (home) => (home.endsWith('Stamford') ? 4242 : null);
+  const list = listFloors(root, 'bbbbbbbbbb', running);
+  assert.deepEqual(list.map((f) => [f.id, f.name, f.running, f.current]), [
+    [null, 'Dunder', false, false],
+    ['bbbbbbbbbb', null, false, true],
+    ['aaaaaaaaaa', 'Stamford', true, false]
+  ]);
+
+  assert.equal(removeFloor(root, 'aaaaaaaaaa', 'bbbbbbbbbb', running).ok, false, 'an open floor is not forgotten');
+  assert.equal(removeFloor(root, 'bbbbbbbbbb', 'bbbbbbbbbb', running).ok, false, 'nor the one you are on');
+  assert.equal(removeFloor(root, '../x', 'bbbbbbbbbb', running).ok, false);
+  assert.deepEqual(removeFloor(root, 'aaaaaaaaaa', 'bbbbbbbbbb', () => null), { ok: true });
+  assert.equal(fs.existsSync(path.join(root, 'floors', 'aaaaaaaaaa')), false);
+  assert.equal(fs.existsSync(path.join(root, 'Stamford')), false, 'never created, and never touched');
+});

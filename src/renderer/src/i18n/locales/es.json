@@ -2441,6 +2441,16 @@
       "customFetch": "Pedir al servidor",
       "emptyAuth": "\"{{id}}\" tiene una entrada de acceso vacía, que oculta la clave de models.json. Ejecuta /logout en el motor y elige {{id}}; vuelve a iniciar sesión si la necesitas."
     },
+    "floors": {
+      "title": "Plantas",
+      "new": "Nueva planta",
+      "newHint": "Otra oficina, en su propia ventana, con su propio orquestador y sus agentes.",
+      "main": "Planta principal",
+      "noOffice": "sin oficina aún",
+      "none": "Aún no hay otras plantas.",
+      "running": "abierta",
+      "forgetTitle": "Olvidar esta planta. Su carpeta de oficina y el trabajo de los agentes no se tocan."
+    },
     "boot": {
       "title": "La oficina se está iniciando.",
       "body": "{{name}} está llegando; la primera vez puede tardar un poco."
