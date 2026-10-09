@@ -2271,7 +2271,12 @@ export class HiveManager {
       `1. At the START of a task, read ${inDir('memory.md')} and EVERY file in ${inDir('inbox')} (messages other agents sent you). After handling an inbox message, move its file into ${inDir('inbox', '.done')}.`,
       `2. Record durable knowledge in ${inDir('memory.md')}, one dated bullet each, ${memoryInstruction(this.projectTypeOf(meta.cwd))}. Correct or remove a bullet when it stops being true: people read this per project, and stale facts mislead the next agent.`,
       `3. To ask another agent for something or share information, write ONE message JSON into ${inDir('outbox')} (schema: ${inRoot(PROTOCOL_DIR, 'messages.md')}). NEVER write into another agent's folder — the orchestrator delivers your outbox.`,
-      '4. At the END of a task, append what you learned to memory.md so future-you remembers.',
+      meta.isGod
+        // The orchestrator's work never "ends" and it rarely learns facts itself:
+        // its memory is the office's record of who did what. Left on the worker
+        // wording, a live research job left it with an empty memory.
+        ? "4. Your memory is the office's record of its work. Whenever a job you delegated finishes, fails or is dropped, append ONE dated bullet under Decisions: what the human asked, who did it, the outcome, and the deliverable path. Anything that went wrong on the way (a crashed temp, a blocked agent, a retry) goes under Log with how you handled it. One or two lines per job, no transcripts."
+        : '4. At the END of a task, append what you learned to memory.md so future-you remembers.',
       guardrailsLine,
       memoryLine,
       knowledgeLine,
