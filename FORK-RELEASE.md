@@ -1,20 +1,24 @@
-# Scranton Branch 0.4.6-fork.38
+# Scranton Branch 1.0.0
 
-The last fork release, and the step to Scranton Branch 1.0.0: update to this one and the app offers 1.0.0 next.
+Scranton Branch gets its own version numbers and its own license. Everything below has been built up over 38 fork releases; 1.0.0 is the first release of Scranton Branch as its own project.
 
-## What's new
+## What's in 1.0.0
 
-- **Clearer Memory.** It opens on what the office knows, a note written by several agents shows once, and search shows how it found each result, also as a path on the map.
-- **Temps keep working and keep what they learn.** A temp in a git worktree no longer quits at Claude's "trust this folder?" question, and its memory stays in Memory after its work is merged.
-- **Office folders with a space work with Claude Code (Windows).** Hooks failed under a path like `Dunder Mifflin`, so agents stopped reporting and draining their inbox.
-- **Faster on a slow disk, a WSL office or under an antivirus**, with no stalls in steady state.
-- **Tasks you can drag**, with their subtasks, and no duplicate Jira entries in Memory.
-- **Updates follow the latest release**, which is how 1.0.0 reaches this install.
+- **An office of coding agents.** Claude Code, Codex, Gemini CLI, Antigravity, Grok, Kimi, Qwen, OpenCode, Crush, Pi, Copilot, Cursor or any command, each in its own terminal and git worktree, with an orchestrator that hands out the work, reviews it and knows the app.
+- **Memory that explains itself.** It opens on what the office knows, search shows how it found each result (also as a path on the map), and what a temp learns stays after its work is merged.
+- **Secrets agents use but never see.** Runners, keyed MCP servers, REST connections such as Jira, and 1Password.
+- **Best on Windows with WSL.** A floor can live entirely inside a distribution, with no network setup, and the app stays quick on slow disks and under an antivirus.
+- **Several offices at once**, offices that work together (sealed end to end), and a headless server edition.
+
+## License
+
+From 1.0.0 Scranton Branch is licensed under the **Apache License 2.0**. If you redistribute it, changed or not, keep the [NOTICE](https://github.com/diegodiaz1256/scranton-branch/blob/main/NOTICE) file with it. The parts that come from Munder Difflin, and the fork up to 1.0.0, stay under the MIT License.
 
 ## Earlier releases
 
 | Version | Highlights |
 |---|---|
+| fork.38 | Clearer Memory, temps that keep working and keep what they learn, faster on slow disks; the step to 1.0.0. |
 | fork.37 | Windows: removing an agent's isolated copy no longer empties your project's node_modules. |
 | fork.36 | Several offices at once, half the size, freeze log, an orchestrator that knows the app, your own skill marketplaces, PDF previews. |
 | fork.35 | No freezes on a busy floor, lighter agents, git and folder guard, office skills, Backlog, deliverable diffs. |
@@ -45,27 +49,27 @@ The last fork release, and the step to Scranton Branch 1.0.0: update to this one
 ### macOS
 | | |
 |---|---|
-| Universal (Apple Silicon + Intel) | [`Scranton-Branch-0.4.6-fork.38-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.38-mac-universal.dmg) |
+| Universal (Apple Silicon + Intel) | [`Scranton-Branch-1.0.0-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-1.0.0-mac-universal.dmg) |
 
 ### Windows
 | | |
 |---|---|
-| Installer (x64), *recommended* | [`Scranton-Branch-0.4.6-fork.38-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.38-win-x64-setup.exe) |
-| Portable (x64, no install) | [`Scranton-Branch-0.4.6-fork.38-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.38-win-x64-portable.exe) |
+| Installer (x64), *recommended* | [`Scranton-Branch-1.0.0-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-1.0.0-win-x64-setup.exe) |
+| Portable (x64, no install) | [`Scranton-Branch-1.0.0-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-1.0.0-win-x64-portable.exe) |
 
 ### Linux
 | | |
 |---|---|
-| AppImage (x86_64) | [`Scranton-Branch-0.4.6-fork.38-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.38-linux-x86_64.AppImage) |
-| Server, no GUI (x64) | [`scranton-branch-server-0.4.6-fork.38-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.38-linux-x64.tar.gz) |
-| Server, no GUI (arm64) | [`scranton-branch-server-0.4.6-fork.38-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.38-linux-arm64.tar.gz) |
+| AppImage (x86_64) | [`Scranton-Branch-1.0.0-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-1.0.0-linux-x86_64.AppImage) |
+| Server, no GUI (x64) | [`scranton-branch-server-1.0.0-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-1.0.0-linux-x64.tar.gz) |
+| Server, no GUI (arm64) | [`scranton-branch-server-1.0.0-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-1.0.0-linux-arm64.tar.gz) |
 
 Server: unpack, then run `sudo ./install.sh`. Setup, Docker and secrets are in [SERVER.md](https://github.com/diegodiaz1256/scranton-branch/blob/main/SERVER.md).
 
 Builds are not code-signed yet: macOS asks you to allow the app in System Settings → Privacy & Security, and Windows SmartScreen asks you to confirm ("More info" → "Run anyway").
 
-Source: [`v0.4.6-fork.38`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v0.4.6-fork.38.tar.gz)
+Source: [`v1.0.0`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v1.0.0.tar.gz)
 
-## About this fork
+## About Scranton Branch
 
-Scranton Branch is the branch office of [Munder Difflin](https://github.com/HarnessMD/munder-difflin) 0.4.6: everything the open-source app does, plus offices that work together (Team, post-quantum sealed), a headless server edition, Factories, WSL offices, and secrets agents use but never see. No product analytics. Versions are `<upstream>-fork.<patch>`; the in-app updater follows this repository only.
+Scranton Branch began as the branch office of [Munder Difflin](https://github.com/HarnessMD/munder-difflin) 0.4.6, and adds offices that work together (post-quantum sealed), a headless server edition, Factories, WSL offices and secrets agents use but never see. No product analytics. From 1.0.0 it has its own versions; the in-app updater follows this repository only.

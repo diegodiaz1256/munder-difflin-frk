@@ -73,6 +73,13 @@ files:
 # resources dir (process.resourcesPath). It runs under `node`, NOT inside the
 # asar, so the office worker can invoke `node <resources>/md-slack-reply.cjs`.
 extraResources:
+  # The licence and the credits the Apache License asks to travel with every copy.
+  - from: LICENSE
+    to: LICENSE
+  - from: NOTICE
+    to: NOTICE
+  - from: LICENSES/MIT-munder-difflin.txt
+    to: LICENSES/MIT-munder-difflin.txt
   - from: resources/md-slack-reply.cjs
     to: md-slack-reply.cjs
   # Knowledge Graph agent CLI + its pure-JS core. Agents invoke `node
