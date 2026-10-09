@@ -1781,6 +1781,7 @@
       "ticket": "ticket · {{status}}",
       "byMeaning": "por significado",
       "meaningUnavailable": "La búsqueda por significado no está disponible",
+      "meaningDown": "la búsqueda por significado no está disponible ahora; se muestran coincidencias exactas",
       "notesAbout": "Notas sobre {{name}}",
       "resultsFor": "Resultados para «{{q}}»",
       "recent": "Aprendido hace poco",
@@ -1795,6 +1796,7 @@
       "projectsHint": "Los proyectos aparecen aquí cuando los agentes que trabajan en un repositorio escriben su memoria.",
       "hideMap": "Ocultar el mapa",
       "map": "Mapa",
+      "overview": "Lo que sabe",
       "view": "Vista",
       "entity": "{{count}} entidad",
       "entities": "{{count}} entidades",
@@ -1849,7 +1851,7 @@
       }
     },
     "lists": {
-      "intro": "Tus propias listas: lo que tienes, quieres o planeas. Díselo a cualquier agente («me he comprado Mortarion», «apunta Rogue Trader en mi lista de deseos») y las mantiene al día; también puedes editarlas aquí.",
+      "intro": "Tus propias listas: lo que tienes, quieres o planeas. Díselo a cualquier agente («me he comprado un escritorio elevable», «apunta Dune en mi lista de lectura») y las mantiene al día; también puedes editarlas aquí.",
       "deleteConfirm": "¿Eliminar la lista «{{title}}»?",
       "delete": "Eliminar",
       "new": "Nueva lista",

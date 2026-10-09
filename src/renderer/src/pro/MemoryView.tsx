@@ -43,6 +43,25 @@ function titled(text: string): { title: string; body?: string } {
 
 interface Entry extends MemoryEntry { agent: string; agentId?: string; project: string }
 
+/** The same note written by several agents ("joined the demo office.") shows
+ *  once, with everyone who wrote it and the latest date. */
+interface Grouped { text: string; section: string; agents: string[]; date?: string }
+function groupSame(entries: Entry[]): Grouped[] {
+  const by = new Map<string, Grouped>();
+  for (const e of entries) {
+    const key = `${e.section}\u0000${e.text.trim().toLowerCase().replace(/\s+/g, ' ')}`;
+    const g = by.get(key);
+    if (!g) { by.set(key, { text: e.text, section: e.section, agents: [e.agent], date: e.date }); continue; }
+    if (!g.agents.includes(e.agent)) g.agents.push(e.agent);
+    if ((e.date ?? '') > (g.date ?? '')) g.date = e.date;
+  }
+  return [...by.values()];
+}
+/** "Angela" · "Angela, Dwight" · "Angela, Dwight +4". */
+function whoWrote(agents: string[]): string {
+  return agents.length <= 2 ? agents.join(', ') : `${agents.slice(0, 2).join(', ')} +${agents.length - 2}`;
+}
+
 /**
  * Memory — what the office knows, for two kinds of use.
  *
@@ -62,8 +81,10 @@ export function MemoryView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agen
   const [scope, setScope] = useState<string>('office');
   const [concept, setConcept] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(false);
-  /** Whole-office view: the concept map, or the entities in the deliverables. */
-  const [tab, setTab] = useState<'map' | 'entities'>('map');
+  /** Whole-office view: what the office knows by section, the concept map, or the entities in the deliverables. */
+  const [tab, setTab] = useState<'overview' | 'map' | 'entities'>('overview');
+  /** Why search by meaning failed on the last search, shown quietly in the header. */
+  const [meaningError, setMeaningError] = useState<string | null>(null);
   const [focusEntity, setFocusEntity] = useState<string | null>(null);
   const setView = useProStore((s) => s.setView);
   const openAgent = useCallback((id: string) => { useStore.getState().select(id); setView({ kind: 'agent', agentId: id }); }, [setView]);
@@ -116,12 +137,14 @@ export function MemoryView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agen
     if (semantic) {
       const palace = await window.cth.searchMemory(query).catch(() => null);
       if (palace?.ok) {
+        setMeaningError(null);
         for (const h of parsePalaceSearch(palace.output).slice(0, 6)) {
           const who = roster.find((a) => a.id === h.wing)?.name ?? h.wing;
           if (!out.some((o) => h.text.includes(o.title.slice(0, 40)))) out.push({ ...titled(h.text), source: `${who}${h.source ? ` · ${h.source}` : ''} · ${tr('pro.memory.byMeaning')}` });
         }
-      } else if (palace && palace.error) {
-        out.push({ title: tr('pro.memory.meaningUnavailable'), body: palace.error, source: tr('pro.nav.memory') });
+      } else {
+        // Not a result: the exact matches above still stand, and the header says meaning search is off for now.
+        setMeaningError(palace?.error || tr('pro.memory.meaningUnavailable'));
       }
     }
     setHits(out.slice(0, 60));
@@ -132,8 +155,8 @@ export function MemoryView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agen
   const conceptHits: Hit[] | null = concept
     ? (graph.notes[concept] ?? []).map((n) => ({ ...titled(n.text), source: scopedDocs.find((d) => d.id === n.docId)?.label ?? n.docId }))
     : null;
-  const recent = entries.filter((e) => inScope(e.project) && e.date).sort((a, b) => (b.date ?? '').localeCompare(a.date ?? '')).slice(0, 25);
-  const sideHits: Hit[] = conceptHits ?? hits ?? recent.map((e) => ({ ...titled(e.text), source: e.agent, when: e.date, section: e.section }));
+  const recent = groupSame(entries.filter((e) => inScope(e.project) && e.date)).sort((a, b) => (b.date ?? '').localeCompare(a.date ?? '')).slice(0, 25);
+  const sideHits: Hit[] = conceptHits ?? hits ?? recent.map((e) => ({ ...titled(e.text), source: whoWrote(e.agents), when: e.date, section: e.section }));
   const sideTitle = conceptHits ? tr('pro.memory.notesAbout', { name: graph.concepts.find((c) => c.id === concept)?.label ?? '' }) : hits ? tr('pro.memory.resultsFor', { q: q.trim() }) : tr('pro.memory.recent');
 
   const projectEntries = entries.filter((e) => e.project === scope);
@@ -142,7 +165,7 @@ export function MemoryView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agen
     <div className="pro-page">
       <div className="pro-head">
         <h2>{tr('pro.nav.memory')}</h2>
-        <span className="pro-sub">{semantic ? tr('pro.memory.meaningOn') : semantic === false ? tr('pro.memory.exactSearch') : ''}</span>
+        <span className="pro-sub" title={meaningError ?? undefined}>{meaningError ? tr('pro.memory.meaningDown') : semantic ? tr('pro.memory.meaningOn') : semantic === false ? tr('pro.memory.exactSearch') : ''}</span>
         <div className="pro-head-end" style={{ flex: '1 1 280px', maxWidth: 440 }}>
           <input className="pro-input" style={{ flex: 1 }} placeholder={scope === 'office' || scope === '__lists' ? tr('pro.memory.searchOffice') : tr('pro.memory.searchIn', { scope })}
             value={q} onChange={(e) => { setQ(e.target.value); if (!e.target.value.trim()) setHits(null); }}
@@ -160,10 +183,11 @@ export function MemoryView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agen
         {projects.length === 0 && <span className="pro-sub" style={{ fontSize: 12 }}>{tr('pro.memory.projectsHint')}</span>}
         {scope === '__lists' ? null : scope !== 'office' ? (
           <button className="pro-btn" style={{ marginInlineStart: 'auto' }} onClick={() => setShowMap((v) => !v)}>{showMap ? tr('pro.memory.hideMap') : tr('pro.memory.map')}</button>
-        ) : entities.length > 0 && (
+        ) : (
           <div className="pro-switch" role="group" aria-label={tr('pro.memory.view')} style={{ marginInlineStart: 'auto' }}>
+            <button aria-pressed={tab === 'overview'} onClick={() => { setTab('overview'); setConcept(null); }}>{tr('pro.memory.overview')}</button>
             <button aria-pressed={tab === 'map'} onClick={() => setTab('map')}>{tr('pro.memory.map')}</button>
-            <button aria-pressed={tab === 'entities'} onClick={() => setTab('entities')}>{tr(entities.length === 1 ? 'pro.memory.entity' : 'pro.memory.entities', { count: entities.length })}</button>
+            {entities.length > 0 && <button aria-pressed={tab === 'entities'} onClick={() => setTab('entities')}>{tr(entities.length === 1 ? 'pro.memory.entity' : 'pro.memory.entities', { count: entities.length })}</button>}
           </div>
         )}
       </div>
@@ -174,6 +198,19 @@ export function MemoryView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agen
         <EntitiesView entities={entities} notesFor={notesFor} focus={focusEntity} />
       ) : scope !== 'office' && !hits && !showMap ? (
         <ProjectMemory project={scope} type={(docs.find((d) => d.project === scope)?.projectType as ProjectType | undefined) ?? null} entries={projectEntries} roster={roster} onOpenAgent={openAgent} />
+      ) : scope === 'office' && tab === 'overview' && !hits ? (
+        <ProjectMemory project="office" type={null} entries={entries} roster={roster} onOpenAgent={openAgent} />
+      ) : hits && !(scope === 'office' ? tab === 'map' : showMap) ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="pro-row">
+            <div className="pro-sub" style={{ fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase' }}>{sideTitle}</div>
+            <button className="pro-btn" style={{ marginInlineStart: 'auto', fontSize: 11 }} onClick={() => { setHits(null); setQ(''); }}>{tr('common.back')}</button>
+          </div>
+          {hits.length === 0 && <p className="pro-sub">{tr('pro.memory.nothingFound')}</p>}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 8, alignItems: 'start' }}>
+            {hits.map((h, i) => <NoteCard key={`${sideTitle}-${i}`} hit={h} />)}
+          </div>
+        </div>
       ) : (
         <div style={{ flex: 1, minHeight: 460, display: 'flex', gap: 12 }}>
           <div className="pro-card pro-embed" style={{ padding: 0, overflow: 'hidden', minWidth: 0, flex: 1 }}>
@@ -240,8 +277,8 @@ function ProjectMemory({ project, type, entries, roster, onOpenAgent }: {
   project: string; type: ProjectType | null; entries: Entry[]; roster: Agent[]; onOpenAgent: (id: string) => void;
 }) {
   const { t } = useTranslation();
-  const by = new Map<string, Entry[]>();
-  for (const e of entries) by.set(e.section, [...(by.get(e.section) ?? []), e]);
+  const by = new Map<string, Grouped[]>();
+  for (const g of groupSame(entries)) by.set(g.section, [...(by.get(g.section) ?? []), g]);
   const agents = [...new Map(entries.filter((e) => e.agentId).map((e) => [e.agentId!, e.agent])).entries()];
   if (!entries.length) return <p className="pro-sub">{t('pro.memory.nothingFor', { project })}</p>;
   return (
@@ -266,7 +303,7 @@ function ProjectMemory({ project, type, entries, roster, onOpenAgent }: {
                 return (
                   <li key={i} style={{ padding: '8px 12px', borderTop: i ? '1px solid var(--pro-line)' : undefined, fontSize: 13, lineHeight: 1.45 }}>
                     {file ? <><code className="pro-mono" style={{ fontSize: 12 }}>{file}</code> <Rich text={withoutProject(e.text, project).replace(/`[^`]+`/, '').replace(/^\s*[—–-]\s*/, '')} /></> : <Rich text={withoutProject(e.text, project)} />}
-                    <div className="pro-sub" style={{ fontSize: 11 }}>{e.agent}{e.date ? ` · ${e.date}` : ''}</div>
+                    <div className="pro-sub" style={{ fontSize: 11 }} title={e.agents.length > 2 ? e.agents.join(', ') : undefined}>{whoWrote(e.agents)}{e.date ? ` · ${e.date}` : ''}</div>
                   </li>
                 );
               })}
