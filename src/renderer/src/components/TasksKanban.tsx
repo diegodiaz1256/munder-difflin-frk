@@ -13,6 +13,7 @@ import { useRtl } from '@/i18n/useDirection';
 import { useProStore } from '@/pro/proStore';
 import { SpritePortrait } from './SpritePortrait';
 import { formatTaskKey } from '@shared/taskKeys';
+import { descendantsOf } from '@shared/taskBoard';
 
 /** The ticket people use for a card (DUN-12); the ledger id only when it has none yet. */
 export function ticketOf(task: HiveTask & { key?: string }): string {
@@ -174,6 +175,28 @@ export function TasksKanban() {
     } catch { /* keep last good; the next poll re-syncs from disk */ }
   }, [refresh]);
 
+  // Drag a card to another column (as in the Manager's board). Moving a card
+  // that has subtasks asks whether they go with it.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overCol, setOverCol] = useState<Status | null>(null);
+  const [ask, setAsk] = useState<{ id: string; status: Status; kids: HiveTask[] } | null>(null);
+  const moveCards = async (ids: string[], status: Status) => {
+    setTasks((prev) => prev.map((x) => (ids.includes(x.id) ? { ...x, status } : x))); // optimistic
+    for (const id of ids) {
+      try { await window.cth.hivePatchTask(id, { status }); } catch { /* the poll shows the truth */ }
+    }
+    void refresh();
+  };
+  const dropOn = (status: Status) => {
+    const id = dragId;
+    setDragId(null); setOverCol(null);
+    const card = id ? tasks.find((x) => x.id === id) : undefined;
+    if (!card || card.status === status) return;
+    const kids = descendantsOf(tasks, card.id).filter((k) => k.status !== status);
+    if (kids.length) setAsk({ id: card.id, status, kids });
+    else void moveCards([card.id], status);
+  };
+
   useEffect(() => {
     refresh();
     timer.current = setInterval(refresh, POLL_MS);
@@ -215,9 +238,14 @@ export function TasksKanban() {
         {COLUMNS.map((col) => {
           const cards = tasks.filter((t) => t.status === col.key);
           return (
-            <div key={col.key} style={{
+            <div key={col.key}
+              onDragOver={(e) => { if (dragId) { e.preventDefault(); setOverCol(col.key); } }}
+              onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOverCol((c) => (c === col.key ? null : c)); }}
+              onDrop={(e) => { e.preventDefault(); dropOn(col.key); }}
+              style={{
               flex: '1 1 0', minWidth: 170, display: 'flex', flexDirection: 'column',
-              background: 'var(--cth-cream-100)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)'
+              background: overCol === col.key && dragId ? 'var(--cth-lemon-light)' : 'var(--cth-cream-100)',
+              boxShadow: overCol === col.key && dragId ? 'inset 0 0 0 2px var(--cth-lemon)' : 'inset 0 0 0 1px var(--cth-ink-300)'
             }}>
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px 4px',
@@ -232,8 +260,11 @@ export function TasksKanban() {
                   <div style={{ fontSize: 12, color: 'var(--cth-ink-300)', textAlign: 'center', padding: '8px 0' }}>{t('kanban.emptyColumn')}</div>
                 )}
                 {cards.map((t) => (
+                  <div key={t.id} draggable
+                    onDragStart={(e) => { setDragId(t.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', t.id); }}
+                    onDragEnd={() => { setDragId(null); setOverCol(null); }}
+                    style={{ opacity: dragId === t.id ? 0.5 : 1, cursor: 'grab' }}>
                   <TaskCard
-                    key={t.id}
                     task={t}
                     accent={col.accent}
                     assigneeName={nameFor(t.assignee)}
@@ -241,12 +272,35 @@ export function TasksKanban() {
                     onOpen={() => openTaskDetail(t.id)}
                     onDismiss={() => dismissTask(t.id)}
                   />
+                  </div>
                 ))}
               </div>
             </div>
           );
         })}
       </div>
+
+      {ask && (() => {
+        const parent = tasks.find((x) => x.id === ask.id);
+        const to = t(COLUMNS.find((c) => c.key === ask.status)?.labelKey ?? '').toLowerCase();
+        return (
+          <div role="presentation" onClick={() => setAsk(null)} style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(26, 19, 32, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div role="dialog" aria-modal="true" aria-labelledby="classic-move-kids" onClick={(e) => e.stopPropagation()}
+              style={{ width: 420, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--cth-paper-100)', boxShadow: 'inset 0 0 0 2px var(--cth-ink-900), 4px 4px 0 rgba(26, 19, 32, 0.25)' }}>
+              <strong id="classic-move-kids" style={{ fontSize: 14 }}>{t('pro.tasks.moveKidsTitle', { key: parent ? ticketOf(parent) : ask.id, to })}</strong>
+              <span style={{ fontSize: 12, color: 'var(--cth-ink-500)' }}>{t('pro.tasks.moveKidsBody', { count: ask.kids.length, to })}</span>
+              <ul style={{ margin: 0, paddingInlineStart: 18, maxHeight: 150, overflowY: 'auto', fontSize: 12 }}>
+                {ask.kids.map((k) => <li key={k.id}><span style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 10, color: 'var(--cth-ink-500)' }}>{ticketOf(k)}</span> {k.title}</li>)}
+              </ul>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}>
+                <PixelButton variant="secondary" size="sm" onClick={() => setAsk(null)}>{t('common.cancel')}</PixelButton>
+                <PixelButton variant="secondary" size="sm" onClick={() => { void moveCards([ask.id], ask.status); setAsk(null); }}>{t('pro.tasks.moveOnlyThis')}</PixelButton>
+                <PixelButton variant="primary" size="sm" onClick={() => { void moveCards([ask.id, ...ask.kids.map((k) => k.id)], ask.status); setAsk(null); }}>{t('pro.tasks.moveWithKids', { count: ask.kids.length })}</PixelButton>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
