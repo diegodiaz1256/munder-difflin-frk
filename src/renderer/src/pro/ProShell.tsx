@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { APP_NAME, LAYOUT_LABELS } from '@shared/fork';
+import { FloorSwitcher } from './FloorSwitcher';
 import type { HarnessConfig } from '@/store/config';
 import { useStore } from '@/store/store';
 import { ProIcon, type ProIconName } from './ProIcon';
@@ -131,7 +132,7 @@ export function ProShell({ config }: { config: HarnessConfig }) {
           <Avatar agent={god} />
           <span style={{ display: 'flex', flexDirection: 'column', lineHeight: '15px' }}>
             <span>{APP_NAME}</span>
-            <span className="pro-sub" style={{ fontSize: 10 }}>Munder Difflin</span>
+            <FloorSwitcher office={config.harnessHome ?? null} enabled={config.multiWindow !== false} />
           </span>
           <button className="pro-side-toggle" title={t('pro.nav.hideMenu')} aria-label={t('pro.nav.hideMenu')} onClick={toggleSide}>«</button>
         </div>
@@ -179,7 +180,9 @@ export function ProShell({ config }: { config: HarnessConfig }) {
               <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, lineHeight: '15px' }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
                 <span className="pro-sub" style={{ fontSize: 11 }}>
-                  {asking.has(a.id) ? t('pro.nav.askedYou') : ctx !== null ? `ctx ${ctx}%` : a.isGod ? t('pro.nav.orchestrator') : (a.model ?? a.provider ?? t('pro.nav.agent'))}
+                  {asking.has(a.id) ? t('pro.nav.askedYou')
+                    : a.isGod ? `★ ${t('pro.nav.orchestrator')}`
+                    : ctx !== null ? `ctx ${ctx}%` : (a.model ?? a.provider ?? t('pro.nav.agent'))}
                 </span>
               </span>
               <span className="pro-nav-end">

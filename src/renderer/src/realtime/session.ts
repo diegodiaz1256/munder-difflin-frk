@@ -27,6 +27,8 @@ import { useSyncExternalStore } from 'react';
 import { RealtimeAgent, RealtimeSession, OpenAIRealtimeWebRTC } from '@openai/agents-realtime';
 import { realtimeReadTools, realtimeSessionSummary } from './tools';
 import { realtimeActionTools } from './actions';
+import { useStore } from '@/store/store';
+import { resolveGodName } from '@shared/godIdentity';
 import { resetRealtimeCost, recordRealtimeUsage, endRealtimeCost, isRealtimeIdle, getRealtimeCostSnapshot } from './costStore';
 
 /**
@@ -66,7 +68,7 @@ const GREETINGS = [
   "Hi, what's up?",
   "Hey, how's it going?",
   "Hello, how can I help you?",
-  "Hey there, Michael here — what can I do for you?",
+  "Hey there — what can I do for you?",
   "Hi! What are we working on today?",
   "Hey, good to hear you. What's on your mind?",
   "Hello! What do you need?",
@@ -254,7 +256,7 @@ function teardownMedia(): void {
 function micFriendly(msg: string): string {
   const m = msg.toLowerCase();
   if (m.includes('permission') || m.includes('notallowed') || m.includes('denied'))
-    return 'microphone permission denied — allow mic access to talk to Michael';
+    return 'microphone permission denied — allow mic access to talk to the orchestrator';
   if (m.includes('notfound') || m.includes('device'))
     return 'no microphone found — check your input device';
   return msg;
@@ -348,9 +350,11 @@ export async function connect(): Promise<void> {
     // persona+tools prefix stays fully prompt-cached across turns and sessions
     // (cached input is ~99% cheaper). The snapshot goes in as the FIRST
     // conversation item below, and the floor watcher appends deltas mid-call.
+    const godName = resolveGodName(useStore.getState().agents.find((x) => x.isGod)?.name);
     const agent = new RealtimeAgent({
-      name: 'Michael',
-      instructions: MICHAEL_PERSONA,
+      name: godName,
+      // The voice speaks as the orchestrator's real name, not the default one.
+      instructions: MICHAEL_PERSONA.replace(/^You are Michael/, `You are ${godName}`),
       tools: [...realtimeReadTools(), ...realtimeActionTools()]
     });
     const s = new RealtimeSession(agent, {

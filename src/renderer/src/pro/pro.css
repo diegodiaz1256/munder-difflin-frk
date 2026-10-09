@@ -37,6 +37,26 @@
   overflow-y: auto;
 }
 .pro-brand { display: flex; align-items: center; gap: 8px; padding: 4px 8px 12px; font-weight: 600; font-size: 14px; }
+/* The office under the app's name, and the floors it opens onto. */
+.pro-floor-switch { position: relative; min-width: 0; }
+.pro-floor-current {
+  border: 0; background: transparent; padding: 0; cursor: pointer; font: inherit; font-size: 11px; font-weight: 400;
+  color: var(--pro-muted); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block;
+}
+.pro-floor-current:hover { color: var(--pro-text); }
+.pro-floor-menu {
+  position: fixed; z-index: 60; width: 260px; padding: 8px;
+  background: var(--pro-card); border: 1px solid var(--pro-line-strong); border-radius: var(--pro-radius);
+  box-shadow: var(--cth-shadow-hard); font-weight: 400;
+}
+.pro-floor-row { display: flex; align-items: center; gap: 4px; }
+.pro-floor-open {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; border: 0; background: transparent; cursor: pointer;
+  padding: 6px; border-radius: 6px; font: inherit; font-size: 13px; color: var(--pro-text); text-align: start;
+}
+.pro-floor-open:hover, .pro-floor-forget:hover { background: var(--pro-sel); }
+.pro-floor-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pro-floor-forget { border: 0; background: transparent; cursor: pointer; color: var(--pro-muted); padding: 4px 8px; border-radius: 6px; font-size: 14px; }
 .pro-nav {
   display: flex; align-items: center; gap: 10px;
   width: 100%; padding: 5px 8px; border: none; border-radius: 6px;
@@ -90,6 +110,10 @@ button.pro-card:hover { border-color: var(--pro-line-strong); }
 }
 .pro-chip-on { border-color: var(--pro-green); color: var(--cth-ink-900); }
 .pro-chip-off { opacity: .5; }
+/* The orchestrator, wherever it is listed (data.tsx GodBadge). */
+.pro-badge-god { background: var(--cth-lemon-light); box-shadow: inset 0 0 0 1px var(--cth-lemon); color: var(--cth-ink-900); font-weight: 600; }
+.pro-badge-god-sub { font-weight: 400; color: var(--cth-ink-700); }
+.pro-god-star { color: var(--cth-lemon); font-size: 13px; line-height: 1; }
 .pro-badge {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 11px; line-height: 20px; padding: 0 8px; border-radius: 6px; white-space: nowrap;

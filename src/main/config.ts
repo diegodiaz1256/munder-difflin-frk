@@ -359,6 +359,9 @@ export interface HarnessConfig {
    *  The on-disk hive (god orchestration under harnessHome) stays process-global;
    *  floors share it. */
   multiWindow?: boolean;
+  /** The renderer's language, as it last reported it: the app menu (built in
+   *  main) follows it, and a new floor's first window starts in it. */
+  uiLanguage?: 'en' | 'es';
   /** Terminal theme — mirrored into each agent's per-session Claude settings
    *  ("theme" key) at spawn so the TUI's truecolor palette matches. Scoped to
    *  harness agents only; the user's global Claude theme is never touched. */

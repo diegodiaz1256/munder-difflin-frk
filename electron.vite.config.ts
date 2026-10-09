@@ -94,6 +94,11 @@ export default defineConfig({
     define,
     root: resolve(__dirname, 'src/renderer'),
     build: {
+      // electron-vite leaves the renderer unminified: the entry was 12.8 MB of
+      // JS parsed on every launch. Minified, it loads faster and weighs less in
+      // memory. (Main stays readable: the freeze log names functions.)
+      minify: 'esbuild',
+      target: 'chrome128',
       rollupOptions: {
         input: { index: resolve(__dirname, 'src/renderer/index.html') }
       }

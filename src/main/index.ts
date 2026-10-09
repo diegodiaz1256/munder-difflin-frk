@@ -3,6 +3,12 @@ import { DEMO_HOME } from './demo';
 // Copies the data of this fork's old name (Munder Difflin) on first launch — before
 // anything reads userData (see legacyMigration.ts).
 import { offerLegacyUninstall } from './legacyMigration';
+// A floor (another office, its own process) redirects userData too — after the
+// legacy copy, which only ever fills the main profile (see floorProfile.ts).
+import { BASE_USER_DATA, FLOOR_ID, floorArgs, seedFloor } from './floorProfile';
+import { listFloors, removeFloor } from './floors';
+import { menuText } from './menuText';
+import { claimOffice, officeHolder, releaseOffice } from './officeLock';
 // Headless (server) mode sets Chromium switches — must load before ready too.
 import { HEADLESS, HEADLESS_SETUP, SERVER } from './headless';
 import { APP_NAME } from '../shared/fork';
@@ -135,6 +141,7 @@ import {
   codexRemoteSocketFits,
   withCodexRemoteArgs
 } from '../shared/codexRemote';
+import { makeSpawnGate } from './spawnGate';
 import { FreezeMonitor, instrumentEvents, instrumentIpc, instrumentTimers, type FreezeEntry } from './freezeLog';
 
 // Freeze log (freezeLog.ts): set up before any handler or timer exists, so all
@@ -2057,7 +2064,7 @@ function buildAutonomousRequestProtocol(channel: string, threadTs: string, helpe
 2. DELEGATE WITH THE REPLY HANDLE — tell that agent to do the work autonomously AND to post its result back to THIS Slack thread itself when done, using exactly: "${hive.nodeCommand()}" "${helperPath}" --channel ${channel} --thread ${threadTs} --text "<substantive result>" (that first path is the harness's bundled Node, already resolved for this machine — pass it verbatim; bare "node" is not on the hook/agent PATH on many machines.)
 3. AUTONOMOUS EXECUTION — no interactive questions. PAUSE/ask ONLY for high-severity actions: pushing to main or any remote; buying or spawning infrastructure or paid services; deleting an existing repo, file, or folder it did not create. Stay READ-ONLY at critical infrastructure and git-push-type changes unless explicitly approved.
 4. DIRECT, SUBSTANTIVE REPLY — the agent posts a real Slack-mrkdwn answer (short *bold* headline + the actual outcome/specifics/links), NEVER a bare "done"/":white_check_mark:".
-5. REPORT TO GOD — the agent then tells you (Michael) what it did.
+5. REPORT TO GOD — the agent then tells you (the orchestrator) what it did.
 6. ASYNC QUESTIONS — if a decision is genuinely needed, don't block: post the question + numbered OPTIONS to the thread via that reply command, and record {q, options, askedAt (ISO + day & time), thread_ts ${threadTs}} so the threaded human reply correlates back and resumes.
 The user's message starts now: `;
 }
@@ -3084,7 +3091,7 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
     ...(geom && geom.x !== undefined && geom.y !== undefined ? { x: geom.x, y: geom.y } : {}),
     minWidth: MIN_WIN.width,
     minHeight: MIN_WIN.height,
-    title: isFloor ? `${APP_NAME} — Floor` : APP_NAME,
+    title: windowTitle(),
     backgroundColor: '#FFF8E7',
     titleBarStyle: 'hiddenInset',
     show: false,
@@ -3092,7 +3099,9 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
       preload: join(__dirname, '../preload/index.js'),
       // Tells the preload (and so the renderer) that no one is looking: skip
       // the launch picker, never pop anything up.
-      ...(HEADLESS ? { additionalArguments: ['--md-headless'] } : {}),
+      // --md-lang: the language to start in when this profile's own storage has
+      // none yet (a new floor), so it does not open in English.
+      additionalArguments: [...(HEADLESS ? ['--md-headless'] : []), ...(readConfig().uiLanguage ? [`--md-lang=${readConfig().uiLanguage}`] : [])],
       // Keep Chromium's OS renderer sandbox active; privileged work stays behind
       // the narrow contextBridge/IPC surface owned by the main process.
       sandbox: true,
@@ -3113,6 +3122,9 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
   // Capture the webContents once: after 'closed' the window is gone, but this
   // reference stays valid as the per-PTY ownership key.
   const wc = win.webContents;
+  // The title names the office, so floors tell apart in the taskbar and Task
+  // Manager; the page's own <title> would overwrite it.
+  win.on('page-title-updated', (e) => e.preventDefault());
 
   allWindows.add(win);
   // Global timer events follow the user — the most-recently-focused window is
@@ -3260,29 +3272,83 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
 /** Open a new floor window — gated by the multiWindow flag. Returns the window,
  *  or null when the feature is off (the entry points are hidden in that case,
  *  but the IPC stays defensive). */
-function openFloor(): BrowserWindow | null {
-  if (!readConfig().multiWindow) return null;
-  return createWindow({ floor: true });
+/** "Scranton Branch — <office>", or just the app's name before one is open. */
+function windowTitle(): string {
+  const office = readConfig().harnessHome;
+  return office ? `${APP_NAME} — ${basename(office)}` : APP_NAME;
 }
+
+/** New Floor: another office, run by its own copy of the app (floorProfile.ts).
+ *  It starts from these settings and keys and opens on the office picker.
+ *  With an id (or null, the main profile) it reopens a floor that exists; if
+ *  that floor is already running, its own single-instance lock hands the
+ *  launch to it and it comes to the front. */
+function openFloor(existing?: string | null): boolean {
+  if (!readConfig().multiWindow) return false;
+  const id = existing === undefined ? randomBytes(5).toString('hex') : existing;
+  if (id === FLOOR_ID) { mainWindow?.focus(); return true; }
+  try {
+    if (existing === undefined && id) seedFloor(id);
+    const child = spawn(process.execPath, floorArgs(process.argv, id), { detached: true, stdio: 'ignore', env: process.env });
+    child.on('error', (e) => console.error('[floor] could not start:', e));
+    child.unref();
+    // The Open Floor list gains it (and, a moment later, its office).
+    setTimeout(() => { refreshAppMenu(); }, 4000);
+    return true;
+  } catch (e) {
+    console.error('[floor] could not start:', e);
+    return false;
+  }
+}
+
+ipcMain.handle('floors:list', () => listFloors(BASE_USER_DATA, FLOOR_ID));
+ipcMain.handle('floors:open', (_evt, id: unknown) =>
+  ({ ok: openFloor(typeof id === 'string' && /^[0-9a-f]{6,32}$/.test(id) ? id : id === null ? null : undefined) }));
+ipcMain.handle('floors:remove', (_evt, id: unknown) => {
+  if (typeof id !== 'string') return { ok: false, error: 'unknown floor' };
+  const r = removeFloor(BASE_USER_DATA, id, FLOOR_ID);
+  if (r.ok) refreshAppMenu();
+  return r;
+});
+// The renderer's language: the menu is rebuilt in it, and new floors start in it.
+ipcMain.handle('app:uiLanguage', (_evt, lng: unknown) => {
+  if ((lng === 'en' || lng === 'es') && readConfig().uiLanguage !== lng) {
+    writeConfig({ uiLanguage: lng });
+    refreshAppMenu();
+  }
+});
+
+let appMenuInstalled = false;
+function refreshAppMenu(): void { if (appMenuInstalled) installAppMenu(); }
 
 /** Build + install the application menu. Only called when multiWindow is on, so
  *  flag-off keeps Electron's default menu (zero behavior change). Uses standard
  *  role-based items so copy/paste/quit/etc. work per-platform, and adds the
  *  "New Floor" item (Cmd/Ctrl+Shift+N). */
 function installAppMenu(): void {
+  appMenuInstalled = true;
   const isMac = process.platform === 'darwin';
+  const m = menuText(readConfig().uiLanguage);
   const newFloorItem = {
-    label: 'New Floor',
+    label: m.newFloor,
     accelerator: 'CmdOrCtrl+Shift+N',
     click: () => { openFloor(); }
+  };
+  const others = listFloors(BASE_USER_DATA, FLOOR_ID).filter((f) => !f.current);
+  const openFloorItem: Electron.MenuItemConstructorOptions = {
+    label: m.openFloor,
+    submenu: others.length
+      ? others.map((f) => ({
+          label: `${f.id === null ? m.mainFloor : f.name ?? m.noOffice}${f.id === null && f.name ? ` · ${f.name}` : ''}${f.running ? `  (${m.running})` : ''}`,
+          click: () => { openFloor(f.id); }
+        }))
+      : [{ label: m.noOtherFloors, enabled: false }]
   };
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(isMac ? [{ role: 'appMenu' as const }] : []),
     {
-      label: 'File',
-      submenu: isMac
-        ? [newFloorItem, { type: 'separator' as const }, { role: 'close' as const }]
-        : [newFloorItem, { type: 'separator' as const }, { role: 'quit' as const }]
+      label: m.file,
+      submenu: [newFloorItem, openFloorItem, { type: 'separator' as const }, isMac ? { role: 'close' as const, label: m.close } : { role: 'quit' as const, label: m.quit }]
     },
     // The Edit menu is spelled out rather than `{ role: 'editMenu' }` for one
     // reason: `registerAccelerator: false` on the clipboard items.
@@ -3301,19 +3367,39 @@ function installAppMenu(): void {
     // handler and the textarea's native paste event both read the clipboard
     // synchronously, inside the keystroke, before any restore can land.
     {
-      label: 'Edit',
+      label: m.edit,
       submenu: [
-        { role: 'undo' as const, registerAccelerator: false },
-        { role: 'redo' as const, registerAccelerator: false },
+        { role: 'undo' as const, label: m.undo, registerAccelerator: false },
+        { role: 'redo' as const, label: m.redo, registerAccelerator: false },
         { type: 'separator' as const },
-        { role: 'cut' as const, registerAccelerator: false },
-        { role: 'copy' as const, registerAccelerator: false },
-        { role: 'paste' as const, registerAccelerator: false },
-        { role: 'selectAll' as const, registerAccelerator: false }
+        { role: 'cut' as const, label: m.cut, registerAccelerator: false },
+        { role: 'copy' as const, label: m.copy, registerAccelerator: false },
+        { role: 'paste' as const, label: m.paste, registerAccelerator: false },
+        { role: 'selectAll' as const, label: m.selectAll, registerAccelerator: false }
       ]
     },
-    { role: 'viewMenu' },
-    { role: 'windowMenu' }
+    {
+      label: m.view,
+      submenu: [
+        { role: 'reload' as const, label: m.reload },
+        { role: 'forceReload' as const, label: m.forceReload },
+        { role: 'toggleDevTools' as const, label: m.devTools },
+        { type: 'separator' as const },
+        { role: 'resetZoom' as const, label: m.resetZoom },
+        { role: 'zoomIn' as const, label: m.zoomIn },
+        { role: 'zoomOut' as const, label: m.zoomOut },
+        { type: 'separator' as const },
+        { role: 'togglefullscreen' as const, label: m.fullScreen }
+      ]
+    },
+    {
+      label: m.window,
+      submenu: [
+        { role: 'minimize' as const, label: m.minimize },
+        { role: 'zoom' as const, label: m.zoom },
+        { role: 'close' as const, label: m.close }
+      ]
+    }
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -3393,6 +3479,7 @@ function spawnFailReason(error?: string): SpawnFailReason {
   return 'spawn_error';
 }
 
+const spawnTurn = makeSpawnGate();
 ipcMain.handle('pty:spawn', async (evt, opts: AgentSpawnOptions) => {
   if (!opts || typeof opts.id !== 'string' || typeof opts.cwd !== 'string' || typeof opts.command !== 'string') {
     return { ok: false, error: 'invalid SpawnOptions' };
@@ -3412,7 +3499,8 @@ ipcMain.handle('pty:spawn', async (evt, opts: AgentSpawnOptions) => {
     }, 90_000);
   });
   try {
-    return await Promise.race([spawnAgentCore(opts, owner), watchdog]);
+    // One at a time (spawnGate.ts): a team coming up no longer freezes the app.
+    return await Promise.race([spawnTurn(() => spawnAgentCore(opts, owner)), watchdog]);
   } finally {
     clearTimeout(timer);
     spawnSteps.delete(opts.id);
@@ -4228,7 +4316,8 @@ ipcMain.handle('customProviders:fetchModels', async (_evt, baseUrl: unknown, id:
   const key = typeof id === 'string' ? integrations.getSecret(customKeyRef(id)) : undefined;
   const get = async (u: string) => {
     const r = await fetch(u, { headers: key ? { Authorization: `Bearer ${key}` } : {}, signal: AbortSignal.timeout(8000), redirect: 'manual' });
-    return { status: r.status, body: r.ok ? await r.json().catch(() => null) : null };
+    if (!r.ok) { void r.body?.cancel().catch(() => undefined); return { status: r.status, body: null }; }
+    return { status: r.status, body: await r.json().catch(() => null) };
   };
   try {
     let r = await get(`${base.href.replace(/\/+$/, '')}/models`);
@@ -4271,10 +4360,8 @@ ipcMain.handle('integrations:test', async (_evt, payload: unknown) => {
   const secret = integrations.getSecret(rec.secretRef);
   const headers = { ...(('headers' in spec && spec.headers) || {}), ...buildAuthHeaders(rec.authType, rec.authHeader, secret) };
   try {
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), 15_000);
-    const r = await fetch(target, { method: spec.method, headers, body: 'body' in spec ? spec.body : undefined, redirect: 'manual', signal: ac.signal });
-    clearTimeout(timer);
+    const r = await fetch(target, { method: spec.method, headers, body: 'body' in spec ? spec.body : undefined, redirect: 'manual', signal: AbortSignal.timeout(15_000) });
+    void r.body?.cancel().catch(() => undefined); // only the status is wanted; free the connection
     // The service said no: say which request, so a 404/401 can be read, not guessed.
     return { ok: r.ok, status: r.status, ...(r.ok ? {} : { error: `${spec.method} ${target.pathname}${target.search} `.trim() }) };
   } catch (e) {
@@ -4542,6 +4629,8 @@ ipcMain.handle('config:ensureHome', (_evt, path: unknown) => {
 // optionally MOVING the existing hive + palace and relaunching so every service
 // re-binds against the new root. mode: 'move' copies the data (old kept as a
 // safety net), 'fresh' just re-points and bootstraps an empty home.
+ipcMain.handle('config:officesInUse', (_evt, paths: unknown) =>
+  Array.isArray(paths) ? paths.filter((p): p is string => typeof p === 'string' && !!p && officeHolder(resolve(expandTilde(p))) !== null) : []);
 ipcMain.handle('config:changeHome', async (_evt, payload: unknown) => {
   const p = (payload ?? {}) as { newHome?: unknown; mode?: unknown };
   if (typeof p.newHome !== 'string' || !p.newHome) return { ok: false, error: 'invalid newHome' };
@@ -4566,6 +4655,9 @@ ipcMain.handle('config:changeHome', async (_evt, payload: unknown) => {
 
   const ensured = ensureHarnessHome(newHome);
   if (!ensured.ok) return ensured;
+  if (officeHolder(newHome) !== null) {
+    return { ok: false, error: 'That office is already open on another floor. Switch to that window to use it.' };
+  }
 
   // Tear down everything bound to the OLD root before copying, so nothing writes
   // mid-copy — a live git commit into hive/.git would otherwise be copied as a
@@ -4612,6 +4704,7 @@ ipcMain.handle('config:changeHome', async (_evt, payload: unknown) => {
   allowQuit = true;
   writeConfig({ harnessHome: newHome });
   try { ptyManager.killAll(); } catch (e) { console.error('[changeHome] killAll:', e); }
+  releaseClaimedOffice();
   app.relaunch();
   app.exit(0);
   return { ok: true as const }; // unreachable (process exits) — typed for the renderer
@@ -5686,8 +5779,7 @@ ipcMain.handle('app:cancelClose', () => {
 // inside openFloor(); returns whether a window opened so a renderer button can
 // reflect availability. The app-menu "New Floor" item calls openFloor() directly.
 ipcMain.handle('window:newFloor', () => {
-  const win = openFloor();
-  return { ok: win != null };
+  return { ok: openFloor() };
 });
 
 // ─── IPC: closing time (graceful, data-loss-free shutdown) ──────────────────
@@ -5745,6 +5837,7 @@ ipcMain.handle('app:resetAll', () => {
   // Back to first-run defaults, then relaunch clean so all in-memory services
   // re-bootstrap from scratch and the renderer lands on onboarding.
   resetConfig();
+  releaseClaimedOffice();
   app.relaunch();
   app.exit(0);
 });
@@ -7159,8 +7252,45 @@ ipcMain.handle('workers:hire', async (_evt, req: unknown): Promise<{ ok: boolean
 /** Start every hive-bound background service against the current harnessHome.
  *  Called on boot, and again to recover in place if a folder-change copy fails
  *  (config:changeHome tears these down before copying). No-op without a home. */
+/** The office this process runs (officeLock.ts), so quitting gives it back. */
+let claimedOffice: string | null = null;
+function releaseClaimedOffice(): void {
+  releaseOffice(claimedOffice);
+  claimedOffice = null;
+}
+process.on('exit', releaseClaimedOffice);
+
+/** Another floor already runs this office: say so, and leave it alone. */
+function officeTakenElsewhere(home: string): void {
+  const show = () => {
+    const opts = {
+      type: 'warning' as const,
+      message: 'This office is already open on another floor',
+      detail: `${home}
+
+One office runs in one window at a time, so two orchestrators never share its inbox and history. Use the other window, or pick a different office here.`,
+      buttons: ['Pick another office', 'Close this window'],
+      defaultId: 0,
+      cancelId: 1
+    };
+    const w = BrowserWindow.getAllWindows()[0];
+    void (w ? dialog.showMessageBox(w, opts) : dialog.showMessageBox(opts)).then(({ response }) => {
+      allowQuit = true;
+      if (response === 0) { writeConfig({ harnessHome: null }); app.relaunch(); }
+      app.exit(0);
+    });
+  };
+  if (app.isReady()) show(); else void app.whenReady().then(show);
+}
+
 function bootstrapHiveServices(): void {
   if (!hive.enabled()) return;
+  const home = readConfig().harnessHome;
+  if (home && claimedOffice !== resolve(home)) {
+    const claim = claimOffice(resolve(home));
+    if (!claim.ok) { officeTakenElsewhere(home); return; }
+    claimedOffice = resolve(home);
+  }
   hive.ensureHive();
   hive.refreshGeneratedDocs();
   // An office inside a project's repo: keep its files out of that repo's git.
@@ -7625,6 +7755,7 @@ app.on('window-all-closed', () => {
 let analyticsFlushed = false;
 app.on('will-quit', (e) => {
   fortress.stop();
+  releaseClaimedOffice();
   // What is still queued reaches the hive history before the process goes.
   try { hive.flushCommitsSync(); } catch { /* best-effort */ }
   if (analyticsFlushed) return;
