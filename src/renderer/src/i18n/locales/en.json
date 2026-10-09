@@ -1779,8 +1779,16 @@
     },
     "memory": {
       "ticket": "ticket · {{status}}",
+      "pathWords": "words: {{words}}",
+      "pathMeaning": "by meaning · {{score}}",
+      "pathMemory": "{{agent}}'s memory › {{section}}",
+      "pathDoc": "document",
+      "pathTicket": "board › {{status}}",
+      "showOnMap": "Show the path on the map",
+      "pathTitle": "How search found it",
       "byMeaning": "by meaning",
       "meaningUnavailable": "Search by meaning is unavailable",
+      "meaningDown": "search by meaning is unavailable right now, showing exact matches",
       "notesAbout": "Notes about {{name}}",
       "resultsFor": "Results for “{{q}}”",
       "recent": "Recently learned",
@@ -1795,6 +1803,7 @@
       "projectsHint": "Projects appear here as agents working in a repository write their memory.",
       "hideMap": "Hide map",
       "map": "Map",
+      "overview": "What it knows",
       "view": "View",
       "entity": "{{count}} entity",
       "entities": "{{count}} entities",
@@ -1849,7 +1858,7 @@
       }
     },
     "lists": {
-      "intro": "Your own lists — what you have, want, plan. Tell any agent (“I bought Mortarion”, “add Rogue Trader to my wishlist”) and it keeps them up to date; edit them here too.",
+      "intro": "Your own lists — what you have, want, plan. Tell any agent (“I bought a standing desk”, “add Dune to my reading list”) and it keeps them up to date; edit them here too.",
       "deleteConfirm": "Delete the list “{{title}}”?",
       "delete": "Delete",
       "new": "New list",

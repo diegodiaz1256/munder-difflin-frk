@@ -9,8 +9,11 @@ import { forceLayout, type LayoutEdge, type LayoutNode } from '@/components/memo
  * and documents (pages) attached to what they mention. Click a concept to read
  * the notes behind it.
  */
-export function ConceptGraph({ graph, docs, selected, onSelect }: {
+export function ConceptGraph({ graph, docs, selected, onSelect, trail }: {
   graph: Graph; docs: MemoryDoc[]; selected: string | null; onSelect: (conceptId: string | null) => void;
+  /** A search's path: the concepts it went through and the agents/documents its
+   *  results came from (`c:<id>`, `d:<docId>`). Lit up, everything else dimmed. */
+  trail?: Set<string> | null;
 }) {
   const { t } = useTranslation();
   const box = useRef<HTMLDivElement>(null);
@@ -34,21 +37,26 @@ export function ConceptGraph({ graph, docs, selected, onSelect }: {
       ...graph.edges.map((e) => ({ source: `c:${e.a}`, target: `c:${e.b}`, strength: Math.min(2, 0.6 + e.weight / 3) })),
       ...sources.flatMap((d) => (graph.mentions[d.id] ?? []).map((c) => ({ source: `d:${d.id}`, target: `c:${c}`, strength: 0.25 })))
     ];
-    const raw = forceLayout(nodes, edges, { width: size.w, height: size.h, iterations: 320, padding: 40 });
-    // The layout settles into the middle of the box; stretch it to fill the
-    // panel so labels have room (margins leave space for them and the legend).
+    const raw = forceLayout(nodes, edges, { width: size.w, height: size.h, iterations: 320, padding: 40, maxSpacing: 60 });
+    // The layout settles into the middle of the box. Shrink it to fit the
+    // panel if needed, the same on both axes, and keep it centred: a
+    // small map stays a small cluster instead of being flung into the corners
+    // (margins leave room for labels and the legend).
     const pts = [...raw.values()];
     const minX = Math.min(...pts.map((p) => p.x)), maxX = Math.max(...pts.map((p) => p.x));
     const minY = Math.min(...pts.map((p) => p.y)), maxY = Math.max(...pts.map((p) => p.y));
-    const mx = 70, mt = 34, mb = 40;
-    const sx = maxX > minX ? (size.w - 2 * mx) / (maxX - minX) : 1;
-    const sy = maxY > minY ? (size.h - mt - mb) / (maxY - minY) : 1;
-    const pos = new Map([...raw].map(([id, p]) => [id, { x: mx + (p.x - minX) * sx, y: mt + (p.y - minY) * sy }]));
+    const mx = 70, mt = 34, mb = 48;
+    const fx = maxX > minX ? (size.w - 2 * mx) / (maxX - minX) : Infinity;
+    const fy = maxY > minY ? (size.h - mt - mb) / (maxY - minY) : Infinity;
+    const k = Math.min(1, fx, fy);
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    const ox = size.w / 2, oy = mt + (size.h - mt - mb) / 2;
+    const pos = new Map([...raw].map(([id, p]) => [id, { x: ox + (p.x - cx) * k, y: oy + (p.y - cy) * k }]));
     return { pos, edges };
   }, [graph, sources, size.w, size.h]);
 
   const focus = hover ?? (selected ? `c:${selected}` : null);
-  const near = useMemo(() => {
+  const focusNear = useMemo(() => {
     if (!focus) return null;
     const s = new Set([focus]);
     for (const e of layout.edges) {
@@ -57,6 +65,8 @@ export function ConceptGraph({ graph, docs, selected, onSelect }: {
     }
     return s;
   }, [focus, layout.edges]);
+  // Hover or a picked concept wins; otherwise a search shows its path.
+  const near = focusNear ?? (trail && trail.size ? trail : null);
   const dim = (id: string) => (near && !near.has(id) ? 0.25 : 1);
   // Label the top ~18 concepts by default.
   const labelMin = graph.concepts.length > 18 ? graph.concepts[17].count : 0;

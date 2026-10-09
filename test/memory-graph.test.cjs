@@ -50,3 +50,29 @@ test('mempalace search output becomes results, not lines', () => {
   assert.ok(hits[0].score > 0.5);
   assert.ok(!/={5,}|Results for|Match:/.test(hits.map((h) => h.text).join('\n')));
 });
+
+test('markdown markup is not part of a note, and bold labels are not concepts', () => {
+  const doc = [
+    '**Purpose**: cache invoices for Acme Billing.',
+    '',
+    '```http',
+    'Cache-Control: private, max-age=3600',
+    '```',
+    '',
+    '| Header | Effect |',
+    '|---|:---:|',
+    '| ETag | Validation |'
+  ].join('\n');
+  const notes = splitNotes(doc);
+  assert.deepEqual(notes, ['Purpose: cache invoices for Acme Billing.', 'Cache-Control: private, max-age=3600', 'Header; Effect', 'ETag; Validation']);
+  const g = buildMemoryGraph([{ id: 'd', kind: 'doc', label: 'd', text: doc }]);
+  const ids = g.concepts.map((c) => c.id);
+  assert.ok(!ids.includes('purpose') && !ids.includes('effect'), `labels leaked into concepts: ${ids}`);
+  assert.ok(ids.includes('acme billing'), `real names stay: ${ids}`);
+});
+
+test('measurements are not concepts, names with digits still are', () => {
+  const found = conceptsIn('Sidebar icons: 1.5px stroke, round caps, 16px box, 5px gap; builds in 30ms on Node 22 with OAuth2.');
+  for (const k of ['16px', '5px', '30ms']) assert.ok(!found.has(k), `${k} should not be a concept`);
+  assert.ok(found.has('oauth2'), 'OAuth2 is still a concept');
+});

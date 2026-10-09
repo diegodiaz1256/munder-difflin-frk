@@ -25,6 +25,8 @@ export interface LayoutOpts {
   pinned?: Record<string, { x: number; y: number }>;
   iterations?: number;
   padding?: number;
+  /** Longest ideal edge, in px. A few nodes in a big frame otherwise spread to the walls. */
+  maxSpacing?: number;
 }
 
 export type Positions = Map<string, { x: number; y: number }>;
@@ -66,8 +68,13 @@ export function forceLayout(
 
   // Fruchterman–Reingold ideal edge length, scaled down so labels have room.
   const area = width * height;
-  const k = Math.sqrt(area / ids.length) * 0.55;
+  const natural = Math.sqrt(area / ids.length) * 0.55;
+  const k = Math.min(opts.maxSpacing ?? Infinity, natural);
   const k2 = k * k;
+  // When the cap bites (a few nodes in a big frame), far apart nodes stop pushing:
+  // a few pairs would otherwise shove each other to the walls, and gravity then
+  // gathers them near the centre. A busy map keeps the full layout.
+  const reach = opts.maxSpacing && natural > opts.maxSpacing ? k * 4 : Infinity;
   const gravity = 0.045;
 
   const biasById = new Map(nodes.map((n) => [n.id, n.gravityBias ?? 1]));
@@ -89,6 +96,7 @@ export function forceLayout(
         let dy = pi.y - pj.y;
         let dist = Math.hypot(dx, dy);
         if (dist < 0.01) { dx = (i - j) * 0.01 + 0.01; dy = 0.01; dist = Math.hypot(dx, dy); }
+        if (dist > reach) continue;
         const force = k2 / dist;
         const ux = dx / dist;
         const uy = dy / dist;

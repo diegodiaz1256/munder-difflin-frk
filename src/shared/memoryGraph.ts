@@ -52,11 +52,16 @@ const FILE = /\b[\w-]+\.(?:md|json|ts|tsx|py|txt)\b/g;
 export function splitNotes(text: string): string[] {
   const out: string[] = [];
   let buf: string[] = [];
-  const flush = () => { const t = buf.join(' ').trim(); if (t.length > 3) out.push(t); buf = []; };
+  // Bold markers go: they are not words, and they hid where a sentence starts
+  // ("**Purpose**: …" made Purpose a concept).
+  const flush = () => { const t = buf.join(' ').replace(/\*\*|__/g, '').trim(); if (t.length > 3) out.push(t); buf = []; };
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) { flush(); continue; }
-    if (/^([-*+]|\d+[.)]|#{1,6}|\|)\s?/.test(line)) { flush(); buf.push(line.replace(/^([-*+]|\d+[.)]|#{1,6})\s*/, '').replace(/\s*\|\s*/g, '; ').replace(/^;\s*|;\s*$/g, '')); flush(); continue; }
+    // Code fences and table rules are markup: the code inside a fence stays a note of its own.
+    if (/^(```|~~~)/.test(line)) { flush(); continue; }
+    if (/^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?$/.test(line)) continue;
+    if (/^([-*+]\s|\d+[.)]\s?|#{1,6}\s?|\|)/.test(line)) { flush(); buf.push(line.replace(/^([-*+]\s|\d+[.)]|#{1,6})\s*/, '').replace(/\s*\|\s*/g, '; ').replace(/^;\s*|;\s*$/g, '')); flush(); continue; }
     buf.push(line);
   }
   flush();
@@ -75,6 +80,8 @@ export function conceptsIn(note: string): Map<string, string> {
     // Colour codes (C39E81, 231F) and ordinals (10ª) are not concepts.
     if (/^#?[0-9a-f]{3,8}$/i.test(key) && /\d/.test(key)) return;
     if (/^\d+[ªº°]$/.test(key)) return;
+    // Nor are measurements (5px, 16px, 30ms, 500mb, 2x).
+    if (/^\d+(?:px|pt|em|rem|vh|vw|ms|s|m|h|d|k|kb|mb|gb|tb|x)$/.test(key)) return;
     if (!found.has(key)) found.set(key, clean);
   };
   for (const m of note.matchAll(PHRASE)) {
