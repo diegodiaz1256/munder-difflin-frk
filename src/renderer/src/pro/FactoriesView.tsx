@@ -413,11 +413,11 @@ function Desk({ agent, project, dim, picked, onPick, deskRef }: {
         opacity: dim ? 0.35 : gone || agent.state === 'away' ? 0.55 : 1, cursor: 'pointer', position: 'relative'
       }}
     >
-      <div className="pro-row" style={{ gap: 6 }}>
-        <span className={agent.state === 'working' ? 'pro-typing' : undefined} style={{ lineHeight: 0 }}>
+      <div className="pro-row" style={{ gap: 6, width: '100%', minWidth: 0 }}>
+        <span className={agent.state === 'working' ? 'pro-typing' : undefined} style={{ lineHeight: 0, flexShrink: 0 }}>
           {gone ? <span style={{ width: 32, height: 32, display: 'inline-block' }} /> : <Avatar agent={{ character: faceFor(agent.name) }} scale={2} />}
         </span>
-        <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, overflow: 'hidden' }}>
           <strong title={agent.display_name ?? agent.name} style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{agent.display_name ?? agent.name}</strong>
           <span className="pro-sub" style={{ fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.display_name ? agent.name : agent.role}</span>
         </span>
@@ -627,7 +627,7 @@ function TaskCard({ task, parts, onOpen }: { task: TaskView; parts: TaskView[]; 
   const inState = inStateFor(task);
   const doneParts = parts.filter((p) => p.state === 'done').length;
   return (
-    <div className="pro-card" style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+    <div className="pro-card" style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, overflow: 'hidden' }}>
       <button onClick={() => onOpen(task.task_id)} title={tr('pro.fac.openTask')}
         style={{ all: 'unset', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
         <span style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>{task.title}</span>
@@ -638,7 +638,7 @@ function TaskCard({ task, parts, onOpen }: { task: TaskView; parts: TaskView[]; 
           {task.state === 'failed' && <StateBadge label={tr('pro.fac.failed')} tone="red" />}
           {task.state === 'cancelled' && <StateBadge label={tr('pro.fac.cancelled')} tone="grey" />}
           {task.ask && <StateBadge label={task.ask.kind === 'approval' ? tr('pro.fac.needsApproval') : tr('pro.fac.question')} tone="amber" />}
-          {inState && <span className="pro-ticket" title={inState.exact ? tr('pro.fac.timeInState') : tr('pro.fac.sinceUpdate')}>{inState.exact ? '' : '~'}{inState.text}{task.stage ? ` · ${task.stage}` : ''}</span>}
+          {inState && <span className="pro-ticket" title={inState.exact ? tr('pro.fac.timeInState') : tr('pro.fac.sinceUpdate')} style={{ whiteSpace: 'normal', flexShrink: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{inState.exact ? '' : '~'}{inState.text}{task.stage ? ` · ${task.stage}` : ''}</span>}
         </span>
       </button>
       {parts.length > 0 && (
