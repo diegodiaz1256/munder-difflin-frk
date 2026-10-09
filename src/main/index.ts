@@ -143,6 +143,7 @@ import {
   withCodexRemoteArgs
 } from '../shared/codexRemote';
 import { makeSpawnGate } from './spawnGate';
+import { clearWorkerScratch } from './workerScratch';
 import { FreezeMonitor, instrumentEvents, instrumentIpc, instrumentTimers, type FreezeEntry } from './freezeLog';
 
 // Freeze log (freezeLog.ts): set up before any handler or timer exists, so all
@@ -1211,7 +1212,7 @@ function removeWorkerScratch(workerId: string): void {
   const agentsRoot = join(root, 'agents');
   // Path-safety: the resolved dir must sit directly under agents/ with basename == id.
   if (resolve(dir) !== join(resolve(agentsRoot), basename(dir)) || basename(dir) !== workerId) return;
-  try { rmSync(dir, { recursive: true, force: true }); }
+  try { clearWorkerScratch(dir); }
   catch (e) { console.error('[worker] removeWorkerScratch failed:', e); }
 }
 // A natural PTY exit must run the same teardown as an explicit kill — EXCEPT when
