@@ -92,6 +92,10 @@ function detectLanguage(): string {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (saved && SUPPORTED.includes(saved as LanguageCode)) return saved;
   } catch { /* localStorage unavailable — English it is */ }
+  // A new floor has empty storage of its own: start in the language the app
+  // was last used in (main remembers it), not in English.
+  const fromMain = typeof window !== 'undefined' ? window.cth?.initialLanguage : null;
+  if (fromMain && SUPPORTED.includes(fromMain as LanguageCode)) return fromMain;
   return 'en';
 }
 
@@ -120,5 +124,10 @@ void i18n
     interpolation: { escapeValue: false, defaultVariables: { godName: DEFAULT_GOD_NAME } },
     returnNull: false
   });
+
+// Main builds the app menu and starts new floors; keep it told the language.
+const tellMain = (lng: string): void => { try { void window.cth?.uiLanguage?.(lng)?.catch(() => {}); } catch { /* no bridge (tests) */ } };
+i18n.on('languageChanged', (lng) => tellMain(lng));
+if (i18n.language) tellMain(i18n.language);
 
 export default i18n;

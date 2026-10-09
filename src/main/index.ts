@@ -5,7 +5,9 @@ import { DEMO_HOME } from './demo';
 import { offerLegacyUninstall } from './legacyMigration';
 // A floor (another office, its own process) redirects userData too — after the
 // legacy copy, which only ever fills the main profile (see floorProfile.ts).
-import { FLOOR_ID, floorArgs, seedFloor } from './floorProfile';
+import { BASE_USER_DATA, FLOOR_ID, floorArgs, seedFloor } from './floorProfile';
+import { listFloors, removeFloor } from './floors';
+import { menuText } from './menuText';
 import { claimOffice, officeHolder, releaseOffice } from './officeLock';
 // Headless (server) mode sets Chromium switches — must load before ready too.
 import { HEADLESS, HEADLESS_SETUP, SERVER } from './headless';
@@ -3070,7 +3072,7 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
     ...(geom && geom.x !== undefined && geom.y !== undefined ? { x: geom.x, y: geom.y } : {}),
     minWidth: MIN_WIN.width,
     minHeight: MIN_WIN.height,
-    title: isFloor ? `${APP_NAME} — Floor` : APP_NAME,
+    title: windowTitle(),
     backgroundColor: '#FFF8E7',
     titleBarStyle: 'hiddenInset',
     show: false,
@@ -3078,7 +3080,9 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
       preload: join(__dirname, '../preload/index.js'),
       // Tells the preload (and so the renderer) that no one is looking: skip
       // the launch picker, never pop anything up.
-      ...(HEADLESS ? { additionalArguments: ['--md-headless'] } : {}),
+      // --md-lang: the language to start in when this profile's own storage has
+      // none yet (a new floor), so it does not open in English.
+      additionalArguments: [...(HEADLESS ? ['--md-headless'] : []), ...(readConfig().uiLanguage ? [`--md-lang=${readConfig().uiLanguage}`] : [])],
       // Keep Chromium's OS renderer sandbox active; privileged work stays behind
       // the narrow contextBridge/IPC surface owned by the main process.
       sandbox: true,
@@ -3099,6 +3103,9 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
   // Capture the webContents once: after 'closed' the window is gone, but this
   // reference stays valid as the per-PTY ownership key.
   const wc = win.webContents;
+  // The title names the office, so floors tell apart in the taskbar and Task
+  // Manager; the page's own <title> would overwrite it.
+  win.on('page-title-updated', (e) => e.preventDefault());
 
   allWindows.add(win);
   // Global timer events follow the user — the most-recently-focused window is
@@ -3246,16 +3253,28 @@ function createWindow(opts: { floor?: boolean } = {}): BrowserWindow {
 /** Open a new floor window — gated by the multiWindow flag. Returns the window,
  *  or null when the feature is off (the entry points are hidden in that case,
  *  but the IPC stays defensive). */
+/** "Scranton Branch — <office>", or just the app's name before one is open. */
+function windowTitle(): string {
+  const office = readConfig().harnessHome;
+  return office ? `${APP_NAME} — ${basename(office)}` : APP_NAME;
+}
+
 /** New Floor: another office, run by its own copy of the app (floorProfile.ts).
- *  It starts from these settings and keys and opens on the office picker. */
-function openFloor(): boolean {
+ *  It starts from these settings and keys and opens on the office picker.
+ *  With an id (or null, the main profile) it reopens a floor that exists; if
+ *  that floor is already running, its own single-instance lock hands the
+ *  launch to it and it comes to the front. */
+function openFloor(existing?: string | null): boolean {
   if (!readConfig().multiWindow) return false;
-  const id = randomBytes(5).toString('hex');
+  const id = existing === undefined ? randomBytes(5).toString('hex') : existing;
+  if (id === FLOOR_ID) { mainWindow?.focus(); return true; }
   try {
-    seedFloor(id);
+    if (existing === undefined && id) seedFloor(id);
     const child = spawn(process.execPath, floorArgs(process.argv, id), { detached: true, stdio: 'ignore', env: process.env });
     child.on('error', (e) => console.error('[floor] could not start:', e));
     child.unref();
+    // The Open Floor list gains it (and, a moment later, its office).
+    setTimeout(() => { refreshAppMenu(); }, 4000);
     return true;
   } catch (e) {
     console.error('[floor] could not start:', e);
@@ -3263,24 +3282,54 @@ function openFloor(): boolean {
   }
 }
 
+ipcMain.handle('floors:list', () => listFloors(BASE_USER_DATA, FLOOR_ID));
+ipcMain.handle('floors:open', (_evt, id: unknown) =>
+  ({ ok: openFloor(typeof id === 'string' && /^[0-9a-f]{6,32}$/.test(id) ? id : id === null ? null : undefined) }));
+ipcMain.handle('floors:remove', (_evt, id: unknown) => {
+  if (typeof id !== 'string') return { ok: false, error: 'unknown floor' };
+  const r = removeFloor(BASE_USER_DATA, id, FLOOR_ID);
+  if (r.ok) refreshAppMenu();
+  return r;
+});
+// The renderer's language: the menu is rebuilt in it, and new floors start in it.
+ipcMain.handle('app:uiLanguage', (_evt, lng: unknown) => {
+  if ((lng === 'en' || lng === 'es') && readConfig().uiLanguage !== lng) {
+    writeConfig({ uiLanguage: lng });
+    refreshAppMenu();
+  }
+});
+
+let appMenuInstalled = false;
+function refreshAppMenu(): void { if (appMenuInstalled) installAppMenu(); }
+
 /** Build + install the application menu. Only called when multiWindow is on, so
  *  flag-off keeps Electron's default menu (zero behavior change). Uses standard
  *  role-based items so copy/paste/quit/etc. work per-platform, and adds the
  *  "New Floor" item (Cmd/Ctrl+Shift+N). */
 function installAppMenu(): void {
+  appMenuInstalled = true;
   const isMac = process.platform === 'darwin';
+  const m = menuText(readConfig().uiLanguage);
   const newFloorItem = {
-    label: 'New Floor',
+    label: m.newFloor,
     accelerator: 'CmdOrCtrl+Shift+N',
     click: () => { openFloor(); }
+  };
+  const others = listFloors(BASE_USER_DATA, FLOOR_ID).filter((f) => !f.current);
+  const openFloorItem: Electron.MenuItemConstructorOptions = {
+    label: m.openFloor,
+    submenu: others.length
+      ? others.map((f) => ({
+          label: `${f.id === null ? m.mainFloor : f.name ?? m.noOffice}${f.id === null && f.name ? ` · ${f.name}` : ''}${f.running ? `  (${m.running})` : ''}`,
+          click: () => { openFloor(f.id); }
+        }))
+      : [{ label: m.noOtherFloors, enabled: false }]
   };
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(isMac ? [{ role: 'appMenu' as const }] : []),
     {
-      label: 'File',
-      submenu: isMac
-        ? [newFloorItem, { type: 'separator' as const }, { role: 'close' as const }]
-        : [newFloorItem, { type: 'separator' as const }, { role: 'quit' as const }]
+      label: m.file,
+      submenu: [newFloorItem, openFloorItem, { type: 'separator' as const }, isMac ? { role: 'close' as const, label: m.close } : { role: 'quit' as const, label: m.quit }]
     },
     // The Edit menu is spelled out rather than `{ role: 'editMenu' }` for one
     // reason: `registerAccelerator: false` on the clipboard items.
@@ -3299,19 +3348,39 @@ function installAppMenu(): void {
     // handler and the textarea's native paste event both read the clipboard
     // synchronously, inside the keystroke, before any restore can land.
     {
-      label: 'Edit',
+      label: m.edit,
       submenu: [
-        { role: 'undo' as const, registerAccelerator: false },
-        { role: 'redo' as const, registerAccelerator: false },
+        { role: 'undo' as const, label: m.undo, registerAccelerator: false },
+        { role: 'redo' as const, label: m.redo, registerAccelerator: false },
         { type: 'separator' as const },
-        { role: 'cut' as const, registerAccelerator: false },
-        { role: 'copy' as const, registerAccelerator: false },
-        { role: 'paste' as const, registerAccelerator: false },
-        { role: 'selectAll' as const, registerAccelerator: false }
+        { role: 'cut' as const, label: m.cut, registerAccelerator: false },
+        { role: 'copy' as const, label: m.copy, registerAccelerator: false },
+        { role: 'paste' as const, label: m.paste, registerAccelerator: false },
+        { role: 'selectAll' as const, label: m.selectAll, registerAccelerator: false }
       ]
     },
-    { role: 'viewMenu' },
-    { role: 'windowMenu' }
+    {
+      label: m.view,
+      submenu: [
+        { role: 'reload' as const, label: m.reload },
+        { role: 'forceReload' as const, label: m.forceReload },
+        { role: 'toggleDevTools' as const, label: m.devTools },
+        { type: 'separator' as const },
+        { role: 'resetZoom' as const, label: m.resetZoom },
+        { role: 'zoomIn' as const, label: m.zoomIn },
+        { role: 'zoomOut' as const, label: m.zoomOut },
+        { type: 'separator' as const },
+        { role: 'togglefullscreen' as const, label: m.fullScreen }
+      ]
+    },
+    {
+      label: m.window,
+      submenu: [
+        { role: 'minimize' as const, label: m.minimize },
+        { role: 'zoom' as const, label: m.zoom },
+        { role: 'close' as const, label: m.close }
+      ]
+    }
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

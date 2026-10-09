@@ -2441,6 +2441,16 @@
       "customFetch": "Fetch from server",
       "emptyAuth": "\"{{id}}\" has an empty sign-in entry, which hides the key in models.json. Run /logout in the engine and pick {{id}}, then sign in again if you need it."
     },
+    "floors": {
+      "title": "Floors",
+      "new": "New floor",
+      "newHint": "Another office, in its own window, with its own orchestrator and agents.",
+      "main": "Main floor",
+      "noOffice": "no office yet",
+      "none": "No other floors yet.",
+      "running": "open",
+      "forgetTitle": "Forget this floor. Its office folder and the agents’ work are not touched."
+    },
     "boot": {
       "title": "The office is starting.",
       "body": "{{name}} is clocking in; this can take a little while on the first start."
