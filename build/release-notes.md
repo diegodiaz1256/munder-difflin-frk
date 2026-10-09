@@ -1,3 +1,4 @@
-- **Factories**: long stages and names stay inside their cards.
-- **Agent page**: a long goal wraps inside its card.
-- Includes everything from Scranton Branch 1.0.0.
+- **Security**: subagent tool calls are checked against their agent's limits.
+- **Runner proposals** open in the app and can create secrets.
+- **Clearer Settings**, with search; subagents listed in Temps.
+- Faster start on slow disks.
