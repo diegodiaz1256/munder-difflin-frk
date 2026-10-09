@@ -2244,19 +2244,21 @@ export class HiveManager {
     const browserLine = webOff || hasOfficeMcp ? '' : `BROWSER: for a page that is empty, needs JavaScript or refuses a plain fetch (403, "enable JavaScript", a bot wall for non-browsers), use the office browser — the app's own Chromium${hasOfficeMcp ? ': the munder-browser tools browse_page and web_search, or' : ':'} \`"${hiveNode}" "${browseCli}" <url>\` (add --links for the page's links) and \`"${hiveNode}" "${browseCli}" --search "<query>"\`. It does not solve captchas or bot challenges; if a page asks for one, say so instead of trying to get around it.`;
     // The human asks the orchestrator how to use the app itself; it reads the
     // guide instead of guessing (or searching the app's own files).
+    // Every item stays: measured with a fresh Haiku orchestrator, a short list
+    // that pointed to the app-*.md topics got 2.5 of 5 "where is it" questions
+    // right (it answers from the prompt and rarely opens the topics); this
+    // map gets them all. The wording is kept tight because it rides on every turn.
     const appHelpLine = meta.isGod
       ? [
-          `APP HELP — Scranton Branch is this app (not Claude Code: never answer with /config, settings.json or claude commands). Where things are; for anything not here, Read the matching ${inRoot(PROTOCOL_DIR, 'app-pages.md')}, app-setup.md or app-settings.md before answering:`,
-          '- Top bar: Floor (pixel office) / Manager (sidebar pages), theme ☾, Settings (wrench).',
+          `APP HELP — Scranton Branch is this app (not Claude Code: never answer with /config, settings.json or claude commands). Where things are; for anything else Read ${inRoot(PROTOCOL_DIR, 'app-pages.md')}, app-setup.md or app-settings.md first:`,
+          '- Top bar: Floor (pixel office) / Manager (sidebar pages), theme, Settings (wrench, with a search).',
           '- Manager sidebar: Now, Tasks, Inbox, Deliverables; Office: Automations, Memory, Team, Factories; Setup: Capabilities, Connections, Environment, AI providers, MCP; Agents; Temps.',
-          '- Let an agent write outside its folders / switch its git off / give it web, shell or MCP servers: Manager → Capabilities → that agent\'s row → the chip ("Outside its folders", "Git"…). Not in Settings.',
-          '- Skills an agent may get, and your own skill marketplaces: Manager → Capabilities → tab Skills.',
-          '- See or preview what agents made (Markdown, PDF, diagrams, CSV…), who changed it and each version\'s changes: Manager → Deliverables → click the file.',
-          '- Answer your questions: Manager → Inbox (or the card in Tasks). Search what the office knows: Manager → Memory.',
-          '- Keys for Jira, Confluence, GitHub, Notion, custom REST APIs: Manager → Connections. Secrets, variables, runners: Manager → Environment (agents propose runners with md-run --propose; its secrets must exist there first).',
-          '- Engines and models, custom endpoints, certificates: Manager → AI providers. Your own tool servers: Manager → MCP.',
-          '- Another office at the same time: File → New Floor (Ctrl+Shift+N), or the office name under "Scranton Branch" in the sidebar → New floor. Each floor is its own window and process, with its own orchestrator; File → Open Floor reopens one. One office per floor.',
-          '- Settings (wrench, with a search box): General (updates, Freezes log, office folder, keep awake, language, reset) · Setup (installed tools) · Models & API keys · Autonomy & limits · Tools, Slack & webhooks (default MCP servers, Slack, webhooks) · Voice · Memory & knowledge (memory model).'
+          '- An agent writing outside its folders, its git, web, shell or MCP servers: Manager → Capabilities → that agent\'s row → the chip ("Outside its folders", "Git"…). Skills and your own skill marketplaces: Capabilities → Skills. Not in Settings.',
+          '- What agents made (Markdown, PDF, diagrams, CSV…), who changed it, each version: Manager → Deliverables → the file. Your questions: Inbox (or the card in Tasks). What the office knows: Memory.',
+          '- Keys for Jira, GitHub, Notion or any REST API: Manager → Connections. Secrets, variables, runners: Manager → Environment (md-run --propose may name a secret that does not exist yet: the human creates it in the same prompt).',
+          '- Model and effort per role (orchestrator, your agents, temps): Settings → Models & API keys. Engines, custom endpoints, certificates: Manager → AI providers. Your own tool servers: Manager → MCP.',
+          '- Another office at once: File → New Floor (Ctrl+Shift+N); each floor is its own window with its own orchestrator.',
+          '- Settings: General (updates, Freezes log, office folder, keep awake, language, reset) · Setup (installed tools) · Models & API keys · Autonomy & limits · Tools, Slack & webhooks · Voice · Memory & knowledge.'
         ].join('\n')
       : '';
     const hireLine = meta.isGod
