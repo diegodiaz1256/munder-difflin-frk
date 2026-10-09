@@ -144,6 +144,8 @@ import {
 } from '../shared/codexRemote';
 import { makeSpawnGate } from './spawnGate';
 import { clearWorkerScratch } from './workerScratch';
+import { appendWorkLog, workLogLine, type WorkLogEntry } from './workLog';
+import { messageBody } from '../shared/messageBody';
 import { FreezeMonitor, instrumentEvents, instrumentIpc, instrumentTimers, type FreezeEntry } from './freezeLog';
 
 // Freeze log (freezeLog.ts): set up before any handler or timer exists, so all
@@ -473,6 +475,7 @@ interface WorkerRec {
   workerId: string;       // == the PTY id == hive agent id (`worker-<reqId>`)
   reqId: string;          // the spawn-request id
   name?: string;          // display name (for the worker tab)
+  objective?: string;     // what it was asked to do (for the orchestrator's work log)
   slack?: { channel: string; thread_ts: string };
   baseBranch: string;     // the branch its worktree was cut from (for ahead-of-base)
   spawnedAt: number;      // epoch ms
@@ -804,6 +807,41 @@ function teardownPty(id: string): void {
  *  controller uses this to surface every terminal failure AND to carry the Slack
  *  {channel,thread_ts} so god can post a 'couldn't complete' reply — closing the
  *  Slack loop (the success path is the worker replying in-thread itself). */
+/** One line in the orchestrator's work log (main/workLog.ts). Best-effort. */
+function logWork(rec: WorkerRec, outcome: WorkLogEntry['outcome'], extra: Partial<WorkLogEntry> = {}): void {
+  const root = hive.root();
+  if (!root) return;
+  try {
+    const reg = hive.registry();
+    const godId = reg.godId ?? 'god';
+    const owner = reg.agents[godId]?.name ?? godId;
+    appendWorkLog(join(root, 'agents', godId), owner, workLogLine({ who: rec.name ?? rec.workerId, objective: rec.objective, outcome, ...extra }));
+  } catch (e) { console.error('[worker] work log failed:', e); }
+}
+
+/** The text of a worker's newest done (after it spawned): its report. */
+function workerDoneText(workerId: string, spawnedAt: number): string {
+  const root = hive.root();
+  if (!root) return '';
+  const base = join(root, 'agents', workerId, 'outbox');
+  let best: { ts: number; text: string } | null = null;
+  for (const dir of [base, join(base, '.sent')]) {
+    let files: string[] = [];
+    try { files = readdirSync(dir); } catch { continue; }
+    for (const f of files) {
+      if (!f.endsWith('.json')) continue;
+      try {
+        const msg = JSON.parse(readFileSync(join(dir, f), 'utf8')) as Record<string, unknown>;
+        if (msg.act !== 'done') continue;
+        const ts = Date.parse(String(msg.created_at ?? '')) || statSync(join(dir, f)).mtimeMs;
+        if (ts <= spawnedAt || (best && ts <= best.ts)) continue;
+        best = { ts, text: messageBody(msg) || (typeof msg.subject === 'string' ? msg.subject : '') };
+      } catch { /* skip unreadable/partial */ }
+    }
+  }
+  return best?.text ?? '';
+}
+
 function informGod(subject: string, body: string, slack?: { channel: string; thread_ts: string }): void {
   try {
     const slackLine = slack
@@ -1226,6 +1264,9 @@ ptyManager.setExitHandler((id, exitCode, info) => {
   // pty->agent mapping, so after it runs we can no longer say WHOSE process
   // died. Only abnormal exits are recorded (recordAgentExit returns early on a
   // clean one), so this adds no noise to a normal archive.
+  // A temp whose process ended before it reported done (crash, refused start).
+  const exitingWorker = liveWorkers.get(id);
+  if (exitingWorker && !exitingWorker.releasing) logWork(exitingWorker, 'exited', { exitCode });
   try {
     const dyingAgent = ptyToAgent.get(id);
     if (dyingAgent) {
@@ -5289,6 +5330,13 @@ ipcMain.handle('hive:memoryCorpus', async () => {
       const project = await memoryProjectOf(a.cwd, home);
       out.push({ id: `agent:${a.id}`, kind: 'agent', label: a.name, agentId: a.id, project, projectType: hive.projectTypeOf(a.cwd), text: text.slice(0, PER_FILE) });
     } catch { /* no memory yet */ }
+    // The orchestrator's work log (main/workLog.ts), written by the app.
+    if (a.id === (reg.godId ?? 'god')) {
+      try {
+        const log = await readFile(join(root, 'agents', a.id, 'worklog.md'), 'utf8');
+        out.push({ id: `agent:${a.id}:worklog`, kind: 'agent', label: a.name, agentId: a.id, project: await memoryProjectOf(a.cwd, home), projectType: hive.projectTypeOf(a.cwd), text: log.slice(-PER_FILE) });
+      } catch { /* no work handed out yet */ }
+    }
   }));
   try {
     const files = (await readdir(join(root, 'research'))).filter((f) => /\.(md|txt)$/i.test(f)).slice(0, 40);
@@ -6979,7 +7027,7 @@ async function processSpawnRequest(filePath: string): Promise<void> {
   // tokenCap is optional plumbing (default unlimited) — only a positive finite cap is kept.
   const tokenCap = typeof raw.tokenCap === 'number' && Number.isFinite(raw.tokenCap) && raw.tokenCap > 0
     ? raw.tokenCap : undefined;
-  liveWorkers.set(workerId, { workerId, reqId, name: meta.name, slack, baseBranch, spawnedAt: Date.now(), tokenCap, card });
+  liveWorkers.set(workerId, { workerId, reqId, name: meta.name, objective, slack, baseBranch, spawnedAt: Date.now(), tokenCap, card });
 
   // Dispatch the objective via the standard inbox path (zero new transport),
   // reusing the autonomous-request preamble so the worker gets the exact Slack
@@ -7089,6 +7137,7 @@ async function ephemeralWorkerTick(): Promise<void> {
         // Success: the worker already replied in-thread; just release it.
         rec.releasing = true;
         console.log(`[worker] ${workerId} signaled done — releasing`);
+        logWork(rec, 'done', { result: workerDoneText(workerId, rec.spawnedAt) });
         // Its mailbox is finished with too. Workers seldom file their own work
         // order before signaling done, and the id is reused on every re-hire of
         // the same name, so anything left unread here would greet the next
@@ -7132,6 +7181,7 @@ async function ephemeralWorkerTick(): Promise<void> {
         if (used > tokenCap) {
           rec.releasing = true;
           console.warn(`[worker] reaping ${workerId} — token cap (${used.toLocaleString()} > ${tokenCap.toLocaleString()})`);
+          logWork(rec, 'tokens');
           informGod(
             `[worker reaped — token cap] ${workerId}`,
             `Worker ${workerId} used ${used.toLocaleString()} tokens (> its cap of ${tokenCap.toLocaleString()}) and was reaped. Any committed work on its branch is preserved for you.`,
@@ -7147,6 +7197,7 @@ async function ephemeralWorkerTick(): Promise<void> {
       if (idleMs > idleTimeoutMs) {
         rec.releasing = true;
         console.warn(`[worker] reaping idle ${workerId} (${Math.round(idleMs / 60000)}min idle)`);
+        logWork(rec, 'idle');
         informGod(
           `[worker reaped — idle] ${workerId}`,
           `Worker ${workerId} produced no output for ${Math.round(idleMs / 60000)} min (> the ${Math.round(idleTimeoutMs / 60000)} min cap) and never signaled done, so it was reaped. Any committed work on its branch is preserved for you.`,
