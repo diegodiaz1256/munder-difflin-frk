@@ -415,7 +415,17 @@
     "saved": "Saved",
     "saving": "Saving…",
     "unsavedChanges": "unsaved changes",
-    "unsavedWarning": "You have unsaved settings. Close anyway and lose them?"
+    "unsavedWarning": "You have unsaved settings. Close anyway and lose them?",
+    "freezes": {
+      "title": "Freezes",
+      "none": "No freezes in the last 24 hours.",
+      "count_one": "{{count}} freeze in the last 24 hours (the longest: {{worst}} ms).",
+      "count_other": "{{count}} freezes in the last 24 hours (the longest: {{worst}} ms).",
+      "open": "Open log",
+      "inWindow": "the window, on {{screen}}",
+      "unknown": "cause not caught (not a handler or timer)",
+      "hint": "The app writes down every stall over 200 ms and what was running. Nothing is sent anywhere; attach the log file when you report a freeze."
+    }
   },
   "commandCenter": {
     "title": "COMMAND CENTER",
@@ -1531,7 +1541,9 @@
   },
   "app": {
     "godFailed": "The orchestrator could not start:",
-    "godRetry": "Retry"
+    "godRetry": "Retry",
+    "clockingIn": "CLOCKING IN",
+    "clockingInBody": "{{godName}} is settling into the corner office and getting the floor ready. Hang tight…"
   },
   "usage": {
     "title": "Subscription usage",
@@ -1907,7 +1919,7 @@
         "subagents": "Sub-agents",
         "subagentsDesc": "Claude's own helpers inside the session, which the office never sees (Agent, Task)",
         "roam": "Outside its folders",
-        "roamDesc": "Off: it writes only in its workspace, its hive folder, the hive and the temp dir (the orchestrator also in the office repos). On: anywhere on the disk. Applies at once."
+        "roamDesc": "Off: it writes only in its workspace, its hive folder, the hive and the temp dir (the orchestrator also in the office repos). On: anywhere on the disk. Applies at once. It is a fence, not a jail: see the note below the table."
       },
       "accessRead": "Read only",
       "accessWrite": "Read & write",
@@ -1925,7 +1937,8 @@
         "none": "None yet.",
         "everyone": "every agent",
         "remove": "Remove"
-      }
+      },
+      "guardLimits": "\"Outside its folders\" and \"Git\" are checked on every command before it runs: file tools, shell commands (including what they pass to bash -c, cmd /c, PowerShell or wsl) and python/node/perl/ruby one-liners. A script saved in a file, or a path the program builds while it runs, cannot be read in advance, so this is a fence for honest mistakes, not a jail. For a hard limit, run the agent in WSL or a container."
     },
     "conn": {
       "step1": "Pick a service and get its key",
@@ -2448,6 +2461,16 @@
       "customFetch": "Fetch from server",
       "emptyAuth": "\"{{id}}\" has an empty sign-in entry, which hides the key in models.json. Run /logout in the engine and pick {{id}}, then sign in again if you need it."
     },
+    "floors": {
+      "title": "Floors",
+      "new": "New floor",
+      "newHint": "Another office, in its own window, with its own orchestrator and agents.",
+      "main": "Main floor",
+      "noOffice": "no office yet",
+      "none": "No other floors yet.",
+      "running": "open",
+      "forgetTitle": "Forget this floor. Its office folder and the agents’ work are not touched."
+    },
     "boot": {
       "title": "The office is starting.",
       "body": "{{name}} is clocking in; this can take a little while on the first start."
@@ -2476,9 +2499,15 @@
       "restartedList": "Restarted: {{names}}",
       "joinedList": "Joined: {{names}}",
       "leftList": "Left: {{names}}"
+    },
+    "god": {
+      "badge": "Orchestrator",
+      "tip": "{{godName}} is the orchestrator (the \"god agent\"): it reads your requests, hands the work to the right agents, keeps them coordinated and only brings you what needs you."
     }
   },
   "hivePicker": {
+    "inUse": "open on another floor",
+    "inUseTitle": "Another floor is running this office. Use that window, or pick a different office here.",
     "couldNotOpen": "Could not open that folder.",
     "title": "SELECT A HARNESS CONFIG",
     "intro": "A <strong>harness config</strong> is the folder where the app keeps everything for one workspace — its settings, your agents and their memory, tasks, triggers, and history. Each config is separate and self-contained, so you can run different setups side by side. Open the one you were working in, switch to another, or start a new one.",

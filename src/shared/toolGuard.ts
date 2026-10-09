@@ -11,8 +11,12 @@
  *   the shell. A file tool writing outside, or a shell command that moves
  *   into, writes to or deletes from a folder outside, is refused. Reading
  *   elsewhere stays allowed. The check reads the command line, so it catches
- *   the plain ways out (cd, redirects, rm/mv/cp/Remove-Item…), not a script
- *   determined to hide where it writes; it is a fence, not a jail.
+ *   the plain ways out (cd, redirects, rm/mv/cp/Remove-Item…), the same inside
+ *   `bash -c`, `cmd /c`, `powershell -Command` (encoded too) and `wsl`, and
+ *   one-liners in python/node/perl/ruby/php (`-c`/`-e`, heredocs) that write
+ *   to or delete a path outside, or start git when git is off.
+ *   What it cannot read is a script in a file (`python build.py`) or a path
+ *   built at run time: it is a fence, not a jail.
  */
 
 import { writtenPathsOf } from './agentSteps';
@@ -164,6 +168,95 @@ function writtenPaths(name: string, args: string[]): string[] {
   return paths;
 }
 
+/** Shells that run a command line given as an argument. */
+const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh', 'fish', 'cmd', 'powershell', 'pwsh', 'wsl']);
+/** Interpreters and the flag that takes inline code. */
+const INLINE_FLAGS: Record<string, string[]> = {
+  python: ['-c'], python3: ['-c'], py: ['-c'], node: ['-e', '--eval', '-p', '--print'], deno: ['eval'], bun: ['-e', '--eval'],
+  perl: ['-e', '-E'], ruby: ['-e'], php: ['-r']
+};
+
+/** The command line a shell is asked to run, or null. */
+function nestedCommand(name: string, args: string[]): string | null {
+  if (name === 'cmd') {
+    const i = args.findIndex((a) => /^\/[ck]$/i.test(a));
+    return i >= 0 ? args.slice(i + 1).join(' ') : null;
+  }
+  if (name === 'powershell' || name === 'pwsh') {
+    const enc = args.findIndex((a) => /^-(?:e|ec|encodedcommand)$/i.test(a));
+    if (enc >= 0 && args[enc + 1]) {
+      // Base64 of UTF-16LE (shared code: no Buffer here).
+      try {
+        const bin = atob(args[enc + 1]);
+        let s = '';
+        for (let k = 0; k + 1 < bin.length; k += 2) s += String.fromCharCode(bin.charCodeAt(k) | (bin.charCodeAt(k + 1) << 8));
+        return s;
+      } catch { return null; }
+    }
+    const i = args.findIndex((a) => /^-(?:c|command)$/i.test(a));
+    return i >= 0 ? args.slice(i + 1).join(' ') : null;
+  }
+  if (name === 'wsl') {
+    const i = args.findIndex((a) => a === '-e' || a === '--exec' || a === '--');
+    if (i >= 0) return args.slice(i + 1).join(' ') || null;
+    // `wsl -d Ubuntu rm -rf /x`: skip wsl's own options and their values.
+    let j = 0;
+    while (j < args.length && args[j].startsWith('-')) j += /^-(?:d|u|-distribution|-user|-cd)$/.test(args[j]) ? 2 : 1;
+    return args.slice(j).join(' ') || null;
+  }
+  const i = args.findIndex((a) => /^-[a-z]*c$/.test(a));
+  return i >= 0 && args[i + 1] !== undefined ? args[i + 1] : null;
+}
+
+/** Inline code an interpreter is asked to run, or null. */
+function inlineCode(name: string, args: string[]): string | null {
+  const flags = INLINE_FLAGS[name];
+  if (!flags) return null;
+  const i = args.findIndex((a) => flags.includes(a));
+  return i >= 0 && args[i + 1] !== undefined ? args[i + 1] : null;
+}
+
+/** Calls that change files, across python/node/perl/ruby/php. */
+const CODE_WRITES = new RegExp([
+  String.raw`open\s*\([^)]*,\s*(?:mode\s*=\s*)?['"][^'"]*[wax+]`,
+  String.raw`\.(?:write_text|write_bytes|unlink|rmdir|mkdir|touch|rename|replace|symlink_to)\s*\(`,
+  String.raw`\bos\.(?:remove|unlink|rename|replace|makedirs|mkdir|rmdir|removedirs|chmod|symlink|link)\b`,
+  String.raw`\bshutil\.`,
+  String.raw`\b(?:writeFileSync|appendFileSync|unlinkSync|renameSync|mkdirSync|copyFileSync|cpSync|rmSync|rmdirSync|truncateSync|writeFile|appendFile|unlink|rename|mkdir|copyFile|cp|rm|rmdir|symlink|truncate|createWriteStream|writeTextFile|remove)\s*\(`,
+  String.raw`\bFile\.(?:write|delete|rename|open)\b`,
+  String.raw`\bFileUtils\.`,
+  String.raw`\bfile_put_contents\b`,
+  String.raw`\b(?:unlink|rmtree)\b`,
+  String.raw`\bopen\s*\(?\s*\w*\s*,\s*['"]?[>+]`
+].join('|'));
+/** Code that starts a program. */
+const CODE_RUNS = /\b(?:subprocess|os\.system|os\.popen|popen|execSync|execFileSync|spawnSync|exec|execFile|spawn|system|Command|Bun\.spawn|shell_exec|passthru)\b|`/;
+/** "git" as a program name inside code: a string or argv item of its own. */
+const CODE_GIT = /(?:^|["'`\s[(,])git(?:\.exe)?(?=["'`\s,\])]|$)/;
+
+/** String literals in code that look like paths (absolute, ~, or climbing out). */
+function codePaths(code: string): string[] {
+  const out: string[] = [];
+  for (const m of code.matchAll(/(["'`])((?:\\.|(?!\1)[^\\\n])*)\1/g)) {
+    const s = m[2].replace(/\\\\/g, '\\');
+    if (/^(?:[a-zA-Z]:[\\/]|\/|~[\\/]|\.\.[\\/])/.test(s)) out.push(s);
+  }
+  return out;
+}
+
+/** Heredoc bodies fed to a program on the command line (`python - <<'EOF' … EOF`). */
+function heredocs(cmd: string): Array<{ program: string; body: string }> {
+  const out: Array<{ program: string; body: string }> = [];
+  const re = /(?:^|[\s;&|(])([\w./\\-]+)[^\n]*?<<-?\s*(['"]?)(\w+)\2[^\n]*\n([\s\S]*?)\n\s*\3\s*(?=\n|$)/g;
+  for (const m of cmd.matchAll(re)) {
+    const program = (m[1].replace(/\\/g, '/').split('/').pop() ?? '').toLowerCase().replace(/\.exe$/, '');
+    out.push({ program, body: m[4] });
+  }
+  return out;
+}
+
+const gitOff: GuardVerdict = { deny: true, reason: 'Refused: git is switched off for you (Capabilities). Leave git to an agent that has it, or tell the human.' };
+
 /** Why a call is refused, or null. `home` resolves `~`. */
 export function guardToolCall(tool: string | undefined, input: unknown, policy: GuardPolicy, home = ''): GuardVerdict | null {
   if (!tool) return null;
@@ -186,12 +279,36 @@ export function guardToolCall(tool: string | undefined, input: unknown, policy: 
   if (!SHELL_TOOLS.has(tool)) return null;
   const cmd = typeof inp.command === 'string' ? inp.command : Array.isArray(inp.command) ? (inp.command as unknown[]).join(' ') : typeof inp.cmd === 'string' ? inp.cmd : '';
   if (!cmd) return null;
-  for (const words of splitCommands(cmd)) {
+  return checkShell(cmd, 0);
+
+  /** Inline code: git when git is off, or a write to a path outside. */
+  function checkCode(code: string): GuardVerdict | null {
+    if (!policy.git && CODE_RUNS.test(code) && CODE_GIT.test(code)) return gitOff;
+    if (!policy.contained || !CODE_WRITES.test(code)) return null;
+    for (const p of codePaths(code)) if (outside(p)) return { deny: true, reason: fenceReason(p) };
+    return null;
+  }
+
+  /** A command line, and whatever it hands to another shell or interpreter. */
+  function checkShell(line: string, depth: number): GuardVerdict | null {
+  if (depth > 3) return null;
+  for (const h of heredocs(line)) {
+    const v = SHELLS.has(h.program) ? checkShell(h.body, depth + 1) : INLINE_FLAGS[h.program] ? checkCode(h.body) : null;
+    if (v) return v;
+    // Its lines are code or input, not commands of this shell.
+    line = line.replace(h.body, '');
+  }
+  for (const words of splitCommands(line)) {
     const prog = programOf(words);
     if (!prog) continue;
-    if (!policy.git && prog.name === 'git') {
-      return { deny: true, reason: 'Refused: git is switched off for you (Capabilities). Leave git to an agent that has it, or tell the human.' };
+    if (!policy.git && prog.name === 'git') return gitOff;
+    if (SHELLS.has(prog.name)) {
+      const inner = nestedCommand(prog.name, prog.args);
+      const v = inner ? checkShell(inner, depth + 1) : null;
+      if (v) return v;
     }
+    const code = inlineCode(prog.name, prog.args);
+    if (code !== null) { const v = checkCode(code); if (v) return v; }
     if (!policy.contained) continue;
     if (MOVES.has(prog.name)) {
       const target = prog.args.find((a) => !/^-/.test(a));
@@ -207,4 +324,5 @@ export function guardToolCall(tool: string | undefined, input: unknown, policy: 
     for (const t of redirectTargets(words)) if (outside(t)) return { deny: true, reason: fenceReason(t) };
   }
   return null;
+  }
 }

@@ -63,7 +63,7 @@ export function TaskTimeline({ taskId, taskKey }: { taskId: string; taskKey?: st
   const entries: Entry[] = [
     ...events.map((e) => ({ ts: e.ts, text: describeTaskEvent(e, name, t), detail: detailOf(e) })),
     ...messages.map((m) => ({ ts: m.created_at, text: t('taskHistory.message', { from: name(m.from), to: m.to === 'human' ? t('pro.inbox.you') : name(m.to) }), detail: m.subject }))
-  ].sort((a, b) => a.ts.localeCompare(b.ts));
+  ].sort((a, b) => (a.ts ?? '').localeCompare(b.ts ?? ''));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

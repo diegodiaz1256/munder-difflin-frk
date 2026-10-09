@@ -30,6 +30,7 @@ import { RealtimeDevicePicker } from '@/realtime/DevicePicker';
 import { CostHud } from '@/realtime/CostHud';
 import { isComposingKey } from '@shared/imeGuard';
 import { LANGUAGES, setLanguage } from '@/i18n';
+import { FreezeLogSection } from './FreezeLogSection';
 
 export interface SettingsModalProps {
   config: HarnessConfig;
@@ -974,6 +975,11 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                           answer, and the toolbar chip says nothing at all when
                           the answer is yes. */}
                       <UpdatesSection />
+
+                      <div style={{ height: 1, background: 'var(--cth-ink-300)' }} />
+
+                      {/* Freezes the app noticed by itself (main/freezeLog.ts). */}
+                      <FreezeLogSection headStyle={sectionHead} />
 
                       <div style={{ height: 1, background: 'var(--cth-ink-300)' }} />
 
