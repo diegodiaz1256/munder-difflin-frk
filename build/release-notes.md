@@ -1,4 +1,4 @@
-- **Clearer Memory**: search shows how it found each result.
-- **Temps** no longer quit at Claude's trust question.
-- **Faster** on a slow disk, WSL or antivirus.
-- Next update: Scranton Branch 1.0.0.
+- **Scranton Branch 1.0.0**: its own versions from now on.
+- **Apache-2.0 license**: keep NOTICE when you share it.
+- Memory search shows its path, also on the map.
+- Best on Windows with WSL, quick on slow disks.

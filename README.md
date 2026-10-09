@@ -7,7 +7,7 @@
 ### The branch office of Munder Difflin: offices that work together
 
 <p>
-  <a href="./LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-F4D35E.svg?style=flat-square&labelColor=6E1423"></a>
+  <a href="./LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-F4D35E.svg?style=flat-square&labelColor=6E1423"></a>
   <a href="https://github.com/diegodiaz1256/scranton-branch/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/diegodiaz1256/scranton-branch?style=flat-square&label=release&color=F4D35E&labelColor=6E1423"></a>
   <img alt="Platform: macOS | Windows | Linux | Linux server" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20server-F4F1EA.svg?style=flat-square&labelColor=6E1423">
 </p>
@@ -91,8 +91,8 @@ npm run typecheck
 node --test test/      # the test suite
 ```
 
-Versions are `<upstream version>-fork.<patch>` (e.g. `0.4.6-fork.6`). They never collide with
-upstream tags, and the in-app updater only follows this repository. A push to `main` with a
+Scranton Branch has its own versions from 1.0.0 (semantic versioning); before that they were
+`<upstream version>-fork.<patch>`. The in-app updater only follows this repository. A push to `main` with a
 new version in `package.json` builds and publishes the release.
 
 ## Architecture in one paragraph
@@ -106,9 +106,11 @@ the same code under a DOM-less React, inside the server (`src/server/`). Details
 
 ## License and credits
 
-The source code is **MIT** ([LICENSE](./LICENSE)): © Chaitanya Giri and the Munder Difflin
-contributors for the original work, © the Scranton Branch contributors for this fork's
-changes.
+From 1.0.0 the source code is **Apache-2.0** ([LICENSE](./LICENSE)), © the Scranton Branch
+contributors. If you redistribute it, changed or not, keep the [NOTICE](./NOTICE) file with it:
+that is the attribution the license asks for. The parts that come from Munder Difflin
+(© Chaitanya Giri and the Munder Difflin contributors), and this fork up to 0.4.6-fork.38, stay
+under the MIT License ([LICENSES/MIT-munder-difflin.txt](./LICENSES/MIT-munder-difflin.txt)).
 
 The bundled pixel art is **Modern Interiors** by [LimeZu](https://limezu.itch.io/moderninteriors),
 under its Complete Version licence, which requires credit to LimeZu. It is licensed separately
