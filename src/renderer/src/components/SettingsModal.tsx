@@ -182,6 +182,28 @@ export type Section = 'General' | 'Prerequisites' | 'Agents & Models' | 'Autonom
 const NAV_SECTIONS: Section[] = ['General', 'Prerequisites', 'Agents & Models', 'Autonomy & Budgets', 'Connections', 'Voice', 'Memory & Knowledge'];
 /** i18n key for each nav section's label — the Section values themselves stay
  *  as stable identifiers (tab state, deep links). */
+/** One line under each section's name: what lives there (also what search matches). */
+const NAV_SECTION_DESC: Record<Section, string> = {
+  'General': 'settings.navDesc.general',
+  'Prerequisites': 'settings.navDesc.prerequisites',
+  'Agents & Models': 'settings.navDesc.agentsModels',
+  'Autonomy & Budgets': 'settings.navDesc.autonomyBudgets',
+  'Connections': 'settings.navDesc.connections',
+  'Voice': 'settings.navDesc.voice',
+  'Memory & Knowledge': 'settings.navDesc.memoryKnowledge'
+};
+/** Extra words search should find a section by (settings.find.*). */
+const NAV_SECTION_FIND: Record<Section, string> = {
+  'General': 'settings.find.general',
+  'Prerequisites': 'settings.find.prerequisites',
+  'Agents & Models': 'settings.find.agentsModels',
+  'Autonomy & Budgets': 'settings.find.autonomyBudgets',
+  'Connections': 'settings.find.connections',
+  'Voice': 'settings.find.voice',
+  'Memory & Knowledge': 'settings.find.memoryKnowledge'
+};
+const fold = (s: string): string => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
 const NAV_SECTION_KEYS: Record<Section, string> = {
   'General': 'settings.nav.general',
   'Prerequisites': 'settings.nav.prerequisites',
@@ -198,6 +220,20 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [activeSection, setActiveSection] = useState<Section>(initialSection ?? 'General');
+  // Search over each section's name, its description and extra words. Every
+  // word must match; a search that leaves the open section out jumps to the
+  // first one it found.
+  const [navQuery, setNavQuery] = useState('');
+  const shownSections = NAV_SECTIONS.filter((sec) => {
+    const words = fold(navQuery).split(/\s+/).filter(Boolean);
+    if (!words.length) return true;
+    const hay = fold(`${t(NAV_SECTION_KEYS[sec])} ${t(NAV_SECTION_DESC[sec])} ${t(NAV_SECTION_FIND[sec])} ${sec}`);
+    return words.every((w) => hay.includes(w));
+  });
+  useEffect(() => {
+    if (shownSections.length && !shownSections.includes(activeSection)) setActiveSection(shownSections[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navQuery]);
 
   // Change-home flow: null until the user picks a new folder, then the sub-modal
   // confirms move-vs-fresh. Pre-selects 'move' (recommended - keeps the data).
@@ -803,7 +839,8 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
 
   return (
     <div
-      onClick={busy ? undefined : onClose}
+      // The backdrop closes like the Close button: with the unsaved-changes check.
+      onClick={busy ? undefined : () => void requestClose()}
       style={{
         position: 'fixed', inset: 0,
         background: 'rgba(26, 19, 32, 0.7)',
@@ -814,7 +851,8 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 840, maxWidth: '92vw', maxHeight: '88vh',
+          // One size for every section, so the window does not jump between them.
+          width: 'min(1100px, 94vw)', height: 'min(780px, 90vh)',
           display: 'flex', flexDirection: 'column',
           filter: 'drop-shadow(4px 4px 0 rgba(26, 19, 32, 0.25))'
         }}
@@ -823,7 +861,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
           variant="dialog"
           title={modalTitle}
           noPadding
-          style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', maxHeight: '88vh' }}
+          style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%' }}
         >
           {/* === Change home sub-modal === */}
           {changeHome ? (
@@ -915,36 +953,41 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
             <>
               <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
 
-                {/* Left nav */}
+                {/* Left nav: a search, then each section with a line saying what is in it. */}
                 <div style={{
-                  width: 160, flexShrink: 0,
-                  display: 'flex', flexDirection: 'column',
+                  width: 250, flexShrink: 0,
+                  display: 'flex', flexDirection: 'column', gap: 2,
                   borderRight: '2px solid var(--cth-ink-300)',
-                  paddingTop: 8, paddingBottom: 8,
+                  padding: 8, overflowY: 'auto',
                   background: 'var(--cth-cream-200)'
                 }}>
-                  {NAV_SECTIONS.map((section) => {
+                  <input
+                    type="search" value={navQuery} onChange={(e) => setNavQuery(e.target.value)}
+                    placeholder={t('settings.searchPlaceholder')} aria-label={t('settings.searchPlaceholder')}
+                    style={{ margin: '2px 0 8px', padding: '6px 8px', fontSize: 13, fontFamily: 'var(--cth-font-ui)', border: '1.5px solid var(--cth-ink-300)', background: 'var(--cth-cream-50)', color: 'var(--cth-ink-900)' }}
+                  />
+                  {shownSections.length === 0 && <span style={{ fontSize: 12, color: 'var(--cth-ink-500)', padding: '4px 8px' }}>{t('settings.searchNone')}</span>}
+                  {shownSections.map((section) => {
                     const active = activeSection === section;
                     return (
                       <button
                         key={section}
                         type="button"
                         onClick={() => setActiveSection(section)}
+                        aria-current={active ? 'page' : undefined}
                         style={{
-                          display: 'block', width: '100%', textAlign: 'left',
-                          padding: '10px 16px 8px',
+                          display: 'flex', flexDirection: 'column', gap: 2, width: '100%', textAlign: 'left',
+                          padding: '8px 10px',
                           border: 'none',
                           borderLeft: active ? '3px solid var(--cth-lemon)' : '3px solid transparent',
                           background: active ? 'var(--cth-ink-900)' : 'transparent',
-                          color: active ? 'var(--cth-cream-50)' : 'var(--cth-ink-700)',
-                          fontFamily: 'var(--cth-font-display)',
-                          fontSize: 8,
-                          lineHeight: '12px',
-                          cursor: 'pointer',
-                          letterSpacing: 0
+                          color: active ? 'var(--cth-cream-50)' : 'var(--cth-ink-900)',
+                          fontFamily: 'var(--cth-font-ui)',
+                          cursor: 'pointer'
                         }}
                       >
-                        {t(NAV_SECTION_KEYS[section])}
+                        <span style={{ fontSize: 13, fontWeight: 600, lineHeight: '18px' }}>{t(NAV_SECTION_KEYS[section])}</span>
+                        <span style={{ fontSize: 11, lineHeight: '15px', color: active ? 'var(--cth-cream-200)' : 'var(--cth-ink-500)' }}>{t(NAV_SECTION_DESC[section])}</span>
                       </button>
                     );
                   })}
@@ -958,6 +1001,10 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                   padding: '20px 24px',
                   display: 'flex', flexDirection: 'column', gap: 20
                 }}>
+                  <header style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingBottom: 12, borderBottom: '2px solid var(--cth-ink-300)' }}>
+                    <h2 style={{ margin: 0, fontSize: 18, lineHeight: '24px', color: 'var(--cth-ink-900)', fontFamily: 'var(--cth-font-ui)' }}>{t(NAV_SECTION_KEYS[activeSection])}</h2>
+                    <span style={{ fontSize: 13, color: 'var(--cth-ink-500)' }}>{t(NAV_SECTION_DESC[activeSection])}</span>
+                  </header>
 
                   {/* GENERAL */}
                   {activeSection === 'General' && (

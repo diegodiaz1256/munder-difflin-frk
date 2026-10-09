@@ -33,7 +33,10 @@ test('it names every Settings section', () => {
   const sections = read('src/renderer/src/components/SettingsModal.tsx').match(/const NAV_SECTIONS: Section\[\] = \[([^\]]+)\]/)[1]
     .split(',').map((s) => s.trim().replace(/^'|'$/g, ''));
   assert.ok(sections.length >= 6);
-  assert.deepEqual(sections.filter((s) => !guide.contents.includes(`**${s}**`)), []);
+  // By the name people see in the app (en.json), not the internal id.
+  const keys = read('src/renderer/src/components/SettingsModal.tsx').match(/const NAV_SECTION_KEYS[\s\S]*?\};/)[0];
+  const label = (s) => { const k = keys.match(new RegExp(`'${s.replace(/[&]/g, '\$&')}': 'settings\.nav\.([a-zA-Z]+)'`))[1]; return JSON.parse(read('src/renderer/src/i18n/locales/en.json')).settings.nav[k]; };
+  assert.deepEqual(sections.map(label).filter((l) => !guide.contents.includes(`**${l}**`)), []);
 });
 
 test('the orchestrator has the app map in its prompt, and the guide for the rest', () => {

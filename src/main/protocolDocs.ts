@@ -199,7 +199,7 @@ The harness spawns \`worker-<id>\` and moves the request to \`spawn-requests/.do
 \`.failed/\` with a reason. \`isolate\` (default true) gives it its own git worktree; \`slack\` routes its
 failures to a thread; \`character\`/\`accent\` set its look (a cast member's name already does).
 
-**It can be switched off** (Settings → Autonomy & Budgets, off by default). While off, a request
+**It can be switched off** (Settings → Autonomy & limits, off by default). While off, a request
 waits in \`spawn-requests/\` untouched; raise it with the human instead of retrying. Route work to an
 agent already on the floor first either way. A temp is archived when its job is done: for a
 permanent member of the office, see \`hire.md\`.`
@@ -327,22 +327,21 @@ same office. The top bar also has the theme switch (☾), full screen, and Setti
     when: 'the human asks about Settings, updates, freezes, memory model, voice, Slack, another office (floors)',
     body: `Answer with the exact place to click, in the human's language; say plainly when something is not possible. Never guess a setting that is not here.
 
-## Settings (the wrench)
+## Settings (the wrench; has a search)
 - **General** — version and updates (checked every 6 hours, install is the human's click), the
   **Freezes** log (stalls over 200 ms the app wrote down by itself, with the cause; "Open log" for
   a report), the office folder (change it: the app relaunches), keep the computer awake, plain
   language mode, notifications, auto-compact, telemetry, language, and Reset (start over). The
   layout (Floor / Manager) and the theme are in the top bar.
-- **Prerequisites** — the tools the app relies on (git, Node, uv, mempalace for memory…) with
-  install buttons.
-- **Agents & Models** — the orchestrator's engine and model, defaults for new agents.
-- **Autonomy & Budgets** — auto mode, token budgets for the floor and per agent, the circuit
+- **Setup** — the tools the app relies on (git, Node, uv, mempalace…), with install buttons.
+- **Models & API keys** — default model, model and effort per role, provider keys, certificates.
+- **Autonomy & limits** — auto mode, token budgets (floor and per agent), the circuit
   breaker (error storms, hard stop).
-- **Connections** — Slack (a channel's messages into your queue, replies in threads) and webhooks
+- **Tools, Slack & webhooks** — default MCP servers, Slack (a channel's messages into your queue, replies in threads) and webhooks
   (public endpoints with a secret, per-trigger JSON schema).
-- **Voice** — dictation (Groq, or local Whisper downloaded once) and talking to you in real time
+- **Voice** — dictation (Groq, or local Whisper, downloaded once) and talking in real time
   (needs an OpenAI key).
-- **Memory & Knowledge** — semantic memory on/off, the memory model (download or update it here:
+- **Memory & knowledge** — semantic memory on/off, the memory model (download or update it here:
   the only time memory goes online), the knowledge base (documents agents can query).
 
 ## Floors (several offices at once)

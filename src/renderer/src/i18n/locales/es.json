@@ -203,10 +203,10 @@
     "eraseEverything": "borrarlo todo y reiniciar",
     "nav": {
       "general": "General",
-      "prerequisites": "Requisitos",
-      "agentsModels": "Agentes y modelos",
-      "autonomyBudgets": "Autonomía y presupuestos",
-      "connections": "Conexiones",
+      "prerequisites": "Instalación",
+      "agentsModels": "Modelos y claves de API",
+      "autonomyBudgets": "Autonomía y límites",
+      "connections": "Herramientas, Slack y webhooks",
       "voice": "Voz",
       "memoryKnowledge": "Memoria y conocimiento"
     },
@@ -315,7 +315,7 @@
       "modelFailed": "La descarga falló: {{error}}",
       "modelDone": "Modelo listo.",
       "modelOffline": "La memoria nunca se conecta por su cuenta: este botón es la única vez que lo hace.",
-      "modelTooOld": "El mempalace instalado no puede usar EmbeddingGemma y no se ha podido actualizar {{detail}}. Reinstálalo desde Ajustes → Requisitos, o cambia el modelo de memoria a MiniLM (solo inglés) en el panel de memoria.",
+      "modelTooOld": "El mempalace instalado no puede usar EmbeddingGemma y no se ha podido actualizar {{detail}}. Reinstálalo desde Ajustes → Instalación, o cambia el modelo de memoria a MiniLM (solo inglés) en el panel de memoria.",
       "modelDownloadingHint": "Si mempalace es demasiado antiguo para este modelo, la app lo actualiza antes (unos minutos)."
     },
     "connections": {
@@ -378,7 +378,7 @@
       "voiceChatDesc": "Habla con el orquestador en tiempo real. Actívalo desde la pestaña de {{godName}}; aquí eliges qué micrófono y altavoz usa.",
       "openaiKey": "Clave de API de OpenAI · voz",
       "openaiKeyDesc1": "Hablar con {{godName}} usa la Realtime API de OpenAI: voz de entrada y de salida sobre una conexión en directo con {{model}}. Es un servicio distinto de la suscripción de Claude con la que trabajan tus agentes, así que necesita su propia clave de API de OpenAI.",
-      "openaiKeyDesc2": "Pégala una vez abajo. Se cifra en este equipo y no se vuelve a mostrar: cada sesión de voz genera con ella su propio token de corta duración, y la clave nunca sale de tu ordenador. Es la misma clave de OpenAI que aparece en Agentes y modelos; basta con ponerla en uno de los dos sitios.",
+      "openaiKeyDesc2": "Pégala una vez abajo. Se cifra en este equipo y no se vuelve a mostrar: cada sesión de voz genera con ella su propio token de corta duración, y la clave nunca sale de tu ordenador. Es la misma clave de OpenAI que aparece en Modelos y claves de API; basta con ponerla en uno de los dos sitios.",
       "keyPlaceholderSaved": "clave guardada; pega una nueva para sustituirla",
       "save": "Guardar",
       "keySaved": "Clave guardada: Hablar está listo. Empiézalo desde la tarjeta de {{godName}}.",
@@ -425,7 +425,27 @@
       "inWindow": "la ventana, en {{screen}}",
       "unknown": "causa no capturada (no era un handler ni un temporizador)",
       "hint": "La app apunta cada parón de más de 200 ms y qué se estaba ejecutando. No se envía a ningún sitio; adjunta el fichero cuando avises de una congelación."
-    }
+    },
+    "navDesc": {
+      "general": "Versión y actualizaciones, congelones, carpeta de la oficina, idioma, mantener despierto, reiniciar.",
+      "prerequisites": "Qué hay instalado: CLIs de agentes, git, Node, uv, el navegador de la oficina.",
+      "agentsModels": "Modelo por defecto, modelo y esfuerzo por rol, claves de proveedores, certificados.",
+      "autonomyBudgets": "Quién actúa sin preguntar, quién puede añadir agentes, cortacircuitos de tokens y bucles.",
+      "connections": "Servidores MCP que reciben los agentes nuevos, Slack y webhooks que despiertan agentes.",
+      "voice": "Dictado (sin conexión o Groq) y hablar con el orquestador.",
+      "memoryKnowledge": "Memoria semántica y su modelo, y el grafo de conocimiento."
+    },
+    "find": {
+      "general": "actualizar version congelon registro carpeta idioma despierto dormir reiniciar borrar tema",
+      "prerequisites": "instalar claude codex gemini cli git node npm uv python fortress navegador requisitos",
+      "agentsModels": "modelo opus sonnet haiku esfuerzo clave api anthropic openai openrouter groq certificado tls ca proxy",
+      "autonomyBudgets": "modo auto aprobar permiso presupuesto tokens cortacircuitos bucle contratar",
+      "connections": "mcp servidor herramientas slack webhook disparador fetch github",
+      "voice": "dictado whisper microfono hablar voz realtime groq",
+      "memoryKnowledge": "memoria mempalace semantica embedding modelo grafo conocimiento"
+    },
+    "searchPlaceholder": "Buscar en ajustes",
+    "searchNone": "No hay coincidencias."
   },
   "commandCenter": {
     "title": "CENTRO DE MANDO",
@@ -895,7 +915,7 @@
     "askMichael": "pedirle a {{godName}} que lo configure todo",
     "sections": {
       "prerequisites": {
-        "title": "Requisitos",
+        "title": "Instalación",
         "blurb": "La base sobre la que se apoya todo lo demás."
       },
       "memory": {
@@ -1237,7 +1257,7 @@
     "turnOff": "Desactivar",
     "turnOn": "Activar",
     "notInstalled": "La búsqueda por significado aún no está instalada.",
-    "setUpInPrereqs": "configúrala en Requisitos →",
+    "setUpInPrereqs": "configúrala en Instalación →",
     "plainNotesStill": "Sin ella, los agentes siguen tomando notas normales.",
     "searchLanguage": "Idioma de búsqueda",
     "modelFast": "Rápido",

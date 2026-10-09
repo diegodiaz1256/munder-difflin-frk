@@ -6839,7 +6839,7 @@ async function askToSpawnPending(): Promise<void> {
       defaultId: 0, cancelId: 2, noLink: true,
       title: 'Start a worker?',
       message: `${who} wants to start a worker: ${name}`,
-      detail: `${objective.length > 600 ? objective.slice(0, 600) + '…' : objective}\n\nTo stop being asked, turn on "Orchestrator may start workers" in Settings → Autonomy & Budgets.`
+      detail: `${objective.length > 600 ? objective.slice(0, 600) + '…' : objective}\n\nTo stop being asked, turn on "Orchestrator may start workers" in Settings → Autonomy & limits.`
     };
     const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
     refocusAfterDialog(win);

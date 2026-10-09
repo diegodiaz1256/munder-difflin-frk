@@ -2256,7 +2256,7 @@ export class HiveManager {
           '- Keys for Jira, Confluence, GitHub, Notion, custom REST APIs: Manager → Connections. Secrets, variables, runners: Manager → Environment (agents propose runners with md-run --propose; its secrets must exist there first).',
           '- Engines and models, custom endpoints, certificates: Manager → AI providers. Your own tool servers: Manager → MCP.',
           '- Another office at the same time: File → New Floor (Ctrl+Shift+N), or the office name under "Scranton Branch" in the sidebar → New floor. Each floor is its own window and process, with its own orchestrator; File → Open Floor reopens one. One office per floor.',
-          '- Settings (wrench): General (updates, Freezes log, office folder, keep awake, language, reset) · Prerequisites · Agents & Models (engines and models) · Autonomy & Budgets · Connections (Slack, webhooks) · Voice · Memory & Knowledge (memory model).'
+          '- Settings (wrench, with a search box): General (updates, Freezes log, office folder, keep awake, language, reset) · Setup (installed tools) · Models & API keys · Autonomy & limits · Tools, Slack & webhooks (default MCP servers, Slack, webhooks) · Voice · Memory & knowledge (memory model).'
         ].join('\n')
       : '';
     const hireLine = meta.isGod
