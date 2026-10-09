@@ -16,6 +16,9 @@ test('sessions come newest first, recorded one first, only this agent\'s', (t) =
   hive.ensureHive();
   const reg = { godId: null, agents: { 'kevin-1': { id: 'kevin-1', name: 'Kevin', cwd: home } } };
   fs.writeFileSync(path.join(hive.root(), 'registry.json'), JSON.stringify(reg));
+  // Written behind the hive's back: drop its 300 ms registry cache, or a fast
+  // disk (Linux CI) reads the registry from before this write.
+  hive.registryCache = null;
   hive.recordSession('kevin-1', 'real-277');
   hive.recordSession('kevin-1', 'empty-0af');
   fs.appendFileSync(path.join(hive.root(), 'log.jsonl'), JSON.stringify({ kind: 'session', agentId: 'other', sessionId: 'not-kevins' }) + '\n');

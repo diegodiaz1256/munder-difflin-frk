@@ -20,6 +20,7 @@ import { HivePicker } from '@/components/HivePicker';
 import { QuitWarningModal, type ClosingTimeState } from '@/components/QuitWarningModal';
 import { CompletionToast } from '@/realtime/CompletionToast';
 import { UpdateToast } from '@/components/UpdateToast';
+import { RunnerProposalModal } from '@/components/RunnerProposalModal';
 import { UpdateBadge } from '@/components/UpdateBadge';
 import { UsageWindowsChip } from './components/UsageWindowsChip';
 import { useAppTheme, toggleAppTheme } from '@/design/theme';
@@ -299,6 +300,8 @@ export function App() {
       {/* v0.3.4: background-update toast ("restart to update"); renders null until
           main's updater pushes a status. */}
       <UpdateToast />
+      {/* An agent's runner proposal (md-run --propose); renders null until one arrives. */}
+      <RunnerProposalModal />
       {/* Title bar */}
       <div
         className="cth-titlebar-drag"

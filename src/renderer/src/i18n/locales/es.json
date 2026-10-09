@@ -2668,5 +2668,27 @@
     "renewTip": "Vuelve a emitir la clave antes de que caduque",
     "signOut": "Cerrar sesión",
     "needsUvWindows": "Para iniciar sesión hace falta uv en el propio Windows (Fortress se ejecuta junto a la app, no dentro de WSL): powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\""
+  },
+  "proposal": {
+    "title": "{{agent}} pide un runner: {{name}}",
+    "why": "Para qué",
+    "command": "Comando",
+    "secrets": "Secretos que usa",
+    "noSecrets": "Ninguno.",
+    "stored": "guardado",
+    "missing": "aún no existe",
+    "kind": "Cómo añadirlo",
+    "kindSecret": "Valor",
+    "kindOp": "1Password",
+    "valuePlaceholder": "Pega el valor",
+    "valueFor": "Valor de {{name}}",
+    "note": "Se ejecuta en la carpeta de {{agent}}. El agente solo recibe la salida, con cada secreto enmascarado, y se te vuelve a preguntar cuando cambien sus ficheros. Puedes editarlo o quitarlo en Entorno.",
+    "newSecretsNote": "Los secretos nuevos se guardan cifrados en la app. El agente solo ve sus nombres.",
+    "more_one": "{{count}} más en espera",
+    "more_other": "{{count}} más en espera",
+    "decline": "Rechazar",
+    "add": "Añadir runner",
+    "addWithSecrets_one": "Añadir runner y {{count}} secreto",
+    "addWithSecrets_other": "Añadir runner y {{count}} secretos"
   }
 }

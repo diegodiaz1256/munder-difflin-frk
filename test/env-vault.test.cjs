@@ -156,3 +156,32 @@ test('an agent can propose a runner; it exists only once the human approves it',
   assert.equal((await no.v.proposeRunner({ name: 'k', command: 'c', secrets: ['K'] }, { agentName: 'Pam' })).ok, false);
   assert.equal(no.runners.length, 0, 'declined: nothing added');
 });
+
+test('a proposal naming a secret that does not exist asks the human to create it', async () => {
+  const answers = [];
+  let vars = []; let runners = []; const secrets = new Map(); const asked = [];
+  const v = new EnvVault({
+    readVars: () => vars, writeVars: (x) => { vars = x; },
+    readRunners: () => runners, writeRunners: (x) => { runners = x; },
+    getSecret: (r) => secrets.get(r), setSecret: (r, s) => { secrets.set(r, s); return { ok: true }; }, deleteSecret: (r) => secrets.delete(r),
+    approve: async () => 'once',
+    approveProposal: async (req) => { asked.push(req); return answers.shift(); }
+  });
+
+  answers.push({ ok: true, secrets: { STRIPE_KEY: { kind: 'secret', value: 'sk_test_123' }, DB_URL: { kind: 'op', value: 'op://Dev/Db/url' } } });
+  const r = await v.proposeRunner({ name: 'Charge test', command: 'npm run charge', secrets: ['STRIPE_KEY', 'DB_URL'] }, { agentName: 'Kevin' });
+  assert.deepEqual(r, { ok: true, id: 'charge-test' });
+  assert.deepEqual(asked[0].missing, ['STRIPE_KEY', 'DB_URL'], 'the human is told which secrets are new');
+  assert.deepEqual(v.secretNames().sort(), ['DB_URL', 'STRIPE_KEY']);
+  assert.ok(!JSON.stringify(vars).includes('sk_test_123'), 'the value is stored as a secret, not in config');
+  assert.deepEqual(runners[0].secrets, ['STRIPE_KEY', 'DB_URL']);
+
+  answers.push({ ok: true, secrets: {} });
+  const left = await v.proposeRunner({ name: 'Deploy', command: 'npm run deploy', secrets: ['DEPLOY_TOKEN'] }, { agentName: 'Kevin' });
+  assert.equal(left.ok, false, 'a missing secret left empty means no runner');
+  assert.equal(runners.length, 1);
+  assert.ok(!v.secretNames().includes('DEPLOY_TOKEN'));
+
+  const bad = await v.proposeRunner({ name: 'x', command: 'y', secrets: ['../etc'] }, { agentName: 'Kevin' });
+  assert.equal(bad.ok, false, 'an agent cannot invent a secret name outside the variable rules');
+});
