@@ -7466,7 +7466,8 @@ function bootstrapHiveServices(): void {
     claimedOffice = resolve(home);
   }
   freezes.time('boot: hive.ensureHive', () => hive.ensureHive());
-  freezes.time('boot: hive.refreshGeneratedDocs', () => hive.refreshGeneratedDocs());
+  // Off the main thread, and only the docs that changed (agents read them later).
+  void hive.refreshGeneratedDocsAsync().catch((e) => console.error('[hive] refreshing protocol docs failed:', e));
   // An office inside a project's repo: keep its files out of that repo's git.
   const officeDir = readConfig().harnessHome;
   if (officeDir) void excludeOfficeFromRepo(officeDir);
@@ -7557,7 +7558,8 @@ function bootstrapHiveServices(): void {
     }
     else console.error('[telemetry] collector failed to start:', r.error);
   });
-  freezes.time('boot: memory.start', () => memory.start()); // init shared palace + mine loop (no-op without mempalace)
+  // The mempalace CLI is looked for without blocking, then the palace and mine loop start (no-op without it).
+  void memory.startSoon().catch((e) => console.error('[memory] start failed:', e));
   freezes.time('boot: reflector.start', () => reflector.start()); // bound oversized memory.md files on a timer (no-op until threshold)
 
   armAlwaysOnBeats();
