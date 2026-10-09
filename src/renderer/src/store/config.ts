@@ -99,6 +99,8 @@ export interface HarnessConfig {
   strongKeepalive?: boolean;
   /** Auto-update from GitHub releases (default ON; Settings → General). */
   autoUpdate?: boolean;
+  /** New Floor (another office in its own window). Default on. */
+  multiWindow?: boolean;
   /** Anonymous product analytics (default ON, opt-out; see TELEMETRY.md).
    *  Mirrors the main-process field (src/main/config.ts). */
   telemetryEnabled?: boolean;

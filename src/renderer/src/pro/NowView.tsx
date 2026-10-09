@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentStep, groupActivity, type ActivityItem, type ActivityKind } from '@shared/officeActivity';
 import { useStore } from '@/store/store';
-import { Avatar, StateBadge, StateLine, agentState, useTasks } from './data';
+import { Avatar, GodBadge, StateLine, agentState, useTasks } from './data';
 import { useOfficeActivity } from './activityStore';
 import { useProStore } from './proStore';
 
@@ -75,7 +75,7 @@ export function NowView() {
             <button key={a.id} className="pro-now-row" onClick={() => setView({ kind: 'agent', agentId: a.id })}>
               <Avatar agent={a} />
               <span className="pro-now-who">
-                <strong>{a.name}</strong>
+                <strong>{a.name}{a.isGod && <> <GodBadge star /></>}</strong>
                 <StateLine {...agentState(a, !!task && task.status === 'blocked')} />
               </span>
               <span className="pro-now-what">

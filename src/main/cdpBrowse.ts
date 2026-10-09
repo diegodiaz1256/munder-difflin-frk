@@ -17,8 +17,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 interface Target { id: string; webSocketDebuggerUrl: string }
 
+/** One CDP command; past this the engine is treated as wedged. Covers a
+ *  navigation that never answers and an extraction script that never settles. */
+const COMMAND_TIMEOUT_MS = 45_000;
+const HTTP_TIMEOUT_MS = 5_000;
+
 async function http<T>(port: number, path: string, method: 'GET' | 'PUT' = 'GET'): Promise<T> {
-  const res = await fetch(`http://127.0.0.1:${port}${path}`, { method });
+  const res = await fetch(`http://127.0.0.1:${port}${path}`, { method, signal: AbortSignal.timeout(HTTP_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`CDP ${path}: HTTP ${res.status}`);
   const text = await res.text();
   return (text ? JSON.parse(text) : {}) as T;
@@ -45,13 +50,26 @@ export async function cdpRead<T>(port: number, url: string, extract: string, isT
       for (const l of listeners) l(msg.method, msg.params ?? {});
     }
   });
+  // The engine crashing or closing the tab must fail what is in flight, not
+  // leave it pending: the browse slot it holds would never be given back.
+  const failAll = (why: string) => { for (const p of pending.values()) p.reject(new Error(why)); pending.clear(); };
+  ws.on('close', () => failAll('the browser engine closed the connection'));
+  ws.on('error', () => failAll('the browser engine connection failed'));
   const send = <R = unknown>(method: string, params: Record<string, unknown> = {}): Promise<R> => new Promise((resolve, reject) => {
     const id = nextId++;
-    pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
-    ws.send(JSON.stringify({ id, method, params }));
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`${method} got no answer in ${COMMAND_TIMEOUT_MS / 1000} s`)); }, COMMAND_TIMEOUT_MS);
+    pending.set(id, {
+      resolve: (v) => { clearTimeout(timer); (resolve as (v: unknown) => void)(v); },
+      reject: (e) => { clearTimeout(timer); reject(e); }
+    });
+    ws.send(JSON.stringify({ id, method, params }), (err) => { if (err) pending.get(id)?.reject(err); });
   });
   try {
-    await new Promise<void>((resolve, reject) => { ws.once('open', () => resolve()); ws.once('error', reject); });
+    await new Promise<void>((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('the browser engine did not open the tab')), HTTP_TIMEOUT_MS);
+      ws.once('open', () => { clearTimeout(t); resolve(); });
+      ws.once('error', (e) => { clearTimeout(t); reject(e); });
+    });
     let status = 0;
     let loaded = false;
     listeners.add((method, params) => {
@@ -76,7 +94,7 @@ export async function cdpRead<T>(port: number, url: string, extract: string, isT
     if (isThin?.(value)) { await sleep(SLOW_SETTLE_MS); value = await evaluate(); }
     return { value, status };
   } finally {
-    for (const p of pending.values()) p.reject(new Error('closed'));
+    failAll('closed');
     try { ws.close(); } catch { /* gone */ }
     await http(port, `/json/close/${target.id}`).catch(() => undefined);
   }

@@ -13,7 +13,7 @@ import { waitsOnHuman } from '@/components/TasksKanban';
 import { respawnAgent } from '@/hooks/useRestoreTeam';
 import { useProStore } from './proStore';
 import {
-  Avatar, Bar, StateBadge, agentState, fmtTokens, stripAnsi, usePoll, useTerminalTail,
+  Avatar, Bar, GodBadge, StateBadge, agentState, fmtTokens, stripAnsi, usePoll, useTerminalTail,
   type AgentDirectoryEntry, type KeyedTask
 } from './data';
 
@@ -157,7 +157,7 @@ function OrchestratorCard({ god, tasks, directory, config, onOpen }: {
         <div style={{ minWidth: 0 }}>
           <div className="pro-row" style={{ gap: 8 }}>
             <button className="pro-title" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit' }} onClick={() => onOpen(god.id)}>{god.name}</button>
-            <span className="pro-badge" style={{ background: 'var(--cth-lemon-light)' }}>{t('pro.nav.orchestrator')}</span>
+            <GodBadge />
           </div>
           <div className="pro-sub" style={{ fontSize: 12 }}>
             {[god.model ?? god.provider, ctx !== null ? `ctx ${ctx}%` : null].filter(Boolean).join(' · ')}

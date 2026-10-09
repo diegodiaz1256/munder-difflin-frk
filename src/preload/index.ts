@@ -3,6 +3,10 @@ import type { AgentProvider } from '../shared/agentProvider';
 import type { HireManifest } from '../shared/hire';
 import type { TaskEvent } from '../shared/taskHistory';
 import type { FortressStatus } from '../main/fortress';
+import type { FreezeEntry } from '../main/freezeLog';
+export type { FreezeEntry } from '../main/freezeLog';
+import type { FloorEntry } from '../main/floors';
+export type { FloorEntry } from '../main/floors';
 export type FortressStatusView = FortressStatus & { enabled: boolean; bytes: number };
 import type { RateLimits } from '../shared/rateLimits';
 export type { HireManifest } from '../shared/hire';
@@ -379,6 +383,8 @@ export interface HarnessConfig {
   strongKeepalive?: boolean;
   /** Auto-update from GitHub releases (default ON; Settings → General). */
   autoUpdate?: boolean;
+  /** New Floor (another office in its own window). Default on. */
+  multiWindow?: boolean;
   /** Anonymous product analytics (default ON, opt-out; see TELEMETRY.md).
    *  Mirrors main + renderer HarnessConfig. */
   telemetryEnabled?: boolean;
@@ -794,6 +800,8 @@ const api = {
    *  on failure (e.g. copy error) returns { ok: false, error }. */
   changeHome: (newHome: string, mode: 'move' | 'fresh'): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('config:changeHome', { newHome, mode }),
+  /** Which of these offices another floor (another app process) is running now. */
+  officesInUse: (paths: string[]): Promise<string[]> => ipcRenderer.invoke('config:officesInUse', paths),
 
   // ─── Filesystem (sandboxed to cwd) ───────────────────────────────────────
   listDir: (root: string, rel: string): Promise<
@@ -1184,6 +1192,24 @@ const api = {
   /** Open a new floor (independent office window). No-op when the multiWindow
    *  flag is off. Resolves { ok } indicating whether a window opened. */
   newFloor: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('window:newFloor'),
+  /** Every floor on this computer (main/floors.ts), this one marked `current`. */
+  listFloors: (): Promise<FloorEntry[]> => ipcRenderer.invoke('floors:list'),
+  /** Reopen a floor (null = the main one); a running one comes to the front. */
+  openFloor: (id: string | null): Promise<{ ok: boolean }> => ipcRenderer.invoke('floors:open', id),
+  /** Forget a floor's profile. Its office folder is never touched. */
+  removeFloor: (id: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('floors:remove', id),
+  /** Language to start in when this profile has none saved yet (a new floor). */
+  initialLanguage: (process.argv.find((a) => a.startsWith('--md-lang='))?.slice('--md-lang='.length) ?? null) as string | null,
+  /** Tell main the UI language (the app menu follows it). */
+  uiLanguage: (lng: string): Promise<void> => ipcRenderer.invoke('app:uiLanguage', lng),
+
+  // ─── Freeze log (main/freezeLog.ts) ────────────────────────────────────────
+  /** Report one of this window's long tasks (fire-and-forget). */
+  reportLongTask: (ms: number, screen: string): void => ipcRenderer.send('diag:longTask', ms, screen),
+  /** The newest freezes, newest first. */
+  freezes: (): Promise<FreezeEntry[]> => ipcRenderer.invoke('diag:freezes'),
+  /** Show freezes.jsonl in the file manager. */
+  openFreezeLog: (): Promise<void> => ipcRenderer.invoke('diag:openFreezeLog'),
 
   // ─── Closing time (graceful shutdown via the hive) ─────────────────────────
   /** Start the closing-time protocol: the god broadcasts shutdown, every worker

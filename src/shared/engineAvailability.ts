@@ -73,6 +73,6 @@ export function engineAvailabilityBadge(a: EngineAvailability): string | null {
 export function engineAvailabilityMessage(a: EngineAvailability, label: string): string | null {
   if (a.state !== 'not-installable') return null;
   return `${label} is not installed on this computer and the app has no installer for it, ` +
-    `so Michael could not start. Install it first, then press "check again". ` +
+    `so the orchestrator could not start. Install it first, then press "check again". ` +
     `Or pick Claude Code, which installs itself on first run.`;
 }

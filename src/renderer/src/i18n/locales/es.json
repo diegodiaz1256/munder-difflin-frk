@@ -415,7 +415,17 @@
     "saved": "Guardado",
     "saving": "Guardando…",
     "unsavedChanges": "cambios sin guardar",
-    "unsavedWarning": "Tienes ajustes sin guardar. ¿Cerrar igualmente y perderlos?"
+    "unsavedWarning": "Tienes ajustes sin guardar. ¿Cerrar igualmente y perderlos?",
+    "freezes": {
+      "title": "Congelaciones",
+      "none": "Ninguna congelación en las últimas 24 horas.",
+      "count_one": "{{count}} congelación en las últimas 24 horas (la más larga: {{worst}} ms).",
+      "count_other": "{{count}} congelaciones en las últimas 24 horas (la más larga: {{worst}} ms).",
+      "open": "Abrir el registro",
+      "inWindow": "la ventana, en {{screen}}",
+      "unknown": "causa no capturada (no era un handler ni un temporizador)",
+      "hint": "La app apunta cada parón de más de 200 ms y qué se estaba ejecutando. No se envía a ningún sitio; adjunta el fichero cuando avises de una congelación."
+    }
   },
   "commandCenter": {
     "title": "CENTRO DE MANDO",
@@ -1531,7 +1541,9 @@
   },
   "app": {
     "godFailed": "El orquestador no pudo arrancar:",
-    "godRetry": "Reintentar"
+    "godRetry": "Reintentar",
+    "clockingIn": "FICHANDO",
+    "clockingInBody": "{{godName}} se está instalando en el despacho del fondo y preparando la planta. Un momento…"
   },
   "usage": {
     "title": "Uso de la suscripción",
@@ -1907,7 +1919,7 @@
         "subagents": "Subagentes",
         "subagentsDesc": "Ayudantes propios de Claude dentro de la sesión, que la oficina nunca ve (Agent, Task)",
         "roam": "Fuera de sus carpetas",
-        "roamDesc": "Apagado: solo escribe en su espacio de trabajo, su carpeta de la colmena, la colmena y la carpeta temporal (el orquestador también en los repos de la oficina). Encendido: en cualquier parte del disco. Se aplica al momento."
+        "roamDesc": "Apagado: solo escribe en su espacio de trabajo, su carpeta de la colmena, la colmena y la carpeta temporal (el orquestador también en los repos de la oficina). Encendido: en cualquier parte del disco. Se aplica al momento. Es una valla, no una jaula: mira la nota bajo la tabla."
       },
       "accessRead": "Solo lectura",
       "accessWrite": "Lectura y escritura",
@@ -1925,7 +1937,8 @@
         "none": "Ninguna todavía.",
         "everyone": "todos los agentes",
         "remove": "Quitar"
-      }
+      },
+      "guardLimits": "«Fuera de sus carpetas» y «Git» se comprueban en cada orden antes de ejecutarla: herramientas de ficheros, comandos de terminal (también lo que pasan a bash -c, cmd /c, PowerShell o wsl) y líneas sueltas de python, node, perl o ruby. Un script guardado en un fichero, o una ruta que el programa construye mientras corre, no se puede leer de antemano: es una valla contra errores, no una jaula. Para un límite firme, ejecuta el agente en WSL o en un contenedor."
     },
     "conn": {
       "step1": "Elige un servicio y consigue su clave",
@@ -2397,7 +2410,14 @@
       "searchTicket": "Buscar, o un ticket (DUN-12)",
       "changes": "Cambios",
       "changesBy": "Lo que cambió {{who}} · {{when}}",
-      "noChanges": "Esta versión no cambia texto."
+      "noChanges": "Esta versión no cambia texto.",
+      "pdfPage": "{{page}} / {{count}}",
+      "pdfPrev": "Página anterior",
+      "pdfNext": "Página siguiente",
+      "pdfZoomIn": "Ampliar",
+      "pdfZoomOut": "Reducir",
+      "pdfFit": "Ajustar al ancho",
+      "pdfFailed": "No se pudo leer este PDF: {{error}}"
     },
     "engines": {
       "title": "Motores",
@@ -2441,6 +2461,16 @@
       "customFetch": "Pedir al servidor",
       "emptyAuth": "\"{{id}}\" tiene una entrada de acceso vacía, que oculta la clave de models.json. Ejecuta /logout en el motor y elige {{id}}; vuelve a iniciar sesión si la necesitas."
     },
+    "floors": {
+      "title": "Plantas",
+      "new": "Nueva planta",
+      "newHint": "Otra oficina, en su propia ventana, con su propio orquestador y sus agentes.",
+      "main": "Planta principal",
+      "noOffice": "sin oficina aún",
+      "none": "Aún no hay otras plantas.",
+      "running": "abierta",
+      "forgetTitle": "Olvidar esta planta. Su carpeta de oficina y el trabajo de los agentes no se tocan."
+    },
     "boot": {
       "title": "La oficina se está iniciando.",
       "body": "{{name}} está llegando; la primera vez puede tardar un poco."
@@ -2469,9 +2499,15 @@
       "restartedList": "Reiniciados: {{names}}",
       "joinedList": "Entraron: {{names}}",
       "leftList": "Salieron: {{names}}"
+    },
+    "god": {
+      "badge": "Orquestador",
+      "tip": "{{godName}} es el orquestador (el «god agent»): lee tus peticiones, reparte el trabajo entre los agentes, los coordina y solo te trae lo que te necesita."
     }
   },
   "hivePicker": {
+    "inUse": "abierta en otra planta",
+    "inUseTitle": "Otra planta está usando esta oficina. Usa esa ventana o elige otra oficina aquí.",
     "couldNotOpen": "No se pudo abrir esa carpeta.",
     "title": "ELIGE UNA OFICINA",
     "intro": "Una <strong>oficina</strong> es la carpeta donde la app guarda todo lo de un espacio de trabajo: sus ajustes, tus agentes y su memoria, las tareas, los disparadores y el historial. Cada una es independiente, así que puedes tener configuraciones distintas a la vez. Abre en la que estabas trabajando, cambia a otra o empieza una nueva.",
