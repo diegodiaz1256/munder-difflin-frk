@@ -531,3 +531,49 @@ test('a hook fires with NO node on PATH, and its payload reaches HIVE_SOCK', { s
   assert.ok(received.length > 0, 'nothing arrived at HIVE_SOCK');
   assert.match(received[0], /"hook_event_name"\s*:\s*"Stop"/);
 });
+
+test('Windows: Claude Code hooks survive an office path containing spaces (run through Git Bash)', { skip: POSIX, timeout: 30_000 }, async (t) => {
+  // Claude Code runs hook commands through Git Bash. Bash hands a .cmd to
+  // cmd.exe, and `"<dir with space>\hive-node.cmd" "<shim>"` arrives mangled:
+  // "…\harness" is not recognized, and every hook (Stop → inbox drain, status) died.
+  const bash = [process.env.CLAUDE_CODE_GIT_BASH_PATH, path.join(process.env.ProgramFiles || 'C:/Program Files', 'Git', 'bin', 'bash.exe')].find((p) => p && fs.existsSync(p));
+  if (!bash) { t.skip('Git Bash not installed'); return; }
+  const { harness: base } = isolatedHomes(t);
+  const harness = `${base} space`;
+  t.after(() => fs.rmSync(harness, { recursive: true, force: true }));
+  const hive = new HiveManager(() => harness);
+  hive.ensureHive();
+  const shim = path.join(harness, 'hive', 'bin', 'cth-hook.cjs');
+  const settings = hive.hookSettings(shim);
+  const command = settings.hooks.Stop[0].hooks[0].command;
+  assert.ok(settings.statusLine.command.startsWith(command), 'the status line uses the same command');
+
+  const sock = hive.sockPath();
+  const received = [];
+  const server = net.createServer((conn) => {
+    let buf = '';
+    conn.on('error', () => { /* shim may hang up first */ });
+    conn.on('data', (d) => { buf += d; });
+    conn.on('close', () => { if (buf) received.push(buf); });
+    conn.write(JSON.stringify({ ok: true }) + '\n', () => conn.end());
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(sock, resolve); });
+  t.after(() => server.close());
+
+  const env = { ...process.env, AGENT_ID: 'a1', HIVE_SOCK: sock };
+  const viaBash = (cmd) => new Promise((resolve) => {
+    const child = spawn(bash, ['-c', cmd], { env, stdio: ['pipe', 'pipe', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.stdin.on('error', () => {});
+    child.stdin.end(JSON.stringify({ hook_event_name: 'Stop', session_id: 's1' }));
+    child.on('close', (code) => resolve({ code, stderr }));
+  });
+
+  const legacy = await viaBash(`"${launcherIn(harness)}" "${shim}"`);
+  assert.notEqual(legacy.code, 0, 'negative control: the old quoted launcher + quoted shim breaks under bash');
+  const result = await viaBash(command);
+  assert.equal(result.code, 0, `Claude hook failed: ${command}\n${result.stderr}`);
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  assert.equal(received.length, 1, 'the hook must reach HIVE_SOCK');
+});

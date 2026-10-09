@@ -809,6 +809,30 @@ export class HiveManager {
     return [launcher, script, ...args].join(' ');
   }
 
+  /** The hook command for Claude Code. On Windows it runs hooks through Git
+   *  Bash, and bash hands a `.cmd` to cmd.exe: a quoted batch path with a space
+   *  followed by a quoted argument arrives mangled ("…\Dunder" is not
+   *  recognized), so under an office path with a space every hook died (no
+   *  Stop → inbox drain, no live status). A quoted wrapper path with no quoted
+   *  argument survives, so then the shim is baked into a wrapper in
+   *  `bin/runtime`. Without a space nothing changes. */
+  private claudeHookCommand(shim: string): string {
+    if (process.platform !== 'win32' || this.wslRoot()) return this.nodeRun(shim);
+    const launcher = this.nodeLauncher() ?? 'node';
+    if (!/\s/.test(launcher) && !/\s/.test(shim)) return this.nodeRun(shim);
+    const dir = this.runtimeBinDir();
+    if (!dir) return this.nodeRun(shim);
+    try {
+      mkdirSync(dir, { recursive: true });
+      const wrapper = join(dir, `md-claude-${basename(shim).replace(/\.c?js$/, '').replace(/[^A-Za-z0-9_-]/g, '-')}.cmd`);
+      writeFileSync(wrapper, `@echo off\r\n"${launcher}" "${shim}" %*\r\n`, 'utf8');
+      return `"${wrapper}"`;
+    } catch (e) {
+      console.error('[hive] could not write the Claude hook wrapper:', e);
+      return this.nodeRun(shim);
+    }
+  }
+
   /** One proxy sidecar per live proxy-tier agent, keyed by agentId. Spawned in
    *  ensureAgent, killed on PTY exit / removeAgent / app quit (index.ts) — so a
    *  dead agent never leaks an orphan loopback listener. */
@@ -1647,7 +1671,7 @@ export class HiveManager {
   private hookSettings(shim: string, theme?: 'light' | 'dark', writableDirs: string[] = []): unknown {
     // Bundled node, NOT bare `node` — see nodeLauncherPath(). Claude runs each of
     // these through `sh -c` with a stripped PATH, where `node` is often absent.
-    const cmd = this.nodeRun(shim);
+    const cmd = this.claudeHookCommand(shim);
     const entry = (matcher?: string) => ({
       ...(matcher ? { matcher } : {}),
       hooks: [{ type: 'command', command: cmd }]
