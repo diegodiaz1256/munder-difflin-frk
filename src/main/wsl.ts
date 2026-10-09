@@ -168,7 +168,8 @@ export function probeInDistro(distro: string, bins: string[], onError?: (message
 export const WSL_INSTALL: Record<string, string> = {
   git: 'sudo apt update && sudo apt install -y git',
   node: 'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && . ~/.nvm/nvm.sh && nvm install --lts',
-  uv: 'curl -LsSf https://astral.sh/uv/install.sh | sh'
+  uv: 'curl -LsSf https://astral.sh/uv/install.sh | sh',
+  bubblewrap: 'sudo apt update && sudo apt install -y bubblewrap socat'
 };
 
 const homes = new Map<string, string>();

@@ -40,6 +40,8 @@ export interface ToolSpec {
   /** Installed and managed by the app itself (its own row with its own
    *  buttons), not by a command the user runs. */
   managed?: 'fortress';
+  /** Only where agents run on Linux (a Linux machine, or a WSL floor). */
+  linuxOnly?: boolean;
 }
 
 /** Base rows — the non-engine tools. Engines are appended by `toolCatalog()`. */
@@ -98,6 +100,18 @@ const BASE_TOOLS: ToolSpec[] = [
     install: { posix: '', win32: '' },
     note: 'The app installs this for you when an engine needs it — nothing to do by hand.',
     docsUrl: 'https://nodejs.org'
+  },
+  {
+    id: 'bubblewrap',
+    bin: 'bwrap',
+    label: 'Sandbox (bubblewrap)',
+    kind: 'prerequisite',
+    why: "Claude Code's OS sandbox on Linux: an agent's shell commands can only write inside its folders. Without it they run with no OS sandbox, and only the app's own guard checks them.",
+    essential: false,
+    install: { posix: 'sudo apt update && sudo apt install -y bubblewrap socat', win32: '' },
+    note: 'On Fedora: sudo dnf install bubblewrap socat. On Arch: sudo pacman -S bubblewrap socat.',
+    docsUrl: 'https://code.claude.com/docs/en/sandboxing',
+    linuxOnly: true
   },
   {
     id: 'fortress',
