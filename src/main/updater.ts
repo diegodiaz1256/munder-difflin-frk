@@ -510,6 +510,13 @@ export function initAutoUpdater(getWebContents: () => WebContents | null): void 
   void (async () => {
     try {
       const autoUpdater = await loadAutoUpdater();
+      // Follow /releases/latest and latest*.yml, whatever this build's version
+      // looks like. electron-updater turns allowPrerelease on for any version
+      // with a suffix (0.4.6-fork.37) and then only offers releases with the
+      // SAME suffix: a plain 1.0.0 would never reach a -fork.N install. Off,
+      // every install takes what GitHub marks as the latest release (-rc and
+      // -beta builds are published as pre-releases and stay out of it).
+      autoUpdater.allowPrerelease = false;
       autoUpdater.autoDownload = true;
       autoUpdater.autoInstallOnAppQuit = false; // install ONLY on explicit restart
       autoUpdater.on('update-available', (info) => {
