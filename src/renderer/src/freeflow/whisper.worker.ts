@@ -57,6 +57,13 @@ const loaded = new Map<ModelId, Promise<Asr>>();
 
 async function load(model: ModelId, download: boolean): Promise<Asr> {
   env.allowRemoteModels = download;
+  // transformers.js 4 refuses to load anything when local AND remote models
+  // are both off ("Invalid configuration detected"), before it even looks in
+  // the cache. Offline, "local" is switched on only to pass that check: the
+  // cache (the app's, above) is read first, and the local path points nowhere,
+  // so a missing file is still an error, never a download.
+  env.allowLocalModels = !download;
+  env.localModelPath = '/__no_local_models__/';
   const m = MODELS[model];
   const device = 'gpu' in navigator ? 'webgpu' : 'wasm';
   const make = (dev: string) => pipeline('automatic-speech-recognition', m.id, {
