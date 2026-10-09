@@ -141,6 +141,7 @@ import {
   codexRemoteSocketFits,
   withCodexRemoteArgs
 } from '../shared/codexRemote';
+import { makeSpawnGate } from './spawnGate';
 
 const isDev = !!process.env.ELECTRON_RENDERER_URL;
 
@@ -3460,6 +3461,7 @@ function spawnFailReason(error?: string): SpawnFailReason {
   return 'spawn_error';
 }
 
+const spawnTurn = makeSpawnGate();
 ipcMain.handle('pty:spawn', async (evt, opts: AgentSpawnOptions) => {
   if (!opts || typeof opts.id !== 'string' || typeof opts.cwd !== 'string' || typeof opts.command !== 'string') {
     return { ok: false, error: 'invalid SpawnOptions' };
@@ -3479,7 +3481,8 @@ ipcMain.handle('pty:spawn', async (evt, opts: AgentSpawnOptions) => {
     }, 90_000);
   });
   try {
-    return await Promise.race([spawnAgentCore(opts, owner), watchdog]);
+    // One at a time (spawnGate.ts): a team coming up no longer freezes the app.
+    return await Promise.race([spawnTurn(() => spawnAgentCore(opts, owner)), watchdog]);
   } finally {
     clearTimeout(timer);
     spawnSteps.delete(opts.id);
