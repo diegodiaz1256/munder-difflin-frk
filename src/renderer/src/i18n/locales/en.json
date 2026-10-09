@@ -1909,7 +1909,7 @@
         "subagents": "Sub-agents",
         "subagentsDesc": "Claude's own helpers inside the session, which the office never sees (Agent, Task)",
         "roam": "Outside its folders",
-        "roamDesc": "Off: it writes only in its workspace, its hive folder, the hive and the temp dir (the orchestrator also in the office repos). On: anywhere on the disk. Applies at once."
+        "roamDesc": "Off: it writes only in its workspace, its hive folder, the hive and the temp dir (the orchestrator also in the office repos). On: anywhere on the disk. Applies at once. It is a fence, not a jail: see the note below the table."
       },
       "accessRead": "Read only",
       "accessWrite": "Read & write",
@@ -1927,7 +1927,8 @@
         "none": "None yet.",
         "everyone": "every agent",
         "remove": "Remove"
-      }
+      },
+      "guardLimits": "\"Outside its folders\" and \"Git\" are checked on every command before it runs: file tools, shell commands (including what they pass to bash -c, cmd /c, PowerShell or wsl) and python/node/perl/ruby one-liners. A script saved in a file, or a path the program builds while it runs, cannot be read in advance, so this is a fence for honest mistakes, not a jail. For a hard limit, run the agent in WSL or a container."
     },
     "conn": {
       "step1": "Pick a service and get its key",

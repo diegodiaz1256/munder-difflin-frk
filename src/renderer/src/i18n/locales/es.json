@@ -1909,7 +1909,7 @@
         "subagents": "Subagentes",
         "subagentsDesc": "Ayudantes propios de Claude dentro de la sesión, que la oficina nunca ve (Agent, Task)",
         "roam": "Fuera de sus carpetas",
-        "roamDesc": "Apagado: solo escribe en su espacio de trabajo, su carpeta de la colmena, la colmena y la carpeta temporal (el orquestador también en los repos de la oficina). Encendido: en cualquier parte del disco. Se aplica al momento."
+        "roamDesc": "Apagado: solo escribe en su espacio de trabajo, su carpeta de la colmena, la colmena y la carpeta temporal (el orquestador también en los repos de la oficina). Encendido: en cualquier parte del disco. Se aplica al momento. Es una valla, no una jaula: mira la nota bajo la tabla."
       },
       "accessRead": "Solo lectura",
       "accessWrite": "Lectura y escritura",
@@ -1927,7 +1927,8 @@
         "none": "Ninguna todavía.",
         "everyone": "todos los agentes",
         "remove": "Quitar"
-      }
+      },
+      "guardLimits": "«Fuera de sus carpetas» y «Git» se comprueban en cada orden antes de ejecutarla: herramientas de ficheros, comandos de terminal (también lo que pasan a bash -c, cmd /c, PowerShell o wsl) y líneas sueltas de python, node, perl o ruby. Un script guardado en un fichero, o una ruta que el programa construye mientras corre, no se puede leer de antemano: es una valla contra errores, no una jaula. Para un límite firme, ejecuta el agente en WSL o en un contenedor."
     },
     "conn": {
       "step1": "Elige un servicio y consigue su clave",
