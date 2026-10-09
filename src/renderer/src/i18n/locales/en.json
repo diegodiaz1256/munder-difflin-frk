@@ -203,12 +203,12 @@
     "eraseEverything": "erase everything & restart",
     "nav": {
       "general": "General",
-      "prerequisites": "Prerequisites",
-      "agentsModels": "Agents & Models",
-      "autonomyBudgets": "Autonomy & Budgets",
-      "connections": "Connections",
+      "prerequisites": "Setup",
+      "agentsModels": "Models & API keys",
+      "autonomyBudgets": "Autonomy & limits",
+      "connections": "Tools, Slack & webhooks",
       "voice": "Voice",
-      "memoryKnowledge": "Memory & Knowledge"
+      "memoryKnowledge": "Memory & knowledge"
     },
     "changeHome": {
       "newHome": "New home folder",
@@ -315,7 +315,7 @@
       "modelFailed": "Download failed: {{error}}",
       "modelDone": "Model ready.",
       "modelOffline": "Memory never goes online by itself: this button is the only time it does.",
-      "modelTooOld": "The installed mempalace cannot run EmbeddingGemma, and updating it did not work {{detail}}. Reinstall it from Settings → Prerequisites, or switch the memory model to MiniLM (English only) in the memory panel.",
+      "modelTooOld": "The installed mempalace cannot run EmbeddingGemma, and updating it did not work {{detail}}. Reinstall it from Settings → Setup, or switch the memory model to MiniLM (English only) in the memory panel.",
       "modelDownloadingHint": "If mempalace is too old for this model, the app updates it first (a few minutes)."
     },
     "connections": {
@@ -378,7 +378,7 @@
       "voiceChatDesc": "Talk to the orchestrator in real time. Toggle it on from {{godName}}'s tab; choose which microphone and speaker the voice loop uses here.",
       "openaiKey": "OpenAI API key · voice",
       "openaiKeyDesc1": "Talking to {{godName}} runs on OpenAI's Realtime API — speech in, speech out, over a live connection to {{model}}. That is a different service from the Claude subscription your agents run on, so it needs its own OpenAI API key.",
-      "openaiKeyDesc2": "Paste it once below. It is encrypted on this machine and never shown again — each voice session mints its own short-lived token from it, and the key itself never leaves your computer. It is the same OpenAI key listed under Agents & Models; setting it in either place is enough.",
+      "openaiKeyDesc2": "Paste it once below. It is encrypted on this machine and never shown again — each voice session mints its own short-lived token from it, and the key itself never leaves your computer. It is the same OpenAI key listed under Models & API keys; setting it in either place is enough.",
       "keyPlaceholderSaved": "key saved — paste a new one to replace it",
       "save": "Save",
       "keySaved": "Key saved — Talk is ready. Start it from {{godName}}'s card.",
@@ -425,7 +425,27 @@
       "inWindow": "the window, on {{screen}}",
       "unknown": "cause not caught (not a handler or timer)",
       "hint": "The app writes down every stall over 200 ms and what was running. Nothing is sent anywhere; attach the log file when you report a freeze."
-    }
+    },
+    "navDesc": {
+      "general": "Version and updates, freezes, the office folder, language, keep awake, reset.",
+      "prerequisites": "What is installed: agent CLIs, git, Node, uv, the office browser.",
+      "agentsModels": "Default model, model and effort per role, provider keys, certificates.",
+      "autonomyBudgets": "Who acts without asking, who can add agents, token and loop breakers.",
+      "connections": "MCP servers new agents get, Slack, and webhooks that wake agents.",
+      "voice": "Dictation (offline or Groq) and talking with the orchestrator.",
+      "memoryKnowledge": "Semantic memory and its model, and the knowledge graph."
+    },
+    "find": {
+      "general": "update version freeze log folder home language idioma keep awake sleep reset erase theme",
+      "prerequisites": "install claude codex gemini cli git node npm uv python fortress browser chrome prerequisites",
+      "agentsModels": "model opus sonnet haiku effort api key anthropic openai openrouter groq certificate tls ca proxy",
+      "autonomyBudgets": "auto mode approve permission budget tokens breaker loop hire spawn",
+      "connections": "mcp server tools slack webhook trigger fetch filesystem github",
+      "voice": "dictation whisper microphone mic talk realtime groq speech",
+      "memoryKnowledge": "memory mempalace semantic embedding model graph knowledge"
+    },
+    "searchPlaceholder": "Search settings",
+    "searchNone": "Nothing matches."
   },
   "commandCenter": {
     "title": "COMMAND CENTER",
@@ -895,7 +915,7 @@
     "askMichael": "ask {{godName}} to set up everything",
     "sections": {
       "prerequisites": {
-        "title": "Prerequisites",
+        "title": "Setup",
         "blurb": "The groundwork everything else builds on."
       },
       "memory": {
@@ -1237,7 +1257,7 @@
     "turnOff": "Turn off",
     "turnOn": "Turn on",
     "notInstalled": "Meaning-based search isn't installed yet.",
-    "setUpInPrereqs": "set it up in Prerequisites →",
+    "setUpInPrereqs": "set it up in Setup →",
     "plainNotesStill": "Agents still keep plain notes without it.",
     "searchLanguage": "Search language",
     "modelFast": "Fast",
