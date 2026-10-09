@@ -58,7 +58,7 @@ export function InboxView({ tasks }: { tasks: KeyedTask[] }) {
 
   const list = (rows: Message[]) => rows.length === 0
     ? <p className="pro-sub">{t('pro.inbox.nothing')}</p>
-    : rows.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 120).map((m) => (
+    : rows.slice().sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? '')).slice(0, 120).map((m) => (
       <article key={`${m.id}-${m.direction}`} className="pro-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div className="pro-row" style={{ fontSize: 12 }}>
           <Avatar agent={byId.get(m.from)} />

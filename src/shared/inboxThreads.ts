@@ -116,7 +116,9 @@ export function buildThread(
   // Stable: equal timestamps keep insertion order (a question before its answer).
   return items
     .map((it, i) => ({ it, i }))
-    .sort((x, y) => (x.it.ts === y.it.ts ? x.i - y.i : x.it.ts.localeCompare(y.it.ts)))
+    // Agents write their messages by hand: one without created_at sorts first
+    // instead of throwing (which took the whole Manager view down).
+    .sort((x, y) => (x.it.ts === y.it.ts ? x.i - y.i : (x.it.ts ?? '').localeCompare(y.it.ts ?? '')))
     .map(({ it }) => it);
 }
 
