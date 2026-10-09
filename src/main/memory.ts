@@ -244,10 +244,12 @@ export class MemoryManager {
       for (const c of candidates) if (c && existsSync(c)) { found = c; break; }
     }
     this.binCache = found;
+    this.binCheckedAt = Date.now();
     return found;
   }
   /** Force re-resolution (e.g. after the user installs mempalace). */
   resetBinCache(): void { this.binCache = undefined; }
+  private binCheckedAt = 0;
 
   available(): boolean { return this.bin() !== null; }
   enabled(): boolean { return this.getSettings().enabled; }
@@ -524,7 +526,10 @@ export class MemoryManager {
    * doesn't cover and that hangs a spawned child.
    */
   refresh(): MemoryStatus {
-    this.resetBinCache();
+    // Settings and the Memory view ask every few seconds. A found mempalace is
+    // kept; a missing one is looked for again at most every 30 s (each look
+    // starts a process: `where`, slow under an antivirus).
+    if (this.binCache === null && Date.now() - this.binCheckedAt > 30_000) this.resetBinCache();
     this.start();
     return this.status();
   }

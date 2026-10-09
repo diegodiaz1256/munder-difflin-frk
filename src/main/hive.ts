@@ -18,7 +18,7 @@
  *
  * Everything here runs in the Electron main process.
  */
-import { readdir as readdirAsync } from 'node:fs/promises';
+import { readdir as readdirAsync, readFile as readFileAsync, stat as statAsync } from 'node:fs/promises';
 import { gitInvocation, linuxizeText, parseWslPath, runInDistro, toWslUnc, type WslLocation } from './wsl';
 import {
   existsSync, mkdirSync, readFileSync, writeFileSync, renameSync,
@@ -817,6 +817,17 @@ export class HiveManager {
   // — bootstrap —
 
   /** Create the hive skeleton + git repo if missing. Idempotent. */
+  private hiveEnsuredFor: string | null = null;
+  /** ensureHive once per office per run: every spawn and every task write
+   *  re-checked a dozen protocol docs and the hive's own files (~25 file
+   *  operations, slow under an antivirus). The boot path still runs the full
+   *  ensureHive, which also restores anything deleted since. */
+  private ensureHiveOnce(root: string): void {
+    if (this.hiveEnsuredFor === root && existsSync(join(root, 'registry.json'))) return;
+    this.ensureHive();
+    this.hiveEnsuredFor = root;
+  }
+
   ensureHive(): void {
     const root = this.root();
     if (!root) return;
@@ -987,7 +998,7 @@ export class HiveManager {
   ): Promise<SpawnInjection> {
     const root = this.root();
     if (!root) return { args: [], env: {} };
-    this.ensureHive();
+    this.ensureHiveOnce(root);
 
     const dir = this.agentDir(meta.id);
     mkdirSync(join(dir, 'inbox', '.done'), { recursive: true });
@@ -2497,9 +2508,27 @@ export class HiveManager {
   /** Poll-based router. Cheap and robust vs fs.watch quirks on macOS. */
   startRouter(intervalMs = 1500): void {
     if (this.routerTimer || !this.enabled()) return;
-    this.routerTimer = setInterval(() => {
-      try { this.routeOnce(); } catch { /* keep the loop alive */ }
-    }, intervalMs);
+    this.routerTimer = setInterval(() => { void this.routeTick(); }, intervalMs);
+  }
+
+  private routing = false;
+  /** One router pass: look for outbox files off the main thread, and route
+   *  (synchronously, as before) only when there is something to route. The
+   *  look was ~2 file operations per agent every 1.5 s on the main thread:
+   *  ~0.1 s per pass with an antivirus scanning each access. */
+  private async routeTick(): Promise<void> {
+    if (this.routing) return;
+    this.routing = true;
+    try {
+      const root = this.root();
+      if (!root) return;
+      const agentsDir = join(root, 'agents');
+      let ids: string[];
+      try { ids = await readdirAsync(agentsDir); } catch { return; }
+      const pending = await Promise.all(ids.map((id) => readdirAsync(join(agentsDir, id, 'outbox'))
+        .then((files) => files.some((f) => f.endsWith('.json')), () => false)));
+      if (pending.some(Boolean)) this.routeOnce();
+    } catch { /* keep the loop alive */ } finally { this.routing = false; }
   }
   stopRouter(): void {
     if (this.routerTimer) { clearInterval(this.routerTimer); this.routerTimer = null; }
@@ -2621,7 +2650,7 @@ export class HiveManager {
   writeTasks(tasks: HiveTask[]): void {
     const root = this.root();
     if (!root) return;
-    this.ensureHive();
+    this.ensureHiveOnce(root);
     const path = join(root, 'tasks.json');
     const current = this.readJson<{ tasks?: unknown }>(path, { tasks: [] });
     const merged = mergeTaskLedger(current?.tasks, tasks);
@@ -2673,6 +2702,19 @@ export class HiveManager {
    *  anything worth reading (every registered agent technically has a memory.md,
    *  but most of the floor's history lives in a handful of them). Cheap: reads a
    *  small markdown file; never throws. Works for ANY id, active OR archived. */
+  private memoryFlag = new Map<string, { mtime: number; has: boolean }>();
+  /** hasMemory off the main thread; the file is parsed again only when it changed. */
+  async hasMemoryAsync(id: string): Promise<boolean> {
+    const p = join(this.agentDir(id), 'memory.md');
+    try {
+      const st = await statAsync(p);
+      const hit = this.memoryFlag.get(id);
+      if (hit && hit.mtime === st.mtimeMs) return hit.has;
+      const has = parseMemory(await readFileAsync(p, 'utf8')).length > 0;
+      this.memoryFlag.set(id, { mtime: st.mtimeMs, has });
+      return has;
+    } catch { return false; }
+  }
   hasMemory(id: string): boolean {
     const p = join(this.agentDir(id), 'memory.md');
     if (!existsSync(p)) return false;
@@ -2777,6 +2819,10 @@ export class HiveManager {
     return out.slice(0, lim);
   }
   /** Count undrained inbox messages for an agent (cheap — for the fleet snapshot). */
+  /** inboxBacklog off the main thread. */
+  async inboxBacklogAsync(id: string): Promise<number> {
+    try { return (await readdirAsync(join(this.agentDir(id), 'inbox'))).filter((f) => f.endsWith('.json')).length; } catch { return 0; }
+  }
   inboxBacklog(id: string): number {
     const dir = join(this.agentDir(id), 'inbox');
     if (!existsSync(dir)) return 0;
@@ -3397,6 +3443,15 @@ export class HiveManager {
     if (!root || !existsSync(join(root, 'log.jsonl'))) return [];
     const lines = readFileSync(join(root, 'log.jsonl'), 'utf8').trim().split('\n').filter(Boolean);
     return lines.slice(-n).map((l) => { try { return JSON.parse(l); } catch { return { raw: l }; } });
+  }
+
+  /** An agent's inbox, read off the main thread (the renderer asks per agent). */
+  async inboxAsync(id: string): Promise<HiveMessage[]> {
+    const dir = join(this.agentDir(id), 'inbox');
+    let files: string[];
+    try { files = (await readdirAsync(dir)).filter((f) => f.endsWith('.json')).sort(); } catch { return []; }
+    const read = await Promise.all(files.map((f) => readFileAsync(join(dir, f), 'utf8').then((t) => { try { return JSON.parse(t) as HiveMessage; } catch { return null; } }, () => null)));
+    return read.filter((m): m is HiveMessage => m !== null);
   }
 
   private listMessages(dir: string): HiveMessage[] {
