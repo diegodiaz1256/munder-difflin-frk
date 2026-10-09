@@ -1,17 +1,21 @@
-# Scranton Branch 0.4.6-fork.37
+# Scranton Branch 0.4.6-fork.38
 
-A quick fix for Windows: removing an agent's isolated worktree could empty your project's node_modules.
+The last fork release, and the step to Scranton Branch 1.0.0: update to this one and the app offers 1.0.0 next.
 
 ## What's new
 
-- **Your project's dependencies stay put (Windows).** An agent working in an isolated copy of your repo shares the project's `node_modules` through a link. When that copy was removed, Windows could delete through the link and empty the original `node_modules`. The link is now removed first, and if it cannot be, the copy is kept instead.
-
-Everything from fork.36 (several offices at once, a lighter app, the freeze log, an orchestrator that knows the app, your own skill marketplaces) is included.
+- **Clearer Memory.** It opens on what the office knows, a note written by several agents shows once, and search shows how it found each result, also as a path on the map.
+- **Temps keep working and keep what they learn.** A temp in a git worktree no longer quits at Claude's "trust this folder?" question, and its memory stays in Memory after its work is merged.
+- **Office folders with a space work with Claude Code (Windows).** Hooks failed under a path like `Dunder Mifflin`, so agents stopped reporting and draining their inbox.
+- **Faster on a slow disk, a WSL office or under an antivirus**, with no stalls in steady state.
+- **Tasks you can drag**, with their subtasks, and no duplicate Jira entries in Memory.
+- **Updates follow the latest release**, which is how 1.0.0 reaches this install.
 
 ## Earlier releases
 
 | Version | Highlights |
 |---|---|
+| fork.37 | Windows: removing an agent's isolated copy no longer empties your project's node_modules. |
 | fork.36 | Several offices at once, half the size, freeze log, an orchestrator that knows the app, your own skill marketplaces, PDF previews. |
 | fork.35 | No freezes on a busy floor, lighter agents, git and folder guard, office skills, Backlog, deliverable diffs. |
 | fork.34 | Inbox as a chat per agent, task history, deliverables with authors, agents keep their conversation. |
@@ -41,26 +45,26 @@ Everything from fork.36 (several offices at once, a lighter app, the freeze log,
 ### macOS
 | | |
 |---|---|
-| Universal (Apple Silicon + Intel) | [`Scranton-Branch-0.4.6-fork.37-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.37-mac-universal.dmg) |
+| Universal (Apple Silicon + Intel) | [`Scranton-Branch-0.4.6-fork.38-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.38-mac-universal.dmg) |
 
 ### Windows
 | | |
 |---|---|
-| Installer (x64), *recommended* | [`Scranton-Branch-0.4.6-fork.37-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.37-win-x64-setup.exe) |
-| Portable (x64, no install) | [`Scranton-Branch-0.4.6-fork.37-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.37-win-x64-portable.exe) |
+| Installer (x64), *recommended* | [`Scranton-Branch-0.4.6-fork.38-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.38-win-x64-setup.exe) |
+| Portable (x64, no install) | [`Scranton-Branch-0.4.6-fork.38-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.38-win-x64-portable.exe) |
 
 ### Linux
 | | |
 |---|---|
-| AppImage (x86_64) | [`Scranton-Branch-0.4.6-fork.37-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.37-linux-x86_64.AppImage) |
-| Server, no GUI (x64) | [`scranton-branch-server-0.4.6-fork.37-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.37-linux-x64.tar.gz) |
-| Server, no GUI (arm64) | [`scranton-branch-server-0.4.6-fork.37-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.37-linux-arm64.tar.gz) |
+| AppImage (x86_64) | [`Scranton-Branch-0.4.6-fork.38-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.38-linux-x86_64.AppImage) |
+| Server, no GUI (x64) | [`scranton-branch-server-0.4.6-fork.38-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.38-linux-x64.tar.gz) |
+| Server, no GUI (arm64) | [`scranton-branch-server-0.4.6-fork.38-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.38-linux-arm64.tar.gz) |
 
 Server: unpack, then run `sudo ./install.sh`. Setup, Docker and secrets are in [SERVER.md](https://github.com/diegodiaz1256/scranton-branch/blob/main/SERVER.md).
 
 Builds are not code-signed yet: macOS asks you to allow the app in System Settings → Privacy & Security, and Windows SmartScreen asks you to confirm ("More info" → "Run anyway").
 
-Source: [`v0.4.6-fork.37`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v0.4.6-fork.37.tar.gz)
+Source: [`v0.4.6-fork.38`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v0.4.6-fork.38.tar.gz)
 
 ## About this fork
 
