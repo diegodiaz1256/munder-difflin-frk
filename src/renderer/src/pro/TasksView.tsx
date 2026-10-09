@@ -148,7 +148,11 @@ export function TasksView({ tasks: ledger, roster }: { tasks: KeyedTask[]; roste
           <span className="pro-sub" style={{ fontSize: 12, lineHeight: '16px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.description}</span>
         )}
         {waitsOnHuman(t) && openQuestion(t) && (
-          <span style={{ fontSize: 12, lineHeight: '16px', padding: '4px 6px', borderRadius: 6, background: 'var(--cth-peach-light)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{openQuestion(t)!.q}</span>
+          // Padding on the box, the 3-line clamp on the text inside: on one element a
+          // fourth line showed half-cut in the padding. Markdown markers are not shown.
+          <span style={{ padding: '4px 6px', borderRadius: 6, background: 'var(--cth-peach-light)', minWidth: 0 }}>
+            <span style={{ fontSize: 12, lineHeight: '16px', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>{openQuestion(t)!.q.replace(/\*\*|__|`/g, '')}</span>
+          </span>
         )}
         {(() => {
           const files = filesOf(t);
@@ -159,9 +163,10 @@ export function TasksView({ tasks: ledger, roster }: { tasks: KeyedTask[]; roste
             <span role="link" tabIndex={0} title={files.map((f) => splitPath(f).name).join('\n')}
               onClick={(e) => { e.stopPropagation(); openDeliverables(t.id); }}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); openDeliverables(t.id); } }}
-              className="pro-row" style={{ gap: 6, fontSize: 12, padding: '3px 6px', borderRadius: 6, background: 'var(--cth-cream-100)', boxShadow: 'inset 0 0 0 1px var(--pro-line)', cursor: 'pointer', minWidth: 0 }}>
-              <ProIcon name="deliverables" />
-              <FileTypeBadge name={first} />
+              className="pro-row" style={{ gap: 6, fontSize: 12, padding: '3px 6px', borderRadius: 6, background: 'var(--cth-cream-100)', boxShadow: 'inset 0 0 0 1px var(--pro-line)', cursor: 'pointer', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
+              {/* Held to the card's width: only the name shrinks, ending in "…". */}
+              <span style={{ display: 'inline-flex', flexShrink: 0 }}><ProIcon name="deliverables" /></span>
+              <span style={{ display: 'inline-flex', flexShrink: 0 }}><FileTypeBadge name={first} /></span>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>{first}</span>
               {files.length > 1 && <span className="pro-sub" style={{ fontSize: 11 }}>+{files.length - 1}</span>}
             </span>
