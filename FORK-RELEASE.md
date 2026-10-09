@@ -1,13 +1,16 @@
-# Scranton Branch 1.0.1
-
-Two layout fixes on top of 1.0.0.
+# Scranton Branch 1.1.0
 
 ## What's new
 
-- **Factories:** long stages ("Secretario verificando") and long names stay inside their cards.
-- **Agent page:** a goal with a long word without spaces wraps inside its card.
-
-Everything from 1.0.0 is included: an office of coding agents with its own versions, Memory that shows how it found each result, secrets agents never see, and the best seat for Windows with WSL.
+- **Security fix: subagents can no longer get around an agent's limits.** Tool calls made inside an agent's subagent were reported under the subagent's own id, so the folder and git guard checked nothing. They are now checked against the agent they belong to.
+- **Runner proposals open in the app.** When an agent asks for a runner, you see the command and why in the app's own window, translated, and you can create the secrets it needs right there. The agent only ever sees their names.
+- **Temps lists subagents.** Helpers an agent's Claude starts show up with what they do, who called them and how long they ran.
+- **The orchestrator keeps a work log.** One line per job it hands to a temp and how it ended, shown in Memory. A temp's answer written outside its message body is no longer lost.
+- **Clearer Settings.** Names that say what's inside, a line per section, a search box, and a window that keeps its size.
+- **Drag cards on the Floor board too**, with the same "move its subtasks too?" question.
+- **Sandbox check for Linux and WSL.** Settings → Setup says whether bubblewrap is installed, which Claude Code's sandbox needs, and how to install it.
+- **Faster start** on slow disks: memory and the protocol docs no longer block the window.
+- Fixes: task cards no longer cut off their question or file name; a Factories card keeps long names and stages inside.
 
 ## License
 
@@ -17,6 +20,7 @@ From 1.0.0 Scranton Branch is licensed under the **Apache License 2.0**. If you 
 
 | Version | Highlights |
 |---|---|
+| 1.0.1 | Factories and agent page layout fixes. |
 | 1.0.0 | Own versions, Apache-2.0, Memory that explains itself, best on Windows with WSL. |
 | fork.38 | Clearer Memory, temps that keep working and keep what they learn, faster on slow disks; the step to 1.0.0. |
 | fork.37 | Windows: removing an agent's isolated copy no longer empties your project's node_modules. |
@@ -49,26 +53,26 @@ From 1.0.0 Scranton Branch is licensed under the **Apache License 2.0**. If you 
 ### macOS
 | | |
 |---|---|
-| Universal (Apple Silicon + Intel) | [`Scranton-Branch-1.0.1-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-1.0.1-mac-universal.dmg) |
+| Universal (Apple Silicon + Intel) | [`Scranton-Branch-1.1.0-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-1.1.0-mac-universal.dmg) |
 
 ### Windows
 | | |
 |---|---|
-| Installer (x64), *recommended* | [`Scranton-Branch-1.0.1-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-1.0.1-win-x64-setup.exe) |
-| Portable (x64, no install) | [`Scranton-Branch-1.0.1-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-1.0.1-win-x64-portable.exe) |
+| Installer (x64), *recommended* | [`Scranton-Branch-1.1.0-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-1.1.0-win-x64-setup.exe) |
+| Portable (x64, no install) | [`Scranton-Branch-1.1.0-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-1.1.0-win-x64-portable.exe) |
 
 ### Linux
 | | |
 |---|---|
-| AppImage (x86_64) | [`Scranton-Branch-1.0.1-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-1.0.1-linux-x86_64.AppImage) |
-| Server, no GUI (x64) | [`scranton-branch-server-1.0.1-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-1.0.1-linux-x64.tar.gz) |
-| Server, no GUI (arm64) | [`scranton-branch-server-1.0.1-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-1.0.1-linux-arm64.tar.gz) |
+| AppImage (x86_64) | [`Scranton-Branch-1.1.0-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-1.1.0-linux-x86_64.AppImage) |
+| Server, no GUI (x64) | [`scranton-branch-server-1.1.0-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-1.1.0-linux-x64.tar.gz) |
+| Server, no GUI (arm64) | [`scranton-branch-server-1.1.0-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-1.1.0-linux-arm64.tar.gz) |
 
 Server: unpack, then run `sudo ./install.sh`. Setup, Docker and secrets are in [SERVER.md](https://github.com/diegodiaz1256/scranton-branch/blob/main/SERVER.md).
 
 Builds are not code-signed yet: macOS asks you to allow the app in System Settings → Privacy & Security, and Windows SmartScreen asks you to confirm ("More info" → "Run anyway").
 
-Source: [`v1.0.1`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v1.0.1.tar.gz)
+Source: [`v1.1.0`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v1.1.0.tar.gz)
 
 ## About Scranton Branch
 
