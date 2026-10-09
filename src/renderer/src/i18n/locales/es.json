@@ -1779,6 +1779,12 @@
     },
     "memory": {
       "ticket": "ticket · {{status}}",
+      "pathWords": "palabras: {{words}}",
+      "pathMeaning": "por significado · {{score}}",
+      "pathMemory": "memoria de {{agent}} › {{section}}",
+      "pathDoc": "documento",
+      "pathTicket": "tablero › {{status}}",
+      "pathTitle": "Cómo lo encontró la búsqueda",
       "byMeaning": "por significado",
       "meaningUnavailable": "La búsqueda por significado no está disponible",
       "meaningDown": "la búsqueda por significado no está disponible ahora; se muestran coincidencias exactas",

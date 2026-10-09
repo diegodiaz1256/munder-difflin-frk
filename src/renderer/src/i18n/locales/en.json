@@ -1779,6 +1779,12 @@
     },
     "memory": {
       "ticket": "ticket · {{status}}",
+      "pathWords": "words: {{words}}",
+      "pathMeaning": "by meaning · {{score}}",
+      "pathMemory": "{{agent}}'s memory › {{section}}",
+      "pathDoc": "document",
+      "pathTicket": "board › {{status}}",
+      "pathTitle": "How search found it",
       "byMeaning": "by meaning",
       "meaningUnavailable": "Search by meaning is unavailable",
       "meaningDown": "search by meaning is unavailable right now, showing exact matches",

@@ -20,6 +20,8 @@ interface Hit {
   source: string;
   when?: string;
   section?: string;
+  /** How search got here: what matched, where it lives, the file it came from. */
+  path?: string[];
 }
 
 /** A section's colour, from its tone (design tokens only). */
@@ -131,16 +133,30 @@ export function MemoryView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agen
     setBusy(true);
     const ws = words(query);
     const out: Hit[] = [];
-    for (const e of entries) if (inScope(e.project) && score(e.text, ws) >= 0.6) out.push({ ...titled(e.text), source: e.agent, when: e.date, section: e.section });
-    for (const d of scopedDocs) if (d.kind === 'doc') for (const n of splitNotes(d.text)) if (n.length > 8 && score(n, ws) >= 0.6) out.push({ ...titled(n), source: d.label });
-    for (const t of tasks) if (score(`${t.key ?? ''} ${t.title} ${t.description ?? ''}`, ws) >= 0.5) out.push({ title: `${t.key ? `${t.key} ` : ''}${t.title}`, source: tr('pro.memory.ticket', { status: tr(`pro.tasks.col_${t.status}`) }) });
+    const matched = (text: string) => tr('pro.memory.pathWords', { words: ws.filter((w) => text.toLowerCase().includes(w)).join(', ') });
+    const sectionName = (s: string) => tr(`pro.memory.section.${sectionDef(s).key}`, { defaultValue: sectionDef(s).label });
+    for (const e of entries) if (inScope(e.project) && score(e.text, ws) >= 0.6) {
+      out.push({ ...titled(e.text), source: e.agent, when: e.date, section: e.section,
+        path: [matched(e.text), tr('pro.memory.pathMemory', { agent: e.agent, section: sectionName(e.section) }), ...(e.agentId ? [`agents/${e.agentId}/memory.md`] : [])] });
+    }
+    for (const d of scopedDocs) if (d.kind === 'doc') for (const n of splitNotes(d.text)) if (n.length > 8 && score(n, ws) >= 0.6) {
+      out.push({ ...titled(n), source: d.label, path: [matched(n), tr('pro.memory.pathDoc'), d.id.replace(/^doc:/, '')] });
+    }
+    for (const t of tasks) {
+      const text = `${t.key ?? ''} ${t.title} ${t.description ?? ''}`;
+      if (score(text, ws) >= 0.5) out.push({ title: `${t.key ? `${t.key} ` : ''}${t.title}`, source: tr('pro.memory.ticket', { status: tr(`pro.tasks.col_${t.status}`) }),
+        path: [matched(text), tr('pro.memory.pathTicket', { status: tr(`pro.tasks.col_${t.status}`) })] });
+    }
     if (semantic) {
       const palace = await window.cth.searchMemory(query).catch(() => null);
       if (palace?.ok) {
         setMeaningError(null);
         for (const h of parsePalaceSearch(palace.output).slice(0, 6)) {
           const who = roster.find((a) => a.id === h.wing)?.name ?? h.wing;
-          if (!out.some((o) => h.text.includes(o.title.slice(0, 40)))) out.push({ ...titled(h.text), source: `${who}${h.source ? ` · ${h.source}` : ''} · ${tr('pro.memory.byMeaning')}` });
+          if (!out.some((o) => h.text.includes(o.title.slice(0, 40)))) {
+            out.push({ ...titled(h.text), source: `${who}${h.source ? ` · ${h.source}` : ''} · ${tr('pro.memory.byMeaning')}`,
+              path: [tr('pro.memory.pathMeaning', { score: h.score != null ? h.score.toFixed(2) : '–' }), who, ...(h.source ? [h.room ? `${h.room} › ${h.source}` : h.source] : [])] });
+          }
         }
       } else {
         // Not a result: the exact matches above still stand, and the header says meaning search is off for now.
@@ -251,6 +267,11 @@ function NoteCard({ hit }: { hit: Hit }) {
         {hit.section && <span className="pro-badge" style={{ background: toneVar(sectionDef(hit.section).tone), fontSize: 10 }}>{t(`pro.memory.section.${sectionDef(hit.section).key}`, { defaultValue: sectionDef(hit.section).label })}</span>}
         <span className="pro-sub" style={{ fontSize: 11 }}>{hit.source}{hit.when ? ` · ${hit.when}` : ''}</span>
       </span>
+      {hit.path && hit.path.length > 0 && (
+        <span className="pro-mono pro-sub" title={t('pro.memory.pathTitle')} style={{ fontSize: 10, lineHeight: 1.5, overflowWrap: 'anywhere' }}>
+          {hit.path.map((step, i) => <span key={i}>{i > 0 && <span aria-hidden> → </span>}{step}</span>)}
+        </span>
+      )}
     </button>
   );
 }
