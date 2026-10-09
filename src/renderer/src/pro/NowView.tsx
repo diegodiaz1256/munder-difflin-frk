@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { currentStep, groupActivity, type ActivityItem, type ActivityKind } from '@shared/officeActivity';
 import { useStore } from '@/store/store';
-import { Avatar, GodBadge, StateBadge, agentState, useTasks } from './data';
+import { Avatar, GodBadge, StateLine, agentState, useTasks } from './data';
 import { useOfficeActivity } from './activityStore';
 import { useProStore } from './proStore';
 
@@ -69,18 +69,27 @@ export function NowView() {
           const step = currentStep(items, a.id, now, 10 * 60_000);
           const last = items.find((i) => i.agentId === a.id);
           return (
-            <button key={a.id} className="pro-now-row" onClick={() => setView({ kind: 'agent', agentId: a.id })}
-              style={{ display: 'grid', gridTemplateColumns: 'auto minmax(90px, 140px) auto 1fr auto', gap: 10, alignItems: 'center', textAlign: 'start', background: 'none', border: 'none', padding: '5px 6px', cursor: 'pointer', color: 'inherit' }}>
+            // Who (name, and how they are under it) | what (the task, and the
+            // last step under it) | when. One weight per role, so the eye can
+            // tell names from tasks from steps at a glance.
+            <button key={a.id} className="pro-now-row" onClick={() => setView({ kind: 'agent', agentId: a.id })}>
               <Avatar agent={a} />
-              <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', gap: 5, alignItems: 'center' }}>{a.name}{a.isGod && <GodBadge star />}</strong>
-              <StateBadge {...agentState(a, !!task && task.status === 'blocked')} />
-              <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {task ? <><span className="pro-ticket">{task.key ?? task.id}</span> {task.title}</> : <span className="pro-sub">{t('pro.now.noTask')}</span>}
-                </span>
-                {step && <span className="pro-mono pro-sub" style={{ fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sentence(step).text}{sentence(step).detail ? ` · ${sentence(step).detail}` : ''}</span>}
+              <span className="pro-now-who">
+                <strong>{a.name}{a.isGod && <> <GodBadge star /></>}</strong>
+                <StateLine {...agentState(a, !!task && task.status === 'blocked')} />
               </span>
-              <span className="pro-sub" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{last ? ago(last.ts, now, t) : ''}</span>
+              <span className="pro-now-what">
+                {task
+                  ? <span className="pro-now-task"><span className="pro-ticket pro-ticket-chip">{task.key ?? task.id}</span><span className="pro-now-title">{task.title}</span></span>
+                  : <span className="pro-now-idle">{t('pro.now.noTask')}</span>}
+                {step && (
+                  <span className="pro-now-step">
+                    {t(`pro.steps.${step.key}`, { defaultValue: step.kind === 'step' ? step.params.tool : sentence(step).text })}
+                    {step.kind === 'step' && step.params.detail && <span className="pro-mono"> · {step.params.detail}</span>}
+                  </span>
+                )}
+              </span>
+              <span className="pro-now-when">{last ? ago(last.ts, now, t) : ''}</span>
             </button>
           );
         })}

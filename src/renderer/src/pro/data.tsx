@@ -133,6 +133,17 @@ export function GodBadge({ star = false }: { star?: boolean }) {
   return <span className="pro-badge pro-badge-god" title={tip}>★ {t('pro.god.badge')} <span className="pro-badge-god-sub">· god agent</span></span>;
 }
 
+/** The same state as StateBadge, as a quiet line (a dot and a word) for dense rows. */
+export function StateLine({ label, tone }: { label: string; tone: Tone }) {
+  const { t } = useTranslation();
+  const key = STATE_KEY[label];
+  return (
+    <span className="pro-state-line">
+      <span className="pro-dot" style={{ background: TONE_COLOR[tone] }} /> {key ? t(`pro.state.${key}`) : label}
+    </span>
+  );
+}
+
 export function StateBadge({ label, tone }: { label: string; tone: Tone }) {
   const { t } = useTranslation();
   const key = STATE_KEY[label];
