@@ -47,3 +47,24 @@ test('aliases from notes and typos lead to the same entity', () => {
   assert.equal(matchEntity(e, 'Wrold Eaters')?.name, 'World Eaters');
   assert.equal(matchEntity(e, 'Space Wolves'), undefined, 'no false friend');
 });
+
+test('tickets one digit apart stay separate, and each is listed once', () => {
+  const { buildEntities: build } = require('./load-ts.cjs')('src/shared/memoryEntities.ts');
+  const jira = (rows) => '| Key | Summary | Assignee |\n|---|---|---|\n' + rows.map((r) => `| ${r.join(' | ')} |`).join('\n');
+  const docs = [
+    { label: 'tickets-a.md', text: jira([['ACME-101', 'Fix login', 'alice'], ['ACME-103', 'Add search', 'bob'], ['ACME-250', 'Update docs', 'alice']]) },
+    { label: 'tickets-b.md', text: jira([['ACME-101', 'Fix login', 'alice'], ['ACME-102', 'Fix logout', 'carol'], ['ACME-250', 'Update docs', 'alice']]) }
+  ];
+  const es = build(docs);
+  const names = es.map((e) => e.name).sort();
+  assert.deepEqual(names, ['ACME-101', 'ACME-102', 'ACME-103', 'ACME-250']);
+  const a = es.find((e) => e.name === 'ACME-101');
+  assert.deepEqual(a.attrs.map((x) => `${x.label}=${x.value}`), ['Summary=Fix login', 'Assignee=alice'], 'its own fields only, once');
+});
+
+test('numbered steps and timelines are not entities', () => {
+  const { buildEntities: build } = require('./load-ts.cjs')('src/shared/memoryEntities.ts');
+  const steps = '| # | Step | Owner |\n|---|---|---|\n| 1 | Build | jim |\n| 2 | Test | pam |\n| 3 | Ship | god |';
+  const times = '| Time | Event |\n|---|---|\n| 10:00 | start |\n| 10:30 | review |\n| 11:00 | merge |';
+  assert.deepEqual(build([{ label: 'plan.md', text: steps + '\n\n' + times }]), []);
+});

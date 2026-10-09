@@ -106,18 +106,25 @@ export function aliasPairs(text: string): Array<[string, string]> {
  *  rows are left out as too thin to be a collection. */
 export function buildEntities(docs: Array<{ label: string; text: string }>): Entity[] {
   const byKey = new Map<string, Entity>();
-  /** The entity a name refers to: exact key, an alias, or a near spelling. */
+  /** The entity a name refers to: exact key, an alias, or a near spelling.
+   *  Names with a number in them (tickets like ACME-101, versions) only
+   *  match exactly: one digit apart is another ticket, not a typo. */
   const find = (n: string): Entity | undefined => {
     const k = entityKey(n);
     const hit = byKey.get(k);
     if (hit) return hit;
     for (const e of byKey.values()) if (e.aliases.some((a) => entityKey(a) === k)) return e;
-    for (const e of byKey.values()) if (k.length >= 5 && (similarity(k, e.key) >= 0.86 || closeSpelling(k, e.key))) return e;
+    if (/\d/.test(k)) return undefined;
+    for (const e of byKey.values()) if (!/\d/.test(e.key) && k.length >= 5 && (similarity(k, e.key) >= 0.86 || closeSpelling(k, e.key))) return e;
     return undefined;
   };
   for (const d of docs) {
     for (const t of parseTables(d.text)) {
       if (t.rows.length < 3) continue;
+      // A numbered list of steps, a timeline or a table of measurements names
+      // no things: its first column is mostly numbers, times or dates.
+      const firsts = t.rows.map((r) => clean(r[0] ?? '')).filter(Boolean);
+      if (firsts.filter((c) => /^[#\d\s.:,/\-–>+%()smhx]+$/i.test(c)).length > firsts.length / 2) continue;
       const kind = t.headers[0] || 'Item';
       let group: string | undefined;
       for (const r of t.rows) {
@@ -150,7 +157,8 @@ export function buildEntities(docs: Array<{ label: string; text: string }>): Ent
       for (const n of [a, b]) if (entityKey(n) !== e.key && !e.aliases.some((x) => entityKey(x) === entityKey(n))) e.aliases.push(n);
     }
   }
-  return [...byKey.values()].filter((e) => e.attrs.length > 0);
+  // One entity can sit under several keys (each spelling that found it): list it once.
+  return [...new Set(byKey.values())].filter((e) => e.attrs.length > 0);
 }
 
 /** The entity a query names (its name, an alias, or close to either). */
