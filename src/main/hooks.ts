@@ -10,6 +10,7 @@
  *
  * Runs in the Electron main process.
  */
+import { SubagentTracker } from './subagents';
 import { createServer, createConnection, type Server, type Socket } from 'node:net';
 import { existsSync, rmSync, statSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -45,6 +46,8 @@ interface HookPayload {
   cwd?: string;
   tool_name?: string;
   tool_input?: unknown;
+  /** Claude: the tool call's id, the same on its Pre and Post events. */
+  tool_use_id?: string;
   stop_hook_active?: boolean;
   /** PostToolUse: what the tool returned. PostToolUseFailure: its error. */
   tool_response?: unknown;
@@ -118,6 +121,10 @@ export class HookServer {
   private server: Server | null = null;
   /** Each agent's last submitted prompt (redacted), for keepHumanPrompt. */
   private lastPrompts = new Map<string, { text: string; ts: number }>();
+  /** Subagents agents start (main/subagents.ts), listed in Temps. */
+  readonly subagents = new SubagentTracker();
+  /** Called when that list changes. */
+  onSubagentsChanged?: () => void;
   /** An agent's name and face for its desktop notifications (set by main). */
   notifyAs: ((agentId: string) => { name?: string; icon?: Electron.NativeImage }) | null = null;
   /** The last prompt an agent received, if recent. */
@@ -747,6 +754,10 @@ export class HookServer {
     if (!validateHookEvent(payload)) {
       console.warn('[hive] rejected invalid hook event:', event);
       return;
+    }
+    // A blocked call never started a subagent.
+    if (!blocked && this.subagents.onHook(agentId, event, p)) {
+      try { this.onSubagentsChanged?.(); } catch (e) { console.error('[hooks] onSubagentsChanged:', e); }
     }
     if (agentId && STEP_EVENTS.has(event)) {
       const log = this.stepLog.get(agentId) ?? [];

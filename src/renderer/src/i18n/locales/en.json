@@ -1775,6 +1775,12 @@
       "idle": "idle {{age}}",
       "leaving": "Leaving…",
       "stop": "Stop",
+      "subagents": "Subagents",
+      "subagentsHow": "Helpers an agent's Claude started inside its own session (its Task tool). They have no terminal of their own and end when their answer comes back.",
+      "calledBy": "called by {{name}}",
+      "subRunning": "running for {{age}}",
+      "subDone": "done in {{age}}",
+      "subFailed": "stopped after {{age}}",
       "preserved": "Finished, waiting to be integrated"
     },
     "memory": {

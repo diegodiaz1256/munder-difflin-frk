@@ -412,6 +412,9 @@ const hookServer = new HookServer(
   standingGoalFromRoster,
   (agentId, event, message) => workerWake.noteHook(agentId, event, message)
 );
+// Subagents agents start (Task/Agent tool), for Temps.
+hookServer.onSubagentsChanged = () => { try { liveWebContents()?.send('subagents:changed', hookServer.subagents.list()); } catch { /* window gone */ } };
+ipcMain.handle('subagents:list', () => hookServer.subagents.list());
 hookServer.notifyAs = (agentId) => ({
   name: hive.registry().agents?.[agentId]?.name,
   icon: agentFaces.get(agentId)
@@ -1288,6 +1291,8 @@ ptyManager.setExitHandler((id, exitCode, info) => {
   // pty->agent mapping, so after it runs we can no longer say WHOSE process
   // died. Only abnormal exits are recorded (recordAgentExit returns early on a
   // clean one), so this adds no noise to a normal archive.
+  // Whatever subagents that agent had running ended with it.
+  { const owner = ptyToAgent.get(id); if (owner && hookServer.subagents.endFor(owner)) hookServer.onSubagentsChanged?.(); }
   // A temp whose process ended before it reported done (crash, refused start).
   const exitingWorker = liveWorkers.get(id);
   if (exitingWorker && !exitingWorker.releasing) logWork(exitingWorker, 'exited', { exitCode });
