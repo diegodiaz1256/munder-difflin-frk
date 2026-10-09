@@ -53,6 +53,9 @@ export interface Runner {
   timeoutSec?: number;
 }
 
+/** The human's answer to a proposal: yes or no, plus the secrets created for it. */
+export type ProposalAnswer = boolean | { ok: boolean; secrets?: Record<string, { kind: 'secret' | 'op'; value: string }> };
+
 export interface EnvVaultDeps {
   readVars: () => EnvVar[];
   writeVars: (v: EnvVar[]) => void;
@@ -63,8 +66,10 @@ export interface EnvVaultDeps {
   deleteSecret: (ref: string) => void;
   /** Ask the human; resolves true to run. */
   approve: (req: { runner: Runner; agentName: string; cwd: string; changed: boolean }) => Promise<'once' | 'always' | 'deny'>;
-  /** Ask the human whether to add a runner an agent proposed. */
-  approveProposal?: (req: { proposal: Pick<Runner, 'name' | 'command' | 'secrets' | 'description'>; agentName: string }) => Promise<boolean>;
+  /** Ask the human whether to add a runner an agent proposed. `missing` are
+   *  secrets it names that do not exist yet: the human can create them in the
+   *  same prompt (a value, or a 1Password reference); the agent never sees them. */
+  approveProposal?: (req: { proposal: Pick<Runner, 'name' | 'command' | 'secrets' | 'description'>; agentName: string; missing: string[] }) => Promise<ProposalAnswer>;
   /** `op read <ref>` (injected for tests). */
   opRead?: (ref: string) => Promise<string>;
   log?: (m: string) => void;
@@ -226,8 +231,10 @@ export class EnvVault {
    * see (a migration, a dev server check, a deploy script). Nothing is added
    * until the human approves it in a prompt that shows the exact command and
    * the secrets; then it is an ordinary runner (asked about again whenever
-   * the worktree changed, like any other). Only secrets that exist can be
-   * named, and an existing runner is never replaced from here.
+   * the worktree changed, like any other). A secret it names that does not
+   * exist yet is created by the human in that same prompt (never by the
+   * agent); a plain variable cannot be named as a secret, and an existing
+   * runner is never replaced from here.
    */
   async proposeRunner(input: unknown, ctx: { agentName: string }): Promise<{ ok: boolean; id?: string; error?: string }> {
     const r = (input ?? {}) as Record<string, unknown>;
@@ -238,18 +245,32 @@ export class EnvVault {
     if (command.length > 1000) return { ok: false, error: 'the command is longer than 1000 characters' };
     const secretsIn = Array.isArray(r.secrets) ? r.secrets.filter((x): x is string => typeof x === 'string').map((x) => x.trim()).filter(Boolean) : [];
     const known = new Set(this.secretNames());
-    const unknown = secretsIn.filter((x) => !known.has(x));
-    if (unknown.length) {
-      return { ok: false, error: `no such secret: ${unknown.join(', ')}. Stored secrets: ${[...known].join(', ') || 'none yet (ask the human to add one in Environment)'}` };
+    const plain = new Set(this.deps.readVars().filter((v) => v.kind === 'plain').map((v) => v.name));
+    const clash = secretsIn.filter((x) => plain.has(x));
+    if (clash.length) {
+      return { ok: false, error: `${clash.join(', ')} ${clash.length === 1 ? 'is a plain variable' : 'are plain variables'}, not a secret. Stored secrets: ${[...known].join(', ') || 'none yet'}` };
     }
+    const badName = secretsIn.filter((x) => !NAME.test(x));
+    if (badName.length) return { ok: false, error: `secret names are letters, digits and _ (not starting with a digit): ${badName.join(', ')}` };
+    const missing = [...new Set(secretsIn.filter((x) => !known.has(x)))];
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     if (!id) return { ok: false, error: 'the name needs a letter or a digit' };
     if (this.deps.readRunners().some((x) => x.id === id)) return { ok: false, error: `a runner named ${id} already exists: run it, or propose another name` };
     if (!this.deps.approveProposal) return { ok: false, error: 'proposals are not available here' };
     const description = typeof r.description === 'string' && r.description.trim() ? r.description.trim().slice(0, 200) : undefined;
     const proposal = { name, command, secrets: [...new Set(secretsIn)], ...(description ? { description } : {}) };
-    const yes = await this.deps.approveProposal({ proposal, agentName: ctx.agentName });
-    if (!yes) return { ok: false, error: 'the human declined this runner' };
+    const raw = await this.deps.approveProposal({ proposal, agentName: ctx.agentName, missing });
+    const answer = typeof raw === 'boolean' ? { ok: raw, secrets: {} } : raw;
+    if (!answer.ok) return { ok: false, error: 'the human declined this runner' };
+    // The secrets the human created in the prompt. The agent gets only names.
+    for (const m of missing) {
+      const s = answer.secrets?.[m];
+      if (!s || !s.value.trim()) return { ok: false, error: `the human did not add the secret ${m}` };
+      const r = s.kind === 'op'
+        ? this.setVar({ name: m, kind: 'op', value: s.value.trim(), note: `added for runner ${name}` })
+        : this.setVar({ name: m, kind: 'secret', note: `added for runner ${name}` }, s.value);
+      if (!r.ok) return { ok: false, error: `could not store the secret ${m}: ${r.error ?? 'unknown error'}` };
+    }
     this.deps.log?.(`runner ${id} added at ${ctx.agentName}'s request`);
     return this.setRunner({ ...proposal, id, approval: 'on-change' });
   }
