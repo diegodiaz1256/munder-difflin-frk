@@ -7,6 +7,8 @@
   --cth-cream-300: #E8D9A0;
   --cth-paper-100: #FCFAF0;
   --cth-paper-200: #F0EAD2;
+  /* A document page (PDF): white in both themes, like the paper it stands for. */
+  --cth-page: #FFFFFF;
 
   /* Ink */
   --cth-ink-900: #1A1320;

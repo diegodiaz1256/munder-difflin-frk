@@ -12,6 +12,8 @@ export const colors = {
     100: 0xfcfaf0,
     200: 0xf0ead2
   },
+  /** A document page (PDF): white in both themes. Mirrors --cth-page. */
+  page: 0xffffff,
   ink: {
     900: 0x1a1320,
     700: 0x3d2e4a,

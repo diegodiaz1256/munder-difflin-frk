@@ -76,6 +76,7 @@
     "electron": "^32.2.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
+    "pdfjs-dist": "^4.10.38",
     "i18next": "^26.3.6",
     "localtunnel": "^2.0.2",
     "mermaid": "^11.17.2",

@@ -2,8 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState } from 'react';
 import { useStore, type Agent } from '@/store/store';
 import { SpritePortrait } from '@/components/SpritePortrait';
-import { parseTasks, waitsOnHuman, type HiveTask } from '@/components/TasksKanban';
-import { formatTaskKey } from '@shared/taskKeys';
+import { loadKeyedTasks, waitsOnHuman, type HiveTask } from '@/components/TasksKanban';
 import { terminalTail } from '@/components/terminalPool';
 
 /**
@@ -40,13 +39,7 @@ export interface KeyedTask extends HiveTask {
 
 /** The board with its ticket keys, polled every 5 s (the Classic kanban's cadence). */
 export function useTasks(): KeyedTask[] {
-  return usePoll(async () => {
-    const [raw, keys] = await Promise.all([
-      window.cth.hiveTasks(),
-      window.cth.hiveTaskKeys().catch(() => ({ prefix: 'md', keys: {} as Record<string, number> }))
-    ]);
-    return parseTasks(raw).map((t) => ({ ...t, key: formatTaskKey(keys.prefix, keys.keys[t.id]) }));
-  }, 5000, [] as KeyedTask[]);
+  return usePoll(loadKeyedTasks, 5000, [] as KeyedTask[]);
 }
 
 // Types flow from the typed `window.cth` global, as elsewhere in the renderer,

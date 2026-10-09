@@ -2410,7 +2410,14 @@
       "searchTicket": "Search, or a ticket (DUN-12)",
       "changes": "Changes",
       "changesBy": "What {{who}} changed · {{when}}",
-      "noChanges": "No text changes in this version."
+      "noChanges": "No text changes in this version.",
+      "pdfPage": "{{page}} / {{count}}",
+      "pdfPrev": "Previous page",
+      "pdfNext": "Next page",
+      "pdfZoomIn": "Zoom in",
+      "pdfZoomOut": "Zoom out",
+      "pdfFit": "Fit width",
+      "pdfFailed": "This PDF could not be read: {{error}}"
     },
     "engines": {
       "title": "Engines",
