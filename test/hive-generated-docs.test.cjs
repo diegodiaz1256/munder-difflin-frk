@@ -93,11 +93,12 @@ test('hive-service bootstrap refreshes generated hive docs', () => {
   assert.match(
     bootstrapBody,
     // Each step may be wrapped in freezes.time(…) so the freeze log can name it.
-    /hive\.ensureHive\(\)\)?;\s*(?:freezes\.time\('[^']*', \(\) => )?hive\.refreshGeneratedDocs\(\)/,
+    // The refresh runs off the main thread (refreshGeneratedDocsAsync), right after.
+    /hive\.ensureHive\(\)\)?;\s*(?:\/\/[^\n]*\n\s*)*(?:void )?(?:freezes\.time\('[^']*', \(\) => )?hive\.refreshGeneratedDocs(?:Async)?\(\)/,
     'bootstrapHiveServices() must refresh generated docs after ensuring the hive'
   );
   assert.equal(
-    source.match(/hive\.refreshGeneratedDocs\(\)\)?;/g)?.length,
+    source.match(/hive\.refreshGeneratedDocs(?:Async)?\(\)/g)?.length,
     1,
     'refreshGeneratedDocs() must have one production caller'
   );

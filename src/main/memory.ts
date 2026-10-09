@@ -16,7 +16,8 @@
 import { existsSync, statSync, readdirSync, readFileSync, writeFileSync, rmSync, mkdtempSync, mkdirSync } from 'node:fs';
 import { dirname, join, sep as pathSep } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
-import { spawn, spawnSync } from 'node:child_process';
+import { execFile, spawn, spawnSync } from 'node:child_process';
+import { access } from 'node:fs/promises';
 import { ensureKilled } from './procKill';
 
 /** Shown when even an updated mempalace cannot load EmbeddingGemma. The
@@ -247,6 +248,41 @@ export class MemoryManager {
     this.binCheckedAt = Date.now();
     return found;
   }
+  /** bin(), without blocking: the same lookup (PATH first, then the usual
+   *  install folders) through child processes the event loop waits on. At boot
+   *  the sync `where` / login-shell `which` held the window for ~360 ms under an
+   *  antivirus (a login shell can take seconds on macOS). */
+  async binAsync(): Promise<string | null> {
+    if (this.wsl() || this.binCache !== undefined) return this.bin();
+    const isWin = process.platform === 'win32';
+    const exists = (p: string) => access(p).then(() => true, () => false);
+    const run = (file: string, args: string[]) => new Promise<string>((resolve) => {
+      execFile(file, args, { encoding: 'utf8', timeout: 3000, windowsHide: true }, (_e, out) => resolve(String(out ?? '')));
+    });
+    let found: string | null = null;
+    try {
+      const out = isWin ? await run('where', ['mempalace']) : await run(process.env.SHELL ?? '/bin/zsh', ['-ilc', 'which mempalace']);
+      const lines = out.trim().split(/\r?\n/);
+      const p = (isWin ? lines[0] : lines.pop())?.trim();
+      if (p && await exists(p)) found = p;
+    } catch { /* fall through */ }
+    if (!found) {
+      const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
+      const candidates = isWin
+        ? [join(home, '.local', 'bin', 'mempalace.exe'), join(process.env.LOCALAPPDATA ?? '', 'Programs', 'Python', 'Scripts', 'mempalace.exe')]
+        : [`${home}/.local/bin/mempalace`, '/opt/homebrew/bin/mempalace', '/usr/local/bin/mempalace'];
+      for (const c of candidates) if (c && await exists(c)) { found = c; break; }
+    }
+    // A sync lookup may have finished first; keep what it found.
+    if (this.binCache === undefined) { this.binCache = found; this.binCheckedAt = Date.now(); }
+    return this.binCache ?? null;
+  }
+
+  /** start(), once the CLI was looked for without blocking (the boot path). */
+  startSoon(): Promise<void> {
+    return this.binAsync().then(() => this.start(), () => this.start());
+  }
+
   /** Force re-resolution (e.g. after the user installs mempalace). */
   resetBinCache(): void { this.binCache = undefined; }
   private binCheckedAt = 0;

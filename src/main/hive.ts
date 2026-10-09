@@ -19,7 +19,7 @@
  * Everything here runs in the Electron main process.
  */
 import { messageBody } from '../shared/messageBody';
-import { readdir as readdirAsync, readFile as readFileAsync, stat as statAsync } from 'node:fs/promises';
+import { mkdir as mkdirAsync, readdir as readdirAsync, readFile as readFileAsync, stat as statAsync, writeFile as writeFileAsync } from 'node:fs/promises';
 import { gitInvocation, linuxizeText, parseWslPath, runInDistro, toWslUnc, type WslLocation } from './wsl';
 import {
   existsSync, mkdirSync, readFileSync, writeFileSync, renameSync,
@@ -925,6 +925,23 @@ export class HiveManager {
   }
 
   /** Deliberately replace generated hive docs with the bundled versions. */
+  /** refreshGeneratedDocs() off the main thread, writing only the docs whose
+   *  text changed (the boot path: ~190 ms of sync writes under an antivirus). */
+  async refreshGeneratedDocsAsync(): Promise<void> {
+    const root = this.root();
+    if (!root) return;
+    const dirs = new Set<string>();
+    for (const { filename, contents } of GENERATED_HIVE_DOCS) {
+      const path = join(root, filename);
+      try {
+        if (await readFileAsync(path, 'utf8') === contents) continue;
+      } catch { /* missing: write it */ }
+      const dir = dirname(path);
+      if (!dirs.has(dir)) { await mkdirAsync(dir, { recursive: true }); dirs.add(dir); }
+      await writeFileAsync(path, contents, 'utf8');
+    }
+  }
+
   refreshGeneratedDocs(): void {
     const root = this.root();
     if (!root) return;
