@@ -794,6 +794,8 @@ const api = {
    *  on failure (e.g. copy error) returns { ok: false, error }. */
   changeHome: (newHome: string, mode: 'move' | 'fresh'): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('config:changeHome', { newHome, mode }),
+  /** Which of these offices another floor (another app process) is running now. */
+  officesInUse: (paths: string[]): Promise<string[]> => ipcRenderer.invoke('config:officesInUse', paths),
 
   // ─── Filesystem (sandboxed to cwd) ───────────────────────────────────────
   listDir: (root: string, rel: string): Promise<

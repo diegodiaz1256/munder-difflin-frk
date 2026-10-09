@@ -2472,6 +2472,8 @@
     }
   },
   "hivePicker": {
+    "inUse": "open on another floor",
+    "inUseTitle": "Another floor is running this office. Use that window, or pick a different office here.",
     "couldNotOpen": "Could not open that folder.",
     "title": "SELECT A HARNESS CONFIG",
     "intro": "A <strong>harness config</strong> is the folder where the app keeps everything for one workspace — its settings, your agents and their memory, tasks, triggers, and history. Each config is separate and self-contained, so you can run different setups side by side. Open the one you were working in, switch to another, or start a new one.",

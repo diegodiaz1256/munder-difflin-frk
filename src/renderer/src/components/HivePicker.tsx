@@ -47,6 +47,12 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
   const { t } = useTranslation();
   const current = config.harnessHome;
   const recents = (config.recentHives ?? []).filter((h) => h && h !== current);
+  // Offices another floor is running right now: shown, but not openable here.
+  const [inUse, setInUse] = useState<string[]>([]);
+  useEffect(() => {
+    if (!recents.length) return;
+    void window.cth.officesInUse(recents).then(setInUse).catch(() => {});
+  }, [recents.join('|')]);
   const [busy, setBusy] = useState<string | undefined>();
   const [error, setError] = useState<string | undefined>();
   const isWindows = window.cth.platform === 'win32';
@@ -137,13 +143,13 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
                     <button
                       key={h}
                       onClick={() => openHive(h)}
-                      disabled={!!busy}
-                      title={t('hivePicker.switchTitle', { path: h })}
+                      disabled={!!busy || inUse.includes(h)}
+                      title={inUse.includes(h) ? t('hivePicker.inUseTitle') : t('hivePicker.switchTitle', { path: h })}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
                         background: 'var(--cth-paper-100)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)',
-                        border: 'none', cursor: busy ? 'default' : 'pointer', textAlign: 'left',
-                        opacity: busy && busy !== h ? 0.5 : 1
+                        border: 'none', cursor: busy || inUse.includes(h) ? 'default' : 'pointer', textAlign: 'left',
+                        opacity: (busy && busy !== h) || inUse.includes(h) ? 0.5 : 1
                       }}
                     >
                       <Icon name="folder" />
@@ -157,7 +163,7 @@ export function HivePicker({ config, onOpenCurrent }: HivePickerProps) {
                         }}>{h}</div>
                       </div>
                       <span style={{ fontSize: 11, color: 'var(--cth-ink-500)', flexShrink: 0 }}>
-                        {busy === h ? t('hivePicker.opening') : t('hivePicker.switch')}
+                        {busy === h ? t('hivePicker.opening') : inUse.includes(h) ? t('hivePicker.inUse') : t('hivePicker.switch')}
                       </span>
                     </button>
                   ))}
