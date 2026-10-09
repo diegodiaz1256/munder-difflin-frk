@@ -1705,7 +1705,14 @@
       "layout": "Vista",
       "layout_board": "Tablero",
       "layout_tree": "Por petición",
-      "parked": "Aparcada"
+      "parked": "Aparcada",
+      "dragHint": "Arrástrala a otra columna para moverla",
+      "moveKidsTitle": "Mover {{key}} a {{to}}",
+      "moveKidsBody_one": "Tiene {{count}} subtarea que no está en {{to}}. ¿La mueves también?",
+      "moveKidsBody_other": "Tiene {{count}} subtareas que no están en {{to}}. ¿Las mueves también?",
+      "moveOnlyThis": "Solo esta",
+      "moveWithKids_one": "Moverla con su subtarea",
+      "moveWithKids_other": "Moverla con sus {{count}} subtareas"
     },
     "automations": {
       "rules": "Programaciones, contexto y webhooks",
