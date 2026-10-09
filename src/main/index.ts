@@ -89,7 +89,7 @@ import { Factories } from './factories';
 import { createWslOffice, describeWslError, distroHomeUnc, fromLinuxPath, runInDistroAsync, listDistros, toWslUnc, mirroredNetworking, parseWslPath, probeInDistro, WSL_INSTALL } from './wsl';
 import { WslBridge } from './wslBridge';
 import { McpServers } from './mcpServers';
-import { EnvVault, fingerprintOf } from './envVault';
+import { EnvVault, fingerprintOf, type ProposalAnswer } from './envVault';
 import { addConnection, connectionAccessFor, setConnectionAccess, connectionKeyStored, connectionLaunchEnv, instancesOf, listConnections, removeConnection, renameConnection, serviceOf, setConnectionEnabled, setConnectionScope, setConnectionSecret, testConnection } from './connections';
 import { McpGateway, type McpCallRecord } from './mcpGateway';
 import { effectiveApiAccess, explainConnection, isAccess, type Access } from '../shared/connectionAccess';
@@ -596,6 +596,10 @@ ipcMain.handle('fortress:uninstall', () => {
 });
 
 // Environment & secrets (envVault.ts): agents use secrets, never see them.
+/** Runner proposals waiting for the human in the window, by id. */
+interface RunnerProposalRequest { id: string; agentName: string; proposal: { name: string; command: string; secrets: string[]; description?: string }; missing: string[] }
+const pendingProposals = new Map<string, { req: RunnerProposalRequest; settle: (a: ProposalAnswer) => void }>();
+
 const envVault = new EnvVault({
   readVars: () => readConfig().envVars ?? [],
   writeVars: (v) => writeConfig({ envVars: v }),
@@ -618,18 +622,38 @@ const envVault = new EnvVault({
     refocusAfterDialog(win);
     return response === 0 ? 'once' : response === 1 ? 'always' : 'deny';
   },
-  approveProposal: async ({ proposal, agentName }) => {
+  approveProposal: async ({ proposal, agentName, missing }) => {
     const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    // In the app's own window: translated, and the human can create the
+    // secrets the runner needs right there (renderer: RunnerProposalModal).
+    if (win && !win.webContents.isDestroyed()) {
+      const id = randomUUID();
+      const req: RunnerProposalRequest = { id, agentName, proposal, missing };
+      return new Promise<ProposalAnswer>((resolve) => {
+        const timer = setTimeout(() => settle(false), 15 * 60_000);
+        const settle = (a: ProposalAnswer) => { clearTimeout(timer); pendingProposals.delete(id); resolve(a); };
+        pendingProposals.set(id, { req, settle });
+        try { win.webContents.send('env:proposal', req); } catch { settle(false); return; }
+        if (win.isMinimized()) win.restore();
+        win.flashFrame(true);
+      });
+    }
+    // No window: a native prompt can say yes or no, but cannot take a secret.
+    if (missing.length) return false;
     const opts = {
       type: 'question' as const,
       buttons: ['Add runner', 'Decline'],
       defaultId: 1, cancelId: 1, noLink: true,
       title: 'Add a runner?',
       message: `${agentName} asks for a runner "${proposal.name}"`,
-      detail: `${proposal.command}\n\nWith secrets: ${proposal.secrets.join(', ') || 'none'}${proposal.description ? `\nWhy: ${proposal.description}` : ''}\n\nIt runs in the asking agent's own folder. The agent gets only the output, with every secret masked, and you are asked again before a run whenever its files changed. You can edit or remove it in Environment.`
+      detail: `${proposal.command}
+
+With secrets: ${proposal.secrets.join(', ') || 'none'}${proposal.description ? `
+Why: ${proposal.description}` : ''}
+
+It runs in the asking agent's own folder. The agent gets only the output, with every secret masked, and you are asked again before a run whenever its files changed. You can edit or remove it in Environment.`
     };
-    const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
-    refocusAfterDialog(win);
+    const { response } = await dialog.showMessageBox(opts);
     return response === 0;
   },
   log: (m) => console.log('[env]', m)
@@ -4586,6 +4610,22 @@ ipcMain.handle('env:setVar', (_evt, v: unknown, secret: unknown) => envVault.set
 ipcMain.handle('env:removeVar', (_evt, name: unknown) => envVault.removeVar(name));
 ipcMain.handle('env:setRunner', (_evt, r: unknown) => envVault.setRunner(r));
 ipcMain.handle('env:removeRunner', (_evt, id: unknown) => envVault.removeRunner(id));
+// Runner proposals shown in the window. `pending` lets a reloaded window pick up
+// the ones still waiting. The answer carries only the secrets the proposal is
+// missing; anything else in it is ignored.
+ipcMain.handle('env:proposalsPending', () => [...pendingProposals.values()].map((p) => p.req));
+ipcMain.handle('env:proposalAnswer', (_evt, id: unknown, answer: unknown) => {
+  const p = typeof id === 'string' ? pendingProposals.get(id) : undefined;
+  if (!p) return { ok: false };
+  const a = (answer ?? {}) as { ok?: unknown; secrets?: Record<string, { kind?: unknown; value?: unknown }> };
+  const secrets: Record<string, { kind: 'secret' | 'op'; value: string }> = {};
+  for (const name of p.req.missing) {
+    const s = a.secrets?.[name];
+    if (s && typeof s.value === 'string') secrets[name] = { kind: s.kind === 'op' ? 'op' : 'secret', value: s.value };
+  }
+  p.settle({ ok: a.ok === true, secrets });
+  return { ok: true };
+});
 ipcMain.handle('env:opStatus', () => new Promise((resolve) => {
   // Is the 1Password CLI installed? (Signing in happens through the desktop app.)
   const p = spawn('op', ['--version'], { windowsHide: true });
