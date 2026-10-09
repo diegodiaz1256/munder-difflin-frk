@@ -550,7 +550,9 @@ export function useHive(config: HarnessConfig | null): void {
         // inbox-wake nudge (idle-only) could never reach it — its mail would sit
         // undrained. Treat it as idle; a follow-up tool/turn re-sets working.
         if (!breakerArmed) updateAgent(e.agentId, { status: 'idle', action: 'idle', carrying: undefined });
-      } else if (e.event === 'Stop' || e.event === 'SubagentStop') {
+      } else if (e.event === 'Stop') {
+        // (SubagentStop is a helper of this agent finishing, not the agent: it
+        // stays as it was.)
         // A blocked Stop means the agent is being re-engaged to process its
         // inbox — it's NOT idle, so keep it working until it genuinely stops.
         if (e.blocked) {

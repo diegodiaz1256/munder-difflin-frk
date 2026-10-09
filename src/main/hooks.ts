@@ -36,6 +36,8 @@ interface HookPayload {
   ping?: string;
   hook_event_name?: string;
   agent_id?: string | null;
+  /** Claude: the subagent a call was made in (its own agent_id), when it was. */
+  subagent_id?: string;
   session_id?: string;
   transcript_path?: string;
   /** Status-line payloads only: the session's live context accounting. */
@@ -531,7 +533,9 @@ export class HookServer {
       this.breaker?.recordCompactEnd(agentId);
     }
 
-    if ((event === 'Stop' || event === 'SubagentStop') && agentId) {
+    // A subagent ending is not its caller ending its turn: no "finished" notice.
+    if (event === 'SubagentStop') { this.emit(agentId, event, p); return {}; }
+    if (event === 'Stop' && agentId) {
       // Respect any upstream Stop hook that already re-entered this boundary.
       if (p.stop_hook_active) { this.emit(agentId, event, p); return {}; }
       // Never turn unread hive mail into a forced continuation at Stop. That old

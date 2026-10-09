@@ -4141,7 +4141,13 @@ process.stdin.on('data', (d) => { data += d; });
 process.stdin.on('end', () => {
   let payload = {};
   try { payload = JSON.parse(data || '{}'); } catch (_) {}
-  if (!payload.agent_id) payload.agent_id = process.env.AGENT_ID || null;
+  // The office agent is the one this process belongs to (AGENT_ID). Claude Code
+  // sends its OWN agent_id on calls made inside a subagent: that goes in
+  // subagent_id, never in agent_id, or the office would look up the limits
+  // (folders, git) of an agent it does not know, and check nothing.
+  var hiveAgent = process.env.AGENT_ID || null;
+  if (payload.agent_id && hiveAgent && payload.agent_id !== hiveAgent) payload.subagent_id = payload.agent_id;
+  payload.agent_id = hiveAgent || payload.agent_id || null;
   const sock = process.env.HIVE_SOCK;
   if (isStatus) {
     // Status-line mode: Claude Code pipes the session status JSON (incl.

@@ -3,7 +3,8 @@
  * HookServer's Notification/Stop branches are what tell the harness an agent is
  * idle and safe to deliver queued mail to. Both branches call notify() but
  * neither had test coverage:
- *   - Stop/SubagentStop always notifies "finished — idle" (unless stop_hook_active)
+ *   - Stop always notifies "finished — idle" (unless stop_hook_active); SubagentStop
+ *     does not: a helper finishing is not its agent going idle
  *   - Notification only notifies when notification_type === 'idle' OR the message
  *     text contains "waiting for your input" (case-insensitive) — this string
  *     fallback exists for CLI versions/locales that don't send the structured
@@ -94,11 +95,12 @@ test('Stop with stop_hook_active does NOT re-notify', async (t) => {
     'an already-re-entered Stop boundary must not spam another toast');
 });
 
-test('SubagentStop behaves the same as Stop', async (t) => {
+test('SubagentStop is a helper finishing, not the agent going idle', async (t) => {
+  // Mail is delivered to an agent on its idle notice: a subagent ending
+  // mid-turn must not open that door.
   const { fire } = await floor(t);
-  await fire({ hook_event_name: 'SubagentStop' });
-  assert.equal(notifications.length, 1);
-  assert.equal(notifications[0].body, 'finished — idle');
+  await fire({ hook_event_name: 'SubagentStop', subagent_id: 'af48f5f85f52aac0e' });
+  assert.equal(notifications.length, 0);
 });
 
 test('notifications setting off suppresses the OS toast but the hook still resolves', async (t) => {
