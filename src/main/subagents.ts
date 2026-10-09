@@ -1,7 +1,9 @@
 /**
  * Subagents: when an agent's Claude starts one (its Task/Agent tool), the app
- * sees it only through that agent's hooks, as one tool call that starts
- * (PreToolUse) and later returns (PostToolUse / PostToolUseFailure). There is
+ * sees it only through that agent's hooks: the tool call starts (PreToolUse)
+ * and returns (PostToolUse / PostToolUseFailure). A subagent launched in the
+ * background returns at once ("async_launched", with its own agentId) and ends
+ * later with a SubagentStop carrying that id (as subagent_id). There is
  * no terminal of its own to show, so Temps lists them from here: what it was
  * asked, which kind of subagent, who called it, and how long it ran.
  *
@@ -21,6 +23,8 @@ export interface SubagentRun {
   endedAt?: number;
   /** false when the tool call failed. */
   ok?: boolean;
+  /** Claude's own id for a subagent running in the background. */
+  asyncId?: string;
 }
 
 export const SUBAGENT_TOOLS = new Set(['Task', 'Agent']);
@@ -37,8 +41,18 @@ export class SubagentTracker {
   private seq = 0;
 
   /** Feed one hook event; returns true when the list changed. */
-  onHook(agentId: string | undefined, event: string, p: { tool_name?: string; tool_input?: unknown; tool_use_id?: string }, now = Date.now()): boolean {
-    if (!agentId || !p.tool_name || !SUBAGENT_TOOLS.has(p.tool_name)) return false;
+  onHook(agentId: string | undefined, event: string, p: { tool_name?: string; tool_input?: unknown; tool_use_id?: string; tool_response?: unknown; subagent_id?: string }, now = Date.now()): boolean {
+    if (!agentId) return false;
+    // A background subagent ended.
+    if (event === 'SubagentStop') {
+      const open = [...this.runs.values()].filter((r) => r.parentId === agentId && !r.endedAt && r.asyncId);
+      const run = p.subagent_id ? open.find((r) => r.asyncId === p.subagent_id) : undefined;
+      if (!run) return false;
+      run.endedAt = now;
+      run.ok = true;
+      return true;
+    }
+    if (!p.tool_name || !SUBAGENT_TOOLS.has(p.tool_name)) return false;
     const input = (p.tool_input && typeof p.tool_input === 'object' ? p.tool_input : {}) as Record<string, unknown>;
     const description = typeof input.description === 'string' && input.description.trim()
       ? input.description
@@ -65,6 +79,12 @@ export class SubagentTracker {
         run = open.find((r) => r.description === want) ?? open[0];
       }
       if (!run) return false;
+      // Launched in the background: still running until its SubagentStop.
+      const res = (p.tool_response && typeof p.tool_response === 'object' ? p.tool_response : {}) as Record<string, unknown>;
+      if (event === 'PostToolUse' && (res.status === 'async_launched' || res.isAsync === true) && typeof res.agentId === 'string') {
+        run.asyncId = res.agentId;
+        return true;
+      }
       run.endedAt = now;
       run.ok = event === 'PostToolUse';
       return true;

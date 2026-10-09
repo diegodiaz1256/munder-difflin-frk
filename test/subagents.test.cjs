@@ -49,3 +49,16 @@ test('running first; ended ones are kept for a while, then dropped', () => {
   assert.deepEqual(t.list(30).map((r) => r.id), ['now', 'old']);
   assert.deepEqual(t.list(3 * 60 * 60_000).map((r) => r.id), ['now'], 'ended over 2 h ago is gone');
 });
+
+test('a background subagent runs until its SubagentStop, matched by its own id', () => {
+  const t = new SubagentTracker();
+  t.onHook('jim', 'PreToolUse', task({ tool_use_id: 'tu_9' }), 1000);
+  // What Claude Code returns for a subagent launched in the background.
+  t.onHook('jim', 'PostToolUse', task({ tool_use_id: 'tu_9', tool_response: { isAsync: true, status: 'async_launched', agentId: 'a5441b8dec3db251c' } }), 1200);
+  assert.equal(t.list(1300)[0].endedAt, undefined, 'still running after the tool returned');
+  assert.equal(t.onHook('jim', 'SubagentStop', { subagent_id: 'someone-else' }, 2000), false);
+  assert.equal(t.onHook('jim', 'SubagentStop', { subagent_id: 'a5441b8dec3db251c' }, 9000), true);
+  const [run] = t.list(9000);
+  assert.equal(run.endedAt, 9000);
+  assert.equal(run.ok, true);
+});
