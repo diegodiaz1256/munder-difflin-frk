@@ -1775,6 +1775,12 @@
       "idle": "inactivo {{age}}",
       "leaving": "Saliendo…",
       "stop": "Parar",
+      "subagents": "Subagentes",
+      "subagentsHow": "Ayudantes que el Claude de un agente lanzó dentro de su propia sesión (su herramienta Task). No tienen terminal propia y terminan cuando vuelve su respuesta.",
+      "calledBy": "lo llamó {{name}}",
+      "subRunning": "en marcha desde hace {{age}}",
+      "subDone": "terminó en {{age}}",
+      "subFailed": "se detuvo tras {{age}}",
       "preserved": "Terminados, esperando a integrarse"
     },
     "memory": {

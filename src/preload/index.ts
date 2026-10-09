@@ -37,6 +37,8 @@ export type {
 /** Environment as the renderer sees it: a secret shows only whether one is stored. */
 export interface EnvVarView { name: string; kind: 'plain' | 'secret' | 'op'; value?: string; agents?: string[] | null; note?: string; stored?: boolean }
 export type McpTransportView = { kind: 'stdio'; command: string; args: string[] } | { kind: 'http'; url: string };
+/** A subagent an agent's Claude started (main/subagents.ts). */
+export interface SubagentView { id: string; parentId: string; type: string; description: string; startedAt: number; endedAt?: number; ok?: boolean }
 export interface McpMineView { id: string; name: string; transport: McpTransportView; env: Record<string, string>; secretEnv: string[]; enabled: boolean; agents: string[] | null; source?: string; secretsStored: Record<string, boolean> }
 export interface McpFoundView { source: string; file: string; name: string; transport: McpTransportView; env: Array<{ name: string; secret: boolean; value?: string }>; headerNames: string[]; imported: boolean; agent?: string; suggest: { kind: 'connection' | 'builtin'; id: string; label: string } | null }
 export interface McpOverviewView { agentId: string; name: string; provider: string; servers: Array<{ name: string; id: string; origin: 'connection' | 'builtin' | 'yours' | 'office'; access?: 'none' | 'read' | 'readwrite' }> }
@@ -1552,6 +1554,13 @@ const api = {
     ipcRenderer.invoke('env:setVar', v, secret),
   envRemoveVar: (name: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('env:removeVar', name),
   envSetRunner: (r: Partial<RunnerView>): Promise<{ ok: boolean; id?: string; error?: string }> => ipcRenderer.invoke('env:setRunner', r),
+  /** Subagents agents started (their Task/Agent tool): running first. */
+  subagentsList: (): Promise<SubagentView[]> => ipcRenderer.invoke('subagents:list'),
+  onSubagentsChanged: (cb: (list: SubagentView[]) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, list: SubagentView[]) => cb(list);
+    ipcRenderer.on('subagents:changed', listener);
+    return () => ipcRenderer.removeListener('subagents:changed', listener);
+  },
   envRemoveRunner: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('env:removeRunner', id),
   envOpStatus: (): Promise<{ installed: boolean; version?: string }> => ipcRenderer.invoke('env:opStatus'),
   // Manager → MCP (main/mcpServers.ts). Keys are write-only.

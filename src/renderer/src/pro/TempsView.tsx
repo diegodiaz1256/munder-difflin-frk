@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore, type Agent } from '@/store/store';
 import { Avatar, Bar, ago, fmtTokens, usePoll, type WorkerList } from './data';
+import type { SubagentView } from '../../../preload';
 
 const EMPTY: WorkerList = { live: [], preserved: [], maxWorkers: 4 };
 
@@ -34,6 +35,22 @@ export function TempsView({ roster }: { roster: Agent[] }) {
   };
 
   const stop = (id: string) => { void window.cth.stopWorker(id).finally(() => setTick((n) => n + 1)); };
+
+  // Subagents agents started (their Task/Agent tool). No terminal of their own:
+  // what they were asked, their kind, who called them, how long they ran.
+  const [subagents, setSubagents] = useState<SubagentView[]>([]);
+  useEffect(() => {
+    void window.cth.subagentsList().then(setSubagents).catch(() => {});
+    return window.cth.onSubagentsChanged(setSubagents);
+  }, []);
+  const [now, setNow] = useState(() => Date.now());
+  const running = subagents.some((s) => !s.endedAt);
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(id);
+  }, [running]);
+  const callerName = (id: string) => agents.find((x) => x.id === id)?.name ?? roster.find((x) => x.id === id)?.name ?? id;
 
   return (
     <div className="pro-page">
@@ -82,6 +99,31 @@ export function TempsView({ roster }: { roster: Agent[] }) {
             </div>
             <span className="pro-mono pro-sub">{ago(w.ageMs)}</span>
             <button className="pro-btn" disabled={w.releasing} onClick={() => stop(w.workerId)}>{w.releasing ? t('pro.temps.leaving') : t('pro.temps.stop')}</button>
+          </article>
+        );
+      })}
+
+      {subagents.length > 0 && <h3 style={{ margin: '6px 0 0', fontSize: 14 }}>{t('pro.temps.subagents')}</h3>}
+      {subagents.length > 0 && <p className="pro-sub" style={{ fontSize: 12, margin: 0 }}>{t('pro.temps.subagentsHow')}</p>}
+      {subagents.map((s) => {
+        const caller = agents.find((x) => x.id === s.parentId);
+        return (
+          <article key={s.id} className={`pro-card${s.endedAt ? ' pro-card-muted' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Avatar agent={caller} />
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div className="pro-row" style={{ flexWrap: 'wrap' }}>
+                <p className="pro-title" style={{ overflowWrap: 'anywhere' }}>{s.description}</p>
+                <span className="pro-chip">{s.type}</span>
+              </div>
+              <span className="pro-sub" style={{ fontSize: 12 }}>
+                {t('pro.temps.calledBy', { name: callerName(s.parentId) })}
+                {' · '}
+                {!s.endedAt ? t('pro.temps.subRunning', { age: ago(now - s.startedAt) })
+                  : s.ok ? t('pro.temps.subDone', { age: ago(s.endedAt - s.startedAt) })
+                  : t('pro.temps.subFailed', { age: ago(s.endedAt - s.startedAt) })}
+              </span>
+            </div>
+            {!s.endedAt && <span className="pro-typing" aria-hidden style={{ width: 8, height: 8, borderRadius: 4, background: 'var(--cth-mint)' }} />}
           </article>
         );
       })}
