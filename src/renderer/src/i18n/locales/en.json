@@ -1936,7 +1936,19 @@
         "policy_catalog": "Anything in the catalog",
         "none": "None yet.",
         "everyone": "every agent",
-        "remove": "Remove"
+        "remove": "Remove",
+        "policy_mine": "Anthropic's and your marketplaces",
+        "mktTitle": "Your marketplaces",
+        "mktSub": "GitHub repositories with skills (a folder with a SKILL.md each). Their skills join the catalog, here and for the orchestrator.",
+        "mktAdd": "Add",
+        "mktReading": "Reading…",
+        "mktRefresh": "Refresh",
+        "mktCount_one": "{{count}} skill",
+        "mktCount_other": "{{count}} skills",
+        "mktAdded_one": "Added: {{count}} skill.",
+        "mktAdded_other": "Added: {{count}} skills.",
+        "mktFailed": "Could not add it.",
+        "mktStale": "last refresh failed"
       },
       "guardLimits": "\"Outside its folders\" and \"Git\" are checked on every command before it runs: file tools, shell commands (including what they pass to bash -c, cmd /c, PowerShell or wsl) and python/node/perl/ruby one-liners. A script saved in a file, or a path the program builds while it runs, cannot be read in advance, so this is a fence for honest mistakes, not a jail. For a hard limit, run the agent in WSL or a container."
     },

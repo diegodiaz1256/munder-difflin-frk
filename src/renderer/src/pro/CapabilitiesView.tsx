@@ -291,12 +291,14 @@ function OfficeSkills({ config, roster }: { config: HarnessConfig; roster: Agent
         <strong style={{ fontSize: 14 }}>{t('pro.caps.skills.title')}</strong>
         <span className="pro-sub" style={{ fontSize: 12, flex: 1, minWidth: 200 }}>{t('pro.caps.skills.sub')}</span>
         <select className="pro-input" value={policy} aria-label={t('pro.caps.skills.policy')}
-          onChange={(e) => void window.cth.updateConfig({ orchestratorSkills: e.target.value as 'off' | 'official' | 'catalog' })}>
+          onChange={(e) => void window.cth.updateConfig({ orchestratorSkills: e.target.value as 'off' | 'official' | 'mine' | 'catalog' })}>
           <option value="off">{t('pro.caps.skills.policy_off')}</option>
           <option value="official">{t('pro.caps.skills.policy_official')}</option>
+          <option value="mine">{t('pro.caps.skills.policy_mine')}</option>
           <option value="catalog">{t('pro.caps.skills.policy_catalog')}</option>
         </select>
       </span>
+      <SkillMarketplaces />
       {rows.length === 0
         ? <span className="pro-sub" style={{ fontSize: 12 }}>{t('pro.caps.skills.none')}</span>
         : rows.map(([name, s]) => (
@@ -307,6 +309,50 @@ function OfficeSkills({ config, roster }: { config: HarnessConfig; roster: Agent
             <button className="pro-btn" onClick={() => void window.cth.skillsOfficeRemove(name).then(load)}>{t('pro.caps.skills.remove')}</button>
           </span>
         ))}
+    </div>
+  );
+}
+
+/** Your own skill marketplaces: GitHub repos whose skills join the catalog
+ *  (main/skillMarketplaces.ts). The Skills browser and the orchestrator see them. */
+function SkillMarketplaces() {
+  const { t } = useTranslation();
+  const [list, setList] = useState<Awaited<ReturnType<typeof window.cth.skillMarketplaces>> | null>(null);
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const load = (force = false) => { void window.cth.skillMarketplaces(force).then(setList).catch(() => setList([])); };
+  useEffect(() => load(), []);
+  const add = async () => {
+    if (!url.trim()) return;
+    setBusy(true); setNote(null);
+    const r = await window.cth.addSkillMarketplace(url.trim());
+    setBusy(false);
+    if (r.ok) { setUrl(''); setNote({ ok: true, text: t('pro.caps.skills.mktAdded', { count: r.count ?? 0 }) }); load(); }
+    else setNote({ ok: false, text: r.error ?? t('pro.caps.skills.mktFailed') });
+  };
+  return (
+    <div className="pro-mkt">
+      <span className="pro-row" style={{ gap: 8 }}>
+        <span className="pro-side-label" style={{ padding: 0 }}>{t('pro.caps.skills.mktTitle')}</span>
+        <span className="pro-sub" style={{ fontSize: 12, flex: 1 }}>{t('pro.caps.skills.mktSub')}</span>
+        {!!list?.length && <button className="pro-btn" style={{ padding: '1px 8px' }} onClick={() => load(true)}>{t('pro.caps.skills.mktRefresh')}</button>}
+      </span>
+      {list?.map((m) => (
+        <span key={m.url} className="pro-row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <strong style={{ fontSize: 13 }}>{m.label}</strong>
+          <span className="pro-chip">{t('pro.caps.skills.mktCount', { count: m.count })}</span>
+          <span className="pro-sub pro-mono" style={{ fontSize: 11, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={m.url}>{m.url}</span>
+          {m.error && <span className="pro-sub" style={{ fontSize: 11, color: 'var(--cth-coral)' }} title={m.error}>{t('pro.caps.skills.mktStale')}</span>}
+          <button className="pro-btn" onClick={() => void window.cth.removeSkillMarketplace(m.url).then(() => load())}>{t('pro.caps.skills.remove')}</button>
+        </span>
+      ))}
+      <span className="pro-row" style={{ gap: 8 }}>
+        <input className="pro-input pro-mono" style={{ flex: 1, minWidth: 0 }} placeholder="https://github.com/your-org/skills" value={url}
+          onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void add(); }} />
+        <button className="pro-btn pro-btn-primary" disabled={busy || !url.trim()} onClick={() => void add()}>{busy ? t('pro.caps.skills.mktReading') : t('pro.caps.skills.mktAdd')}</button>
+      </span>
+      {note && <span className="pro-sub" style={{ fontSize: 12, color: note.ok ? 'var(--cth-mint)' : 'var(--cth-coral)' }}>{note.text}</span>}
     </div>
   );
 }

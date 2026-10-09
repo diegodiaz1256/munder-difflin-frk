@@ -359,6 +359,9 @@ export interface HarnessConfig {
    *  The on-disk hive (god orchestration under harnessHome) stays process-global;
    *  floors share it. */
   multiWindow?: boolean;
+  /** Your own skill marketplaces (GitHub repos or folders), added to the catalog
+   *  (main/skillMarketplaces.ts). */
+  skillMarketplaces?: Array<{ url: string; label?: string }>;
   /** The renderer's language, as it last reported it: the app menu (built in
    *  main) follows it, and a new floor's first window starts in it. */
   uiLanguage?: 'en' | 'es';

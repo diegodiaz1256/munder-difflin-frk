@@ -1936,7 +1936,19 @@
         "policy_catalog": "Cualquiera del catálogo",
         "none": "Ninguna todavía.",
         "everyone": "todos los agentes",
-        "remove": "Quitar"
+        "remove": "Quitar",
+        "policy_mine": "Las de Anthropic y tus marketplaces",
+        "mktTitle": "Tus marketplaces",
+        "mktSub": "Repositorios de GitHub con skills (una carpeta con un SKILL.md cada una). Sus skills se suman al catálogo, aquí y para el orquestador.",
+        "mktAdd": "Añadir",
+        "mktReading": "Leyendo…",
+        "mktRefresh": "Actualizar",
+        "mktCount_one": "{{count}} skill",
+        "mktCount_other": "{{count}} skills",
+        "mktAdded_one": "Añadido: {{count}} skill.",
+        "mktAdded_other": "Añadido: {{count}} skills.",
+        "mktFailed": "No se pudo añadir.",
+        "mktStale": "la última actualización falló"
       },
       "guardLimits": "«Fuera de sus carpetas» y «Git» se comprueban en cada orden antes de ejecutarla: herramientas de ficheros, comandos de terminal (también lo que pasan a bash -c, cmd /c, PowerShell o wsl) y líneas sueltas de python, node, perl o ruby. Un script guardado en un fichero, o una ruta que el programa construye mientras corre, no se puede leer de antemano: es una valla contra errores, no una jaula. Para un límite firme, ejecuta el agente en WSL o en un contenedor."
     },

@@ -6,7 +6,8 @@
  * skill once into the hive's skill store, copies it into the agents it names
  * and answers in the orchestrator's inbox. What it may install is the human's
  * call (Capabilities → Skills): nothing, Anthropic's own skills only (the
- * default), or anything in the catalog. A skill is instructions that run with
+ * default), Anthropic's plus the human's own marketplaces, or anything in the
+ * catalog. A skill is instructions that run with
  * the agent's tools, so the catalog's community entries stay opt-in.
  *
  *   { "action": "add",    "skill": "pdf", "agents": ["jim", "pam"] }
@@ -14,12 +15,24 @@
  *   { "action": "remove", "skill": "pdf", "agents": ["jim"] }      // omit agents: from everyone
  */
 
-export type SkillPolicy = 'off' | 'official' | 'catalog';
+export type SkillPolicy = 'off' | 'official' | 'mine' | 'catalog';
 
 /** The publisher whose skills count as official. */
 export const OFFICIAL_SKILL_OWNER = 'anthropics';
 
-export interface CatalogEntry { name: string; description: string; url: string; category: string; owner: string }
+export interface CatalogEntry {
+  name: string; description: string; url: string; category: string; owner: string;
+  /** Set when it comes from one of the human's own marketplaces. */
+  marketplace?: string;
+}
+
+/** May the orchestrator add this skill under this policy? */
+export function policyAllows(entry: Pick<CatalogEntry, 'owner' | 'marketplace'>, policy: SkillPolicy): boolean {
+  if (policy === 'off') return false;
+  if (policy === 'catalog') return true;
+  if (entry.owner === OFFICIAL_SKILL_OWNER) return true;
+  return policy === 'mine' && !!entry.marketplace;
+}
 
 export interface OfficeSkill {
   /** The catalog source it was installed from. */
@@ -39,7 +52,7 @@ export type SkillPlan =
   | { ok: true; message: string; next: OfficeSkills; install?: CatalogEntry; drop?: string };
 
 export function cleanSkillPolicy(v: unknown): SkillPolicy {
-  return v === 'off' || v === 'catalog' ? v : 'official';
+  return v === 'off' || v === 'catalog' || v === 'mine' ? v : 'official';
 }
 
 export function readOfficeSkills(raw: unknown): OfficeSkills {
@@ -76,7 +89,7 @@ export function findCatalogSkill(catalog: readonly CatalogEntry[], name: string)
 /** Best matches for some words, for the orchestrator's search. */
 export function searchCatalog(catalog: readonly CatalogEntry[], query: string, policy: SkillPolicy, n = 8): CatalogEntry[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const pool = policy === 'official' ? catalog.filter((c) => c.owner === OFFICIAL_SKILL_OWNER) : catalog;
+  const pool = catalog.filter((c) => policyAllows(c, policy));
   if (!words.length) return pool.slice(0, n);
   return pool
     .map((c) => {
@@ -132,8 +145,9 @@ export function planSkillRequest(
   }
   const entry = findCatalogSkill(ctx.catalog, name);
   if (!entry) return { ok: false, message: `${name} is not in the skills catalog. Search it with md-skills.` };
-  if (ctx.policy === 'official' && entry.owner !== OFFICIAL_SKILL_OWNER) {
-    return { ok: false, message: `${entry.name} is a community skill (${entry.owner}); you may only add Anthropic's own. Ask the human to allow the whole catalog in Capabilities → Skills, or to add it there.` };
+  if (!policyAllows(entry, ctx.policy)) {
+    const allowed = ctx.policy === 'mine' ? "Anthropic's own and the human's marketplaces" : "Anthropic's own";
+    return { ok: false, message: `${entry.name} is a community skill (${entry.owner}); you may only add ${allowed}. Ask the human to allow the whole catalog in Capabilities → Skills, or to add it there.` };
   }
   const dir = entry.name.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '').slice(0, 64);
   if (!dir) return { ok: false, message: `${entry.name} has no usable folder name.` };
