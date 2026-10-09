@@ -1,3 +1,4 @@
-- **Fix (Windows)**: removing an agent's isolated copy no longer empties your project's node_modules.
-- Includes everything from fork.36: several offices at once, a lighter app, the freeze log.
-- **Faster on a slow disk or a WSL office**: no more stalls when opening Deliverables or Tasks.
+- **Clearer Memory**: search shows how it found each result.
+- **Temps** no longer quit at Claude's trust question.
+- **Faster** on a slow disk, WSL or antivirus.
+- Next update: Scranton Branch 1.0.0.
