@@ -1,3 +1,3 @@
-- **No freezes** on a busy floor, and **lighter agents** (a third of the memory each).
-- **Git off means no git**; agents write only in their own folders.
-- **Backlog** column, **diffs** in deliverable history, Confluence wiki and Mermaid.
+- **Several offices at once**: File → New Floor.
+- **Half the size**, faster start, and the app logs its own freezes.
+- **The orchestrator knows the app**; your own skill marketplaces; PDF previews.

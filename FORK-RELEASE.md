@@ -1,21 +1,24 @@
-# Scranton Branch 0.4.6-fork.35
+# Scranton Branch 0.4.6-fork.36
 
-A faster, lighter office, agents that stay in their lane, and better tasks, deliverables and messages.
+Several offices at once, a lighter and faster app, an orchestrator that knows the app, and your own skill marketplaces.
 
 ## What's new
 
-- **No more freezes on a busy floor.** Saving the office's history used to stop the app for a moment on every message; now it happens in the background, a few changes at a time. Settings and the team list are read from memory instead of from disk on every event.
-- **Lighter agents.** Each agent no longer starts four helper servers that repeated Claude Code's own tools (files, web fetch, thinking, time): about a third of the memory and processes per agent. Switch any back on in MCP.
-- **Agents stay in their lane.** With Git off in Capabilities an agent really cannot run git, and agents write only in their own folders unless you let them out ("Outside its folders"). Both apply at once.
-- **Skills from the orchestrator.** It can give agents skills from the catalog (Anthropic's own by default); you see and remove them in Capabilities, Skills.
-- **Tasks.** A Backlog column for parked work, subtasks hang under their request, and long cards stay inside the column.
-- **Deliverables.** The history shows the agent who changed a file, with each version's changes; sort, search by ticket, Confluence wiki and Mermaid diagrams.
-- **Messages.** Clearer summaries of agent-to-agent talk and short times.
+- **Several offices at once.** File → New Floor (or the office name in the sidebar) opens another office in its own window, with its own orchestrator and agents. Reopen floors from the same menu; each window's title names its office. One office runs on one floor at a time.
+- **Half the size, faster to start.** The installed app drops from about 600 MB to about 310 MB, the window is ready in roughly half the time, and starting a whole team no longer freezes the app.
+- **The app writes down its own freezes.** Any stall over 200 ms is logged with what caused it (Settings → General → Freezes), so a slow moment comes with data.
+- **The orchestrator knows the app.** Ask it how to do something in Scranton Branch and it tells you where to click. It goes by its real name everywhere and is marked ★ Orchestrator.
+- **Your own skill marketplaces.** Add GitHub repositories of skills in Capabilities → Skills; their skills join the catalog, and the orchestrator can use them if you allow it.
+- **Tighter folder and git guard.** One-liners in python, node and other languages, and commands inside bash -c, cmd /c, PowerShell or wsl, are checked too. Capabilities says what the guard cannot see.
+- **Deliverables and tasks.** PDFs preview inside the app, only the document scrolls, and task details show the ticket (DUN-12).
+- **Clearer.** The Now view reads who, what and when at a glance; the menu follows your language.
+- **Fixes.** A message without a time no longer blanks the Manager view; downloads and the office browser can no longer hang.
 
 ## Earlier releases
 
 | Version | Highlights |
 |---|---|
+| fork.35 | No freezes on a busy floor, lighter agents, git and folder guard, office skills, Backlog, deliverable diffs. |
 | fork.34 | Inbox as a chat per agent, task history, deliverables with authors, agents keep their conversation. |
 | fork.33 | Now view, a tidier sidebar, fewer tokens spent, safer engine installs. |
 | fork.32 | The office browser comes up when a page fails, and uses less memory. |
@@ -43,26 +46,26 @@ A faster, lighter office, agents that stay in their lane, and better tasks, deli
 ### macOS
 | | |
 |---|---|
-| Universal (Apple Silicon + Intel) | [`Scranton-Branch-0.4.6-fork.35-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.35-mac-universal.dmg) |
+| Universal (Apple Silicon + Intel) | [`Scranton-Branch-0.4.6-fork.36-mac-universal.dmg`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.36-mac-universal.dmg) |
 
 ### Windows
 | | |
 |---|---|
-| Installer (x64), *recommended* | [`Scranton-Branch-0.4.6-fork.35-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.35-win-x64-setup.exe) |
-| Portable (x64, no install) | [`Scranton-Branch-0.4.6-fork.35-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.35-win-x64-portable.exe) |
+| Installer (x64), *recommended* | [`Scranton-Branch-0.4.6-fork.36-win-x64-setup.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.36-win-x64-setup.exe) |
+| Portable (x64, no install) | [`Scranton-Branch-0.4.6-fork.36-win-x64-portable.exe`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.36-win-x64-portable.exe) |
 
 ### Linux
 | | |
 |---|---|
-| AppImage (x86_64) | [`Scranton-Branch-0.4.6-fork.35-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.35-linux-x86_64.AppImage) |
-| Server, no GUI (x64) | [`scranton-branch-server-0.4.6-fork.35-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.35-linux-x64.tar.gz) |
-| Server, no GUI (arm64) | [`scranton-branch-server-0.4.6-fork.35-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.35-linux-arm64.tar.gz) |
+| AppImage (x86_64) | [`Scranton-Branch-0.4.6-fork.36-linux-x86_64.AppImage`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/Scranton-Branch-0.4.6-fork.36-linux-x86_64.AppImage) |
+| Server, no GUI (x64) | [`scranton-branch-server-0.4.6-fork.36-linux-x64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.36-linux-x64.tar.gz) |
+| Server, no GUI (arm64) | [`scranton-branch-server-0.4.6-fork.36-linux-arm64.tar.gz`](https://github.com/diegodiaz1256/scranton-branch/releases/latest/download/scranton-branch-server-0.4.6-fork.36-linux-arm64.tar.gz) |
 
 Server: unpack, then run `sudo ./install.sh`. Setup, Docker and secrets are in [SERVER.md](https://github.com/diegodiaz1256/scranton-branch/blob/main/SERVER.md).
 
 Builds are not code-signed yet: macOS asks you to allow the app in System Settings → Privacy & Security, and Windows SmartScreen asks you to confirm ("More info" → "Run anyway").
 
-Source: [`v0.4.6-fork.35`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v0.4.6-fork.35.tar.gz)
+Source: [`v0.4.6-fork.36`](https://github.com/diegodiaz1256/scranton-branch/archive/refs/tags/v0.4.6-fork.36.tar.gz)
 
 ## About this fork
 
