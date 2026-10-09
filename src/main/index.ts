@@ -5593,10 +5593,12 @@ ipcMain.handle('tools:status', async (): Promise<ToolStatus[]> => {
       }
       const installCommand = WSL_INSTALL[spec.id] ?? spec.install.posix.replace(/^xcode-select --install\s+# macOS · or: /, '');
       const path = spec.bin ? found[spec.bin] ?? null : null;
-      return { ...spec, installCommand, found: !!path, path, detail: probeError ? `could not check inside WSL (${wslLoc.distro}): ${probeError}` : `inside WSL (${wslLoc.distro})` };
+      const missingSandbox = spec.id === 'bubblewrap' && !path && !probeError;
+      return { ...spec, installCommand, found: !!path, path, detail: probeError ? `could not check inside WSL (${wslLoc.distro}): ${probeError}` : missingSandbox ? `not in WSL (${wslLoc.distro}): agents on this floor run with no OS sandbox` : `inside WSL (${wslLoc.distro})` };
     });
   }
-  return toolCatalog().map((spec): ToolStatus => {
+  // The sandbox row is about Linux: Windows has none to install, macOS has its own.
+  return toolCatalog().filter((spec) => !spec.linuxOnly || process.platform === 'linux').map((spec): ToolStatus => {
     const installCommand = win ? spec.install.win32 : spec.install.posix;
     if (spec.id === 'mempalace') {
       return {
