@@ -9,8 +9,11 @@ import { forceLayout, type LayoutEdge, type LayoutNode } from '@/components/memo
  * and documents (pages) attached to what they mention. Click a concept to read
  * the notes behind it.
  */
-export function ConceptGraph({ graph, docs, selected, onSelect }: {
+export function ConceptGraph({ graph, docs, selected, onSelect, trail }: {
   graph: Graph; docs: MemoryDoc[]; selected: string | null; onSelect: (conceptId: string | null) => void;
+  /** A search's path: the concepts it went through and the agents/documents its
+   *  results came from (`c:<id>`, `d:<docId>`). Lit up, everything else dimmed. */
+  trail?: Set<string> | null;
 }) {
   const { t } = useTranslation();
   const box = useRef<HTMLDivElement>(null);
@@ -53,7 +56,7 @@ export function ConceptGraph({ graph, docs, selected, onSelect }: {
   }, [graph, sources, size.w, size.h]);
 
   const focus = hover ?? (selected ? `c:${selected}` : null);
-  const near = useMemo(() => {
+  const focusNear = useMemo(() => {
     if (!focus) return null;
     const s = new Set([focus]);
     for (const e of layout.edges) {
@@ -62,6 +65,8 @@ export function ConceptGraph({ graph, docs, selected, onSelect }: {
     }
     return s;
   }, [focus, layout.edges]);
+  // Hover or a picked concept wins; otherwise a search shows its path.
+  const near = focusNear ?? (trail && trail.size ? trail : null);
   const dim = (id: string) => (near && !near.has(id) ? 0.25 : 1);
   // Label the top ~18 concepts by default.
   const labelMin = graph.concepts.length > 18 ? graph.concepts[17].count : 0;

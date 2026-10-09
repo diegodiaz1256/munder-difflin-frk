@@ -1784,6 +1784,7 @@
       "pathMemory": "{{agent}}'s memory › {{section}}",
       "pathDoc": "document",
       "pathTicket": "board › {{status}}",
+      "showOnMap": "Show the path on the map",
       "pathTitle": "How search found it",
       "byMeaning": "by meaning",
       "meaningUnavailable": "Search by meaning is unavailable",

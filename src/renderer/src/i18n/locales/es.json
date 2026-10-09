@@ -1784,6 +1784,7 @@
       "pathMemory": "memoria de {{agent}} › {{section}}",
       "pathDoc": "documento",
       "pathTicket": "tablero › {{status}}",
+      "showOnMap": "Ver el camino en el mapa",
       "pathTitle": "Cómo lo encontró la búsqueda",
       "byMeaning": "por significado",
       "meaningUnavailable": "La búsqueda por significado no está disponible",
