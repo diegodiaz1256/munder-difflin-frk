@@ -8,8 +8,8 @@
  * app lists them in that repo's `.git/info/exclude`: local to this clone,
  * never committed, and the project's own .gitignore stays untouched.
  */
-import { execFileSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
 import { gitInvocation, parseWslPath, toWslUnc } from './wsl';
 
@@ -35,32 +35,34 @@ export function missingExcludeText(current: string, lines: string[]): string {
   return `${lead}${have.has(EXCLUDE_HEADER) ? '' : `${EXCLUDE_HEADER}\n`}${missing.join('\n')}\n`;
 }
 
-type RunGit = (cwd: string, args: string[]) => string;
+type RunGit = (cwd: string, args: string[]) => string | Promise<string>;
 
-const defaultRunGit: RunGit = (cwd, args) => {
+/** Async: the main thread never waits on git (a field log showed ~1 s here
+ *  for an office on a slow disk). */
+const defaultRunGit: RunGit = (cwd, args) => new Promise((resolve, reject) => {
   const inv = gitInvocation(cwd, args);
-  return execFileSync(inv.file, inv.args, { cwd: inv.cwd, encoding: 'utf8', timeout: 15000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-};
+  execFile(inv.file, inv.args, { cwd: inv.cwd, encoding: 'utf8', timeout: 15000, windowsHide: true }, (e, out) => (e ? reject(e) : resolve(String(out).trim())));
+});
 
 /**
  * Make sure the repo containing `officeDir` (if any) ignores the office's
  * files. Best-effort: no repo, no git, or a read-only .git → nothing happens.
  * Returns the exclude file it wrote to, or null.
  */
-export function excludeOfficeFromRepo(officeDir: string, runGit: RunGit = defaultRunGit): string | null {
+export async function excludeOfficeFromRepo(officeDir: string, runGit: RunGit = defaultRunGit): Promise<string | null> {
   try {
-    if (runGit(officeDir, ['rev-parse', '--is-inside-work-tree']) !== 'true') return null;
-    const prefix = runGit(officeDir, ['rev-parse', '--show-prefix']);
-    let file = runGit(officeDir, ['rev-parse', '--git-path', 'info/exclude']);
+    if ((await runGit(officeDir, ['rev-parse', '--is-inside-work-tree'])) !== 'true') return null;
+    const prefix = await runGit(officeDir, ['rev-parse', '--show-prefix']);
+    let file = await runGit(officeDir, ['rev-parse', '--git-path', 'info/exclude']);
     // A WSL floor: git answered with a Linux path.
     const wsl = process.platform === 'win32' ? parseWslPath(officeDir) : null;
     if (wsl && file.startsWith('/')) file = toWslUnc(wsl.distro, file);
     else if (!isAbsolute(file)) file = join(officeDir, file);
-    const current = existsSync(file) ? readFileSync(file, 'utf8') : '';
+    const current = await readFile(file, 'utf8').catch(() => '');
     const add = missingExcludeText(current, excludeLines(prefix));
     if (!add) return file;
-    mkdirSync(dirname(file), { recursive: true });
-    appendFileSync(file, add, 'utf8');
+    await mkdir(dirname(file), { recursive: true });
+    await appendFile(file, add, 'utf8');
     return file;
   } catch {
     return null;

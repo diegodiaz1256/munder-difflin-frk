@@ -18,6 +18,7 @@
  *
  * Everything here runs in the Electron main process.
  */
+import { readdir as readdirAsync } from 'node:fs/promises';
 import { gitInvocation, linuxizeText, parseWslPath, runInDistro, toWslUnc, type WslLocation } from './wsl';
 import {
   existsSync, mkdirSync, readFileSync, writeFileSync, renameSync,
@@ -247,6 +248,22 @@ export function hookSockPath(root: string, env: { runtimeDir?: string; tmp: stri
   const id = createHash('sha1').update(root).digest('hex').slice(0, 12);
   const base = env.runtimeDir && env.runtimeDir.trim() ? env.runtimeDir : join(env.tmp, `scranton-branch-${env.uid ?? 'u'}`);
   return join(base, `md-hooks-${id}.sock`);
+}
+
+/** `git log --format=%x1e%an%x1f%aI --name-only` → who changed each file (the
+ *  newest author first; the app's own "Hive" commits are not people). */
+export function parseFileAuthors(out: string): Record<string, { authors: string[]; last: string; lastTs: string }> {
+  const map: Record<string, { authors: string[]; last: string; lastTs: string }> = {};
+  for (const chunk of out.split('\x1e').filter(Boolean)) {
+    const [headLine, ...files] = chunk.split(/\r?\n/);
+    const [author, ts] = headLine.split('\x1f');
+    if (!author || author === 'Hive') continue;
+    for (const f of files.map((x) => x.trim()).filter(Boolean)) {
+      const e = map[f] ?? (map[f] = { authors: [], last: author, lastTs: ts });
+      if (!e.authors.includes(author)) e.authors.push(author);
+    }
+  }
+  return map;
 }
 
 /** A message id / agent id usable as a file or folder name: no separators, no `..`. */
@@ -3578,6 +3595,33 @@ export class HiveManager {
     console.warn('[hive] untracked the cost ledger from the hive repo');
   }
 
+  /** The two one-time untrack passes, with git off the main thread. They ran
+   *  as sync git on the first commit after launch: on a slow disk or a WSL
+   *  office that froze the app for ~2 s (a field log). */
+  private async untrackOnceAsync(root: string): Promise<void> {
+    if (!this.untrackedCostLedger) {
+      this.untrackedCostLedger = true;
+      const tracked = await this.gitAsync(['ls-files', '--', 'cost-ledger.jsonl'], root);
+      if (tracked.ok && tracked.out.trim()) {
+        await this.gitAsync(['rm', '--cached', '-q', '--ignore-unmatch', '--', 'cost-ledger.jsonl'], root);
+        console.warn('[hive] untracked the cost ledger from the hive repo');
+      }
+    }
+    if (!this.untrackedCodexHomes) {
+      this.untrackedCodexHomes = true;
+      const agentsDir = join(root, 'agents');
+      if (!existsSync(agentsDir)) return;
+      try {
+        for (const id of await readdirAsync(agentsDir)) ensureMineIgnore(join(agentsDir, id));
+      } catch { /* best-effort */ }
+      const tracked = await this.gitAsync(['ls-files', '--', 'agents/*/.codex'], root);
+      if (tracked.ok && tracked.out.trim()) {
+        await this.gitAsync(['rm', '-r', '--cached', '-q', '--ignore-unmatch', '--', 'agents/*/.codex'], root);
+        console.warn('[hive] untracked previously-committed Codex homes from the hive repo');
+      }
+    }
+  }
+
   /** Has the one-time Codex-home untrack pass run in this process yet? */
   private untrackedCodexHomes = false;
 
@@ -3692,8 +3736,7 @@ export class HiveManager {
   private async commitAllAsync(message: string): Promise<void> {
     const root = this.root();
     if (!root || !existsSync(join(root, '.git'))) return;
-    this.untrackCostLedger(root);
-    this.untrackCodexHomes(root);
+    await this.untrackOnceAsync(root);
     for (let attempt = 0; attempt < 5; attempt++) {
       this.clearStaleLock(root);
       const add = await this.gitAsync(['add', '-A'], root);
@@ -3819,6 +3862,27 @@ export class HiveManager {
   /** Who has changed each file under `dir` (agents only, not the app's own
    *  "Hive" commits), most recent first, from one pass over the log; cached
    *  until HEAD moves. Keys are hive-relative paths with '/'. */
+  private authorsRun: Promise<Record<string, { authors: string[]; last: string; lastTs: string }>> | null = null;
+
+  /** fileAuthors with git off the main thread. Deliverables and Tasks ask every
+   *  15 s; the sync version ran `git rev-parse` each time and `git log` when
+   *  HEAD moved, 1-2 s each on a slow disk or a WSL office (a field log). */
+  fileAuthorsAsync(dir: string): Promise<Record<string, { authors: string[]; last: string; lastTs: string }>> {
+    if (this.authorsRun) return this.authorsRun;
+    this.authorsRun = (async () => {
+      const root = this.root();
+      if (!root || !existsSync(join(root, '.git'))) return {};
+      const head = await this.gitAsync(['rev-parse', 'HEAD'], root);
+      if (!head.ok) return {};
+      if (this.authorsCache?.head === head.out.trim()) return this.authorsCache.map;
+      const r = await this.gitAsync(['log', '-n2000', '--no-merges', '--format=%x1e%an%x1f%aI', '--name-only', '--', dir], root);
+      const map = r.ok ? parseFileAuthors(r.out) : {};
+      this.authorsCache = { head: head.out.trim(), map };
+      return map;
+    })().finally(() => { this.authorsRun = null; });
+    return this.authorsRun;
+  }
+
   fileAuthors(dir: string): Record<string, { authors: string[]; last: string; lastTs: string }> {
     const root = this.root();
     if (!root || !existsSync(join(root, '.git'))) return {};
@@ -3826,18 +3890,7 @@ export class HiveManager {
     if (!head.ok) return {};
     if (this.authorsCache?.head === head.out.trim()) return this.authorsCache.map;
     const r = this.git(['log', '-n2000', '--no-merges', '--format=%x1e%an%x1f%aI', '--name-only', '--', dir], root);
-    const map: Record<string, { authors: string[]; last: string; lastTs: string }> = {};
-    if (r.ok) {
-      for (const chunk of r.out.split('\x1e').filter(Boolean)) {
-        const [headLine, ...files] = chunk.split('\n');
-        const [author, ts] = headLine.split('\x1f');
-        if (!author || author === 'Hive') continue;
-        for (const f of files.map((x) => x.trim()).filter(Boolean)) {
-          const e = map[f] ?? (map[f] = { authors: [], last: author, lastTs: ts });
-          if (!e.authors.includes(author)) e.authors.push(author);
-        }
-      }
-    }
+    const map = r.ok ? parseFileAuthors(r.out) : {};
     this.authorsCache = { head: head.out.trim(), map };
     return map;
   }
