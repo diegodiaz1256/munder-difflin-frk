@@ -36,6 +36,8 @@ interface HookPayload {
   ping?: string;
   hook_event_name?: string;
   agent_id?: string | null;
+  /** Claude: the subagent a call was made in (its own agent_id), when it was. */
+  subagent_id?: string;
   session_id?: string;
   transcript_path?: string;
   /** Status-line payloads only: the session's live context accounting. */
