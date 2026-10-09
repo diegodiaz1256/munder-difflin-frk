@@ -16,3 +16,20 @@ export function columnRoots<T extends BoardCard>(cards: readonly T[]): T[] {
 export function subtasksIn<T extends BoardCard>(cards: readonly T[], id: string): T[] {
   return cards.filter((c) => c.parent === id && c.id !== id);
 }
+
+/** Every subtask under `id`, at any depth (a card that is its own ancestor,
+ *  by a mistake in the ledger, is visited once). */
+export function descendantsOf<T extends BoardCard>(cards: readonly T[], id: string): T[] {
+  const out: T[] = [];
+  const seen = new Set([id]);
+  const walk = (pid: string) => {
+    for (const c of cards) {
+      if (c.parent !== pid || seen.has(c.id)) continue;
+      seen.add(c.id);
+      out.push(c);
+      walk(c.id);
+    }
+  };
+  walk(id);
+  return out;
+}

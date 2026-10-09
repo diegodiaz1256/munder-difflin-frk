@@ -23,3 +23,11 @@ test('backlog is a status the board, the parser and the agents know', () => {
   const docs = fs.readFileSync(path.join(__dirname, '..', 'src/main/protocolDocs.ts'), 'utf8');
   assert.match(docs, /backlog \/ todo \/ doing \/ blocked \/ done/);
 });
+
+test('every subtask under a card, at any depth, once even with a cycle', () => {
+  const { descendantsOf } = require('./load-ts.cjs')('src/shared/taskBoard.ts');
+  const cards = [{ id: 'a' }, { id: 'b', parent: 'a' }, { id: 'c', parent: 'b' }, { id: 'd', parent: 'a' }, { id: 'e' }, { id: 'x', parent: 'y' }, { id: 'y', parent: 'x' }];
+  assert.deepEqual(descendantsOf(cards, 'a').map((c) => c.id), ['b', 'c', 'd']);
+  assert.deepEqual(descendantsOf(cards, 'e'), []);
+  assert.deepEqual(descendantsOf(cards, 'x').map((c) => c.id), ['y'], 'a loop in the ledger does not hang');
+});
