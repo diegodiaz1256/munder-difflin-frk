@@ -4210,7 +4210,8 @@ ipcMain.handle('customProviders:fetchModels', async (_evt, baseUrl: unknown, id:
   const key = typeof id === 'string' ? integrations.getSecret(customKeyRef(id)) : undefined;
   const get = async (u: string) => {
     const r = await fetch(u, { headers: key ? { Authorization: `Bearer ${key}` } : {}, signal: AbortSignal.timeout(8000), redirect: 'manual' });
-    return { status: r.status, body: r.ok ? await r.json().catch(() => null) : null };
+    if (!r.ok) { void r.body?.cancel().catch(() => undefined); return { status: r.status, body: null }; }
+    return { status: r.status, body: await r.json().catch(() => null) };
   };
   try {
     let r = await get(`${base.href.replace(/\/+$/, '')}/models`);
@@ -4253,10 +4254,8 @@ ipcMain.handle('integrations:test', async (_evt, payload: unknown) => {
   const secret = integrations.getSecret(rec.secretRef);
   const headers = { ...(('headers' in spec && spec.headers) || {}), ...buildAuthHeaders(rec.authType, rec.authHeader, secret) };
   try {
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), 15_000);
-    const r = await fetch(target, { method: spec.method, headers, body: 'body' in spec ? spec.body : undefined, redirect: 'manual', signal: ac.signal });
-    clearTimeout(timer);
+    const r = await fetch(target, { method: spec.method, headers, body: 'body' in spec ? spec.body : undefined, redirect: 'manual', signal: AbortSignal.timeout(15_000) });
+    void r.body?.cancel().catch(() => undefined); // only the status is wanted; free the connection
     // The service said no: say which request, so a 404/401 can be read, not guessed.
     return { ok: r.ok, status: r.status, ...(r.ok ? {} : { error: `${spec.method} ${target.pathname}${target.search} `.trim() }) };
   } catch (e) {

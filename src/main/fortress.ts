@@ -214,24 +214,30 @@ export class Fortress {
     try {
       mkdirSync(this.deps.baseDir, { recursive: true });
       this.installing = { state: 'downloading', percent: 0 };
-      const sumsRes = await fetch(`${RELEASE}/SHA256SUMS`);
+      const sumsRes = await fetch(`${RELEASE}/SHA256SUMS`, { signal: AbortSignal.timeout(15_000) });
       if (!sumsRes.ok) return fail(`could not fetch SHA256SUMS (HTTP ${sumsRes.status})`);
       const expected = sha256For(await sumsRes.text(), asset);
       if (!expected) return fail(`SHA256SUMS has no entry for ${asset}`);
 
       const archive = join(this.deps.baseDir, `${asset}.part`);
-      const res = await fetch(`${RELEASE}/${asset}`);
-      if (!res.ok || !res.body) return fail(`download failed (HTTP ${res.status})`);
+      // No overall deadline (a big download on a slow line is fine), but a
+      // download that stops moving for a minute is abandoned.
+      const stalled = new AbortController();
+      let stallTimer = setTimeout(() => stalled.abort(), 60_000);
+      const res = await fetch(`${RELEASE}/${asset}`, { signal: stalled.signal });
+      if (!res.ok || !res.body) { clearTimeout(stallTimer); return fail(`download failed (HTTP ${res.status})`); }
       const total = Number(res.headers.get('content-length')) || 0;
       let got = 0;
       const hash = createHash('sha256');
       const body = Readable.fromWeb(res.body as never);
       body.on('data', (c: Buffer) => {
         got += c.length;
+        clearTimeout(stallTimer);
+        stallTimer = setTimeout(() => stalled.abort(), 60_000);
         hash.update(c);
         if (total) this.installing = { state: 'downloading', percent: Math.floor((got / total) * 100) };
       });
-      await pipeline(body, createWriteStream(archive));
+      try { await pipeline(body, createWriteStream(archive)); } finally { clearTimeout(stallTimer); }
 
       this.installing = { state: 'verifying' };
       const actual = hash.digest('hex');
@@ -343,7 +349,7 @@ export class Fortress {
     while (Date.now() < deadline) {
       if (child.exitCode !== null) break;
       try {
-        const v = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json() as { Browser?: string; webSocketDebuggerUrl?: string };
+        const v = await (await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(2000) })).json() as { Browser?: string; webSocketDebuggerUrl?: string };
         if (v.webSocketDebuggerUrl && (v.Browser ?? '').includes(FORTRESS_CHROMIUM)) {
           this.port = port;
           this.lastError = undefined;
