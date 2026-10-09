@@ -66,3 +66,28 @@ test('registry() is cached until the hive writes it, and hands out copies', asyn
   hive.renameAgent('jim', 'James');
   assert.equal(hive.registry().agents.jim.name, 'James', 'the hive write is seen at once');
 });
+
+test('who changed each deliverable, read without blocking: same answer as the sync read, one query at a time', async (t) => {
+  const { hive, root } = await office(t);
+  hive.setAsyncCommits(true);
+  fs.mkdirSync(path.join(root, 'research'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'research', 'r.md'), '# r');
+  hive.holdDeliverables(['research/r.md']);
+  hive.commitDeliverables(['research/r.md'], { id: 'jim', name: 'Jim' });
+  await hive.flushCommits();
+  const a = hive.fileAuthorsAsync('research');
+  const b = hive.fileAuthorsAsync('research');
+  assert.equal(a, b, 'a second ask while one runs shares it');
+  const got = await a;
+  assert.deepEqual(got['research/r.md'].authors, ['Jim']);
+  assert.deepEqual(got, hive.fileAuthors('research'));
+});
+
+test('parseFileAuthors: newest author first, the app itself is not a person', () => {
+  const { parseFileAuthors } = loadTs('src/main/hive.ts');
+  const out = '\x1ePam\x1f2026-10-09T10:00:00Z\n\nresearch/a.md\n\x1eHive\x1f2026-10-09T09:00:00Z\n\nresearch/a.md\n\x1eJim\x1f2026-10-08T09:00:00Z\r\n\r\nresearch/a.md\r\nresearch/b.md\r\n';
+  assert.deepEqual(parseFileAuthors(out), {
+    'research/a.md': { authors: ['Pam', 'Jim'], last: 'Pam', lastTs: '2026-10-09T10:00:00Z' },
+    'research/b.md': { authors: ['Jim'], last: 'Jim', lastTs: '2026-10-08T09:00:00Z' }
+  });
+});

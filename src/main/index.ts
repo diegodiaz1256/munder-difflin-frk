@@ -154,7 +154,9 @@ const freezes = new FreezeMonitor({
 instrumentIpc(ipcMain, freezes);
 instrumentTimers(freezes);
 instrumentEvents(freezes);
-freezes.start();
+// Heartbeats from app-ready on: loading main's own code happens before any
+// window exists, so it is not a freeze anyone sees.
+void app.whenReady().then(() => freezes.start());
 
 const isDev = !!process.env.ELECTRON_RENDERER_URL;
 
@@ -5082,7 +5084,7 @@ ipcMain.handle('deliverables:list', async () => {
   ).sort((x, y) => y.ts - x.ts).slice(0, 200);
   // Who changed each research/ file, from its git history (agents only).
   let authors: Record<string, { authors: string[]; last: string; lastTs: string }> = {};
-  try { authors = hive.fileAuthors(DELIVERABLES_DIR); } catch { /* no history yet */ }
+  try { authors = await hive.fileAuthorsAsync(DELIVERABLES_DIR); } catch { /* no history yet */ }
   return { root, dir, distro: wsl?.distro ?? null, files, written, links: readDeliverableLinks(), hidden: readHiddenDeliverables(), authors };
 });
 /** A deliverable path as the hive repo names it, or null when outside research/. */
@@ -7326,11 +7328,11 @@ function bootstrapHiveServices(): void {
     if (!claim.ok) { officeTakenElsewhere(home); return; }
     claimedOffice = resolve(home);
   }
-  hive.ensureHive();
-  hive.refreshGeneratedDocs();
+  freezes.time('boot: hive.ensureHive', () => hive.ensureHive());
+  freezes.time('boot: hive.refreshGeneratedDocs', () => hive.refreshGeneratedDocs());
   // An office inside a project's repo: keep its files out of that repo's git.
   const officeDir = readConfig().harnessHome;
-  if (officeDir) setTimeout(() => { excludeOfficeFromRepo(officeDir); }, 0);
+  if (officeDir) void excludeOfficeFromRepo(officeDir);
   // Tell the hive what it is running inside, BEFORE anything spawns: the prompt
   // builder reads this, so an agent spawned earlier would never learn it.
   hive.setRuntimeInfo({ version: app.getVersion(), packaged: app.isPackaged, appPath: app.getAppPath() });
@@ -7356,9 +7358,9 @@ function bootstrapHiveServices(): void {
     platform: process.platform
   });
   control.replaceAutoDeliveryPauses(readConfig().autoDeliveryPausedAgents ?? []);
-  archiveOrphanedAgents(); // #57/#58: archive stale archived:false entries with no live PTY
-  hive.startRouter();
-  startEphemeralWorkerWatcher(); // poll HIVE_ROOT/spawn-requests → ephemeral workers
+  freezes.time('boot: archiveOrphanedAgents', () => archiveOrphanedAgents()); // #57/#58: archive stale archived:false entries with no live PTY
+  freezes.time('boot: hive.startRouter', () => hive.startRouter());
+  freezes.time('boot: startEphemeralWorkerWatcher', () => startEphemeralWorkerWatcher()); // poll HIVE_ROOT/spawn-requests → ephemeral workers
   // Phase 2: the loopback secret broker. Bind it BEFORE workers spawn so each spawn can
   // be granted a capability token + the broker URL in its env. Loopback-only, idempotent.
   // Headless: --team-join pairs this office with yours (an invite made in your
@@ -7377,7 +7379,7 @@ function bootstrapHiveServices(): void {
       if (!r.ok) console.error('[headless] could not turn Team on:', r.error);
     }
   }
-  startTeam();
+  freezes.time('boot: startTeam', () => startTeam());
   // An invite is single-use and MD_TEAM_JOIN stays in a unit file or compose
   // file across restarts: join each code once, then remember it was used.
   const joinKey = HEADLESS_SETUP?.teamJoin ? `team.joined.${createHash('sha256').update(HEADLESS_SETUP.teamJoin).digest('hex').slice(0, 16)}` : null;
@@ -7394,8 +7396,8 @@ function bootstrapHiveServices(): void {
     if (r.ok) console.log('[broker] integration broker listening on', integrationBroker.url());
     else console.error('[broker] failed to start:', r.error);
   });
-  ensureDefaultMissions(); // one-time: seed the built-in hourly ops standup
-  syncMissions(); // arm recurring auto-dispatch missions now the router is live
+  freezes.time('boot: ensureDefaultMissions', () => ensureDefaultMissions()); // one-time: seed the built-in hourly ops standup
+  freezes.time('boot: syncMissions', () => syncMissions()); // arm recurring auto-dispatch missions now the router is live
   writeMissionsMirror(readConfig().missions ?? []);
   syncContextTriggers(); // …and the context trigger's own compact/clear cadences
   // Pair replies to inbound webhook messages in the ledger. Tied to the FEATURE
@@ -7403,7 +7405,7 @@ function bootstrapHiveServices(): void {
   // finish long after the operator switched the public surface back off, and its
   // reply still belongs in the history.
   if ((readConfig().webhookTriggers ?? []).length > 0) startWebhookDoneObserver();
-  hookServer.start();
+  freezes.time('boot: hookServer.start', () => hookServer.start());
   // Bind the telemetry collector BEFORE the renderer spawns any agent, then point
   // the hive at it so every subsequent spawn is instrumented. Best-effort — a bind
   // failure just leaves telemetry off (transcript reconciler stays). No breaker.start():
@@ -7418,8 +7420,8 @@ function bootstrapHiveServices(): void {
     }
     else console.error('[telemetry] collector failed to start:', r.error);
   });
-  memory.start(); // init shared palace + mine loop (no-op without mempalace)
-  reflector.start(); // bound oversized memory.md files on a timer (no-op until threshold)
+  freezes.time('boot: memory.start', () => memory.start()); // init shared palace + mine loop (no-op without mempalace)
+  freezes.time('boot: reflector.start', () => reflector.start()); // bound oversized memory.md files on a timer (no-op until threshold)
 
   armAlwaysOnBeats();
 }
@@ -7694,7 +7696,8 @@ app.whenReady().then(() => {
   // The server is updated by its package (npm, docker pull), never in place.
   if (!SERVER) initAutoUpdater(() => liveWebContents());
   // Bootstrap the hive (if harnessHome is configured) and start the message router.
-  bootstrapHiveServices();
+  // Each slow boot step is named in the freeze log (freezeLog.ts).
+  freezes.time('boot: bootstrapHiveServices', () => bootstrapHiveServices());
   // Survive sleep/lock. macOS freezes libuv timers during true system sleep, so a
   // locked/idle/slept Mac stops firing schedules and can wedge PTYs. On wake we
   // re-arm the scheduler (catching up missed missions ONCE) + beats + keep-awake,

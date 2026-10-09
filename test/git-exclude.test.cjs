@@ -32,30 +32,30 @@ function fillOffice(office) {
   fs.writeFileSync(path.join(office, 'roster-backups', 'a.json'), '{}');
 }
 
-test('an office at the root of a project repo: git status shows only the project', (t) => {
+test('an office at the root of a project repo: git status shows only the project', async (t) => {
   const dir = repo(t);
   fillOffice(dir);
-  assert.ok(excludeOfficeFromRepo(dir));
+  assert.ok(await excludeOfficeFromRepo(dir));
   assert.equal(git(dir, 'status', '--porcelain', '--untracked-files=all'), '?? app.js');
   assert.equal(fs.existsSync(path.join(dir, '.gitignore')), false, 'the project .gitignore is not touched');
 });
 
-test('an office in a subfolder of the repo, written once however often it runs', (t) => {
+test('an office in a subfolder of the repo, written once however often it runs', async (t) => {
   const dir = repo(t);
   const office = path.join(dir, 'tools', 'office');
   fillOffice(office);
-  excludeOfficeFromRepo(office);
-  excludeOfficeFromRepo(office);
+  await excludeOfficeFromRepo(office);
+  await excludeOfficeFromRepo(office);
   assert.equal(git(dir, 'status', '--porcelain', '--untracked-files=all'), '?? app.js');
   const exclude = fs.readFileSync(path.join(dir, '.git', 'info', 'exclude'), 'utf8');
   assert.equal(exclude.split(EXCLUDE_HEADER).length, 2, 'one block');
   assert.ok(exclude.includes('/tools/office/hive/'));
 });
 
-test('not a repo: nothing happens', (t) => {
+test('not a repo: nothing happens', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'md-exclude-norepo-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  assert.equal(excludeOfficeFromRepo(dir), null);
+  assert.equal(await excludeOfficeFromRepo(dir), null);
 });
 
 test('appending keeps what was there', () => {
