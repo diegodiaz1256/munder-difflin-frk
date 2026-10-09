@@ -530,6 +530,8 @@ export class MemoryManager {
     // kept; a missing one is looked for again at most every 30 s (each look
     // starts a process: `where`, slow under an antivirus).
     if (this.binCache === null && Date.now() - this.binCheckedAt > 30_000) this.resetBinCache();
+    // …and a found one that is gone (uninstalled while the app runs) is looked for again.
+    else if (typeof this.binCache === 'string' && !existsSync(this.binCache)) this.resetBinCache();
     this.start();
     return this.status();
   }
