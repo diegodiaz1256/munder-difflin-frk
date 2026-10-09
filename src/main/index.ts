@@ -1706,6 +1706,27 @@ function lastCoordinationAt(agentId: string): number {
   return Math.max(...times);
 }
 
+/** Newest mtime among `paths`, read off the main thread (0 when none exist).
+ *  The breaker beat stats a dozen paths per agent every 30 s; with an
+ *  antivirus scanning each access that was ~0.4 s of blocked main thread. */
+async function newestMtime(paths: string[]): Promise<number> {
+  const { stat } = await import('node:fs/promises');
+  const times = await Promise.all(paths.map((p) => stat(p).then((s) => s.mtimeMs, () => 0)));
+  return Math.max(0, ...times);
+}
+function coordinationPaths(agentId: string): string[] {
+  const root = hive.root();
+  if (!root) return [];
+  const dir = join(root, 'agents', agentId);
+  return [join(dir, 'inbox'), join(dir, 'inbox', '.done'), join(dir, 'outbox'), join(dir, 'outbox', '.sent'), join(dir, 'memory.md')];
+}
+function workPaths(agentId: string): string[] {
+  const cwd = hive.registry().agents[agentId]?.cwd;
+  if (!cwd) return [];
+  const git = join(cwd, '.git');
+  return [cwd, join(git, 'index'), join(git, 'logs', 'HEAD'), join(git, 'FETCH_HEAD'), join(git, 'refs', 'remotes'), join(git, 'packed-refs')];
+}
+
 /** Newest mtime of the agent's OWN WORKING DIRECTORY — the work
  *  `lastCoordinationAt` cannot see. 0 when there is nothing to read.
  *
@@ -1866,9 +1887,16 @@ ipcMain.handle('notify:setFaces', (_evt, faces: unknown) => {
  *  emit each BreakerState on control:breakerState (Seam 2), and enforce any
  *  escalation. God is in the LEDGER (cost visibility) but NOT the breaker inputs
  *  (the heartbeat manages god; we never auto-steer/kill the orchestrator). */
-function runBreakerBeat(progressWindowMs: number): void {
-  if (!hive.enabled()) return;
+let breakerBeatRunning = false;
+async function runBreakerBeat(progressWindowMs: number): Promise<void> {
+  if (!hive.enabled() || breakerBeatRunning) return;
+  breakerBeatRunning = true;
+  try {
   const reg = hive.registry();
+  // Every live agent's file times, read in parallel off the main thread first.
+  const watched = Object.entries(reg.agents).filter(([id, a]) => !a.archived && !a.isAssistant && id !== reg.godId && ptyForAgent(id)).map(([id]) => id);
+  const mtimes = new Map(await Promise.all(watched.map(async (id) =>
+    [id, { coordination: await newestMtime(coordinationPaths(id)), work: await newestMtime(workPaths(id)) }] as const)));
   const now = Date.now();
   const inputs: BreakerInput[] = [];
   for (const [id, a] of Object.entries(reg.agents)) {
@@ -1920,10 +1948,10 @@ function runBreakerBeat(progressWindowMs: number): void {
     inputs.push({
       agentId: id,
       sample,
-      progressing: now - lastCoordinationAt(id) < progressWindowMs || now - lastSpanAt < progressWindowMs,
+      progressing: now - (mtimes.get(id)?.coordination ?? lastCoordinationAt(id)) < progressWindowMs || now - lastSpanAt < progressWindowMs,
       // Work, as distinct from coordination. The breaker decides what to do
       // with it; the beat only reports it.
-      lastWorkAt: lastWorkAt(id)
+      lastWorkAt: mtimes.get(id)?.work ?? lastWorkAt(id)
     });
   }
   for (const d of breaker.tick(inputs, now)) {
@@ -1944,6 +1972,7 @@ function runBreakerBeat(progressWindowMs: number): void {
       breakerToast(`${name} stopped by circuit breaker`, reason, d.state.agentId);
     }
   }
+  } finally { breakerBeatRunning = false; }
 }
 
 /** Lifetime spend, folded from cost-ledger.jsonl. `telemetry`'s usd counter is
@@ -5271,7 +5300,7 @@ ipcMain.handle('hive:memoryCorpus', async () => {
   } catch { /* no research yet */ }
   return out.sort((x, y) => x.id.localeCompare(y.id));
 });
-ipcMain.handle('hive:inbox', (_evt, id: unknown) => (typeof id === 'string' ? hive.inbox(id) : []));
+ipcMain.handle('hive:inbox', (_evt, id: unknown) => (typeof id === 'string' ? hive.inboxAsync(id) : []));
 // Voice read-layer: recent message CONTENT (inbox/outbox bodies), REDACTED
 // main-side by hive.voiceMessages(). The renderer/voice layer never sees a raw
 // body — secrets are stripped here, before the result crosses IPC.
@@ -5910,9 +5939,20 @@ ipcMain.handle('hive:agentContext', (_evt, agentId: unknown) => {
 // is live-only) so Michael can speak to inactive agents — their cwd and memory
 // stay reachable. PII-free: no secrets, env, or API keys ever leave main; cost is
 // carried as tokens (+ a usd field the voice layer deliberately never speaks).
+// Two screens poll this every 4 s; with an antivirus its per-agent file reads
+// (memory, inbox) were ~0.2 s of blocked main thread each time. They run in
+// parallel off the main thread, and asks that land together share one run.
+let agentDirectoryRun: Promise<unknown> | null = null;
 ipcMain.handle('hive:agentDirectory', () => {
+  if (agentDirectoryRun) return agentDirectoryRun;
+  agentDirectoryRun = agentDirectory().finally(() => { setTimeout(() => { agentDirectoryRun = null; }, 500); });
+  return agentDirectoryRun;
+});
+async function agentDirectory() {
   if (!hive.enabled()) return { godId: null, agents: [] };
   const reg = hive.registry();
+  const files = new Map(await Promise.all(Object.keys(reg.agents).map(async (id) =>
+    [id, { memory: await hive.hasMemoryAsync(id), backlog: await hive.inboxBacklogAsync(id) }] as const)));
   const snap = telemetry.snapshot();
   const usageById = new Map(snap.usage.map((u) => [u.agentId, u]));
   const now = Date.now();
@@ -5934,8 +5974,8 @@ ipcMain.handle('hive:agentDirectory', () => {
       isGod: !!a.isGod,
       isAssistant: !!a.isAssistant,
       sessionId: a.sessionId ?? null,
-      hasMemory: hive.hasMemory(id),
-      inboxBacklog: hive.inboxBacklog(id),
+      hasMemory: files.get(id)?.memory ?? false,
+      inboxBacklog: files.get(id)?.backlog ?? 0,
       breaker: breaker.levelFor(id),
       tokens,
       usd: u ? Number(u.usd.toFixed(4)) : 0,
@@ -5947,7 +5987,7 @@ ipcMain.handle('hive:agentDirectory', () => {
     };
   });
   return { godId: reg.godId, agents };
-});
+}
 
 // ─── IPC: live telemetry (the OTel collector — the locked usage-provider seam) ─
 // The fleet grid + span waterfall (#7B) read these; Lane A's breaker (#6)
@@ -7540,7 +7580,7 @@ function armAlwaysOnBeats(): void {
   writeFleetSnapshot();
   fleetTimer = setInterval(writeFleetSnapshot, 8_000);
   if (breakerBeatTimer) clearInterval(breakerBeatTimer);
-  breakerBeatTimer = setInterval(() => { try { runBreakerBeat(300_000); } catch (e) { console.error('[breaker beat]', e); } }, 30_000);
+  breakerBeatTimer = setInterval(() => { runBreakerBeat(300_000).catch((e) => console.error('[breaker beat]', e)); }, 30_000);
   if (workerWakeTimer) clearInterval(workerWakeTimer);
   workerWakeTimer = setInterval(() => { try { runWorkerWakeBeat(); } catch (e) { console.error('[worker-wake beat]', e); } }, WORKER_WAKE_POLL_MS);
   runWorkerWakeBeat(); // catch-up on arm — power-resume re-arms and drains the backlog
