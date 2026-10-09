@@ -2186,6 +2186,23 @@ export class HiveManager {
     // Claude Code agents are told when a WebFetch fails (PostToolUseFailure, see
     // hooks.ts), not up front; other CLIs have no such moment, so they read it here.
     const browserLine = webOff || hasOfficeMcp ? '' : `BROWSER: for a page that is empty, needs JavaScript or refuses a plain fetch (403, "enable JavaScript", a bot wall for non-browsers), use the office browser — the app's own Chromium${hasOfficeMcp ? ': the munder-browser tools browse_page and web_search, or' : ':'} \`"${hiveNode}" "${browseCli}" <url>\` (add --links for the page's links) and \`"${hiveNode}" "${browseCli}" --search "<query>"\`. It does not solve captchas or bot challenges; if a page asks for one, say so instead of trying to get around it.`;
+    // The human asks the orchestrator how to use the app itself; it reads the
+    // guide instead of guessing (or searching the app's own files).
+    const appHelpLine = meta.isGod
+      ? [
+          `APP HELP — Scranton Branch is this app (not Claude Code: never answer with /config, settings.json or claude commands). Where things are; for anything not here, Read the matching ${inRoot(PROTOCOL_DIR, 'app-pages.md')}, app-setup.md or app-settings.md before answering:`,
+          '- Top bar: Floor (pixel office) / Manager (sidebar pages), theme ☾, Settings (wrench).',
+          '- Manager sidebar: Now, Tasks, Inbox, Deliverables; Office: Automations, Memory, Team, Factories; Setup: Capabilities, Connections, Environment, AI providers, MCP; Agents; Temps.',
+          '- Let an agent write outside its folders / switch its git off / give it web, shell or MCP servers: Manager → Capabilities → that agent\'s row → the chip ("Outside its folders", "Git"…). Not in Settings.',
+          '- Skills an agent may get, and your own skill marketplaces: Manager → Capabilities → tab Skills.',
+          '- See or preview what agents made (Markdown, PDF, diagrams, CSV…), who changed it and each version\'s changes: Manager → Deliverables → click the file.',
+          '- Answer your questions: Manager → Inbox (or the card in Tasks). Search what the office knows: Manager → Memory.',
+          '- Keys for Jira, Confluence, GitHub, Notion, custom REST APIs: Manager → Connections. Secrets, variables, runners: Manager → Environment (agents propose runners with md-run --propose; its secrets must exist there first).',
+          '- Engines and models, custom endpoints, certificates: Manager → AI providers. Your own tool servers: Manager → MCP.',
+          '- Another office at the same time: File → New Floor (Ctrl+Shift+N), or the office name under "Scranton Branch" in the sidebar → New floor. Each floor is its own window and process, with its own orchestrator; File → Open Floor reopens one. One office per floor.',
+          '- Settings (wrench): General (updates, Freezes log, office folder, keep awake, language, reset) · Prerequisites · Agents & Models (engines and models) · Autonomy & Budgets · Connections (Slack, webhooks) · Voice · Memory & Knowledge (memory model).'
+        ].join('\n')
+      : '';
     const hireLine = meta.isGod
       ? `HIRING A PERMANENT EMPLOYEE (not a temp): write a manifest to ${inRoot('research', 'hires')}/<name>.json — {"spec":"munder-difflin/hire@1","name":"…","description":"one-line role","goal":"standing mission","provider":"claude|codex|cursor|antigravity","model":"…","character":"…","cwd":"/absolute/folder/it/works/in","isolate":false,"tokenCap":0} (only spec and name are required; tokenCap 0 = no cap; cwd defaults to the first project, and "sessionId" continues an existing Claude session). The app opens the Add-Agent review prefilled and the human confirms; then the agent appears in registry.json and you dispatch to its inbox. An invalid file comes back to your inbox as "[hire manifest rejected]" with the reason.`
       : '';
@@ -2212,6 +2229,7 @@ export class HiveManager {
       godLine,
       scheduleLine,
       skillsLine,
+      appHelpLine,
       teamLine,
       spawnQueueLine,
       hireLine,
