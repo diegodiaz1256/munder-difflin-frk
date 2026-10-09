@@ -3,6 +3,8 @@ import type { AgentProvider } from '../shared/agentProvider';
 import type { HireManifest } from '../shared/hire';
 import type { TaskEvent } from '../shared/taskHistory';
 import type { FortressStatus } from '../main/fortress';
+import type { FreezeEntry } from '../main/freezeLog';
+export type { FreezeEntry } from '../main/freezeLog';
 import type { FloorEntry } from '../main/floors';
 export type { FloorEntry } from '../main/floors';
 export type FortressStatusView = FortressStatus & { enabled: boolean; bytes: number };
@@ -1200,6 +1202,14 @@ const api = {
   initialLanguage: (process.argv.find((a) => a.startsWith('--md-lang='))?.slice('--md-lang='.length) ?? null) as string | null,
   /** Tell main the UI language (the app menu follows it). */
   uiLanguage: (lng: string): Promise<void> => ipcRenderer.invoke('app:uiLanguage', lng),
+
+  // ─── Freeze log (main/freezeLog.ts) ────────────────────────────────────────
+  /** Report one of this window's long tasks (fire-and-forget). */
+  reportLongTask: (ms: number, screen: string): void => ipcRenderer.send('diag:longTask', ms, screen),
+  /** The newest freezes, newest first. */
+  freezes: (): Promise<FreezeEntry[]> => ipcRenderer.invoke('diag:freezes'),
+  /** Show freezes.jsonl in the file manager. */
+  openFreezeLog: (): Promise<void> => ipcRenderer.invoke('diag:openFreezeLog'),
 
   // ─── Closing time (graceful shutdown via the hive) ─────────────────────────
   /** Start the closing-time protocol: the god broadcasts shutdown, every worker

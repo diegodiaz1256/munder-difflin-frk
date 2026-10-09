@@ -415,7 +415,17 @@
     "saved": "Guardado",
     "saving": "Guardando…",
     "unsavedChanges": "cambios sin guardar",
-    "unsavedWarning": "Tienes ajustes sin guardar. ¿Cerrar igualmente y perderlos?"
+    "unsavedWarning": "Tienes ajustes sin guardar. ¿Cerrar igualmente y perderlos?",
+    "freezes": {
+      "title": "Congelaciones",
+      "none": "Ninguna congelación en las últimas 24 horas.",
+      "count_one": "{{count}} congelación en las últimas 24 horas (la más larga: {{worst}} ms).",
+      "count_other": "{{count}} congelaciones en las últimas 24 horas (la más larga: {{worst}} ms).",
+      "open": "Abrir el registro",
+      "inWindow": "la ventana, en {{screen}}",
+      "unknown": "causa no capturada (no era un handler ni un temporizador)",
+      "hint": "La app apunta cada parón de más de 200 ms y qué se estaba ejecutando. No se envía a ningún sitio; adjunta el fichero cuando avises de una congelación."
+    }
   },
   "commandCenter": {
     "title": "CENTRO DE MANDO",
