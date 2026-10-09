@@ -1,4 +1,3 @@
-- **Scranton Branch 1.0.0**: its own versions from now on.
-- **Apache-2.0 license**: keep NOTICE when you share it.
-- Memory search shows its path, also on the map.
-- Best on Windows with WSL, quick on slow disks.
+- **Factories**: long stages and names stay inside their cards.
+- **Agent page**: a long goal wraps inside its card.
+- Includes everything from Scranton Branch 1.0.0.
