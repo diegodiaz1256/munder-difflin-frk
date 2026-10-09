@@ -1531,7 +1531,9 @@
   },
   "app": {
     "godFailed": "El orquestador no pudo arrancar:",
-    "godRetry": "Reintentar"
+    "godRetry": "Reintentar",
+    "clockingIn": "FICHANDO",
+    "clockingInBody": "{{godName}} se está instalando en el despacho del fondo y preparando la planta. Un momento…"
   },
   "usage": {
     "title": "Uso de la suscripción",
@@ -2479,6 +2481,10 @@
       "restartedList": "Reiniciados: {{names}}",
       "joinedList": "Entraron: {{names}}",
       "leftList": "Salieron: {{names}}"
+    },
+    "god": {
+      "badge": "Orquestador",
+      "tip": "{{godName}} es el orquestador (el «god agent»): lee tus peticiones, reparte el trabajo entre los agentes, los coordina y solo te trae lo que te necesita."
     }
   },
   "hivePicker": {
