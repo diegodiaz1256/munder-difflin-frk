@@ -165,7 +165,9 @@ test('an in-workspace symlink to an in-workspace target is followed, not refused
     assert.equal(viaLink.ok, true, viaLink.ok ? '' : viaLink.error);
     assert.equal(viaLink.content, 'in-workspace\n');
     assert.equal(
-      viaLink.path, path.join(fs.realpathSync(root), 'real.txt'),
+      // .native: a temp folder spelled with a Windows short name (RUNNER~1)
+      // resolves to its long name, as the app's own realpath does.
+      viaLink.path, path.join(fs.realpathSync.native(root), 'real.txt'),
       'the link resolves to the canonical path of its target, not to the link'
     );
 
