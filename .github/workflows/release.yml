@@ -105,8 +105,12 @@ jobs:
 
       # No analytics in this fork's builds: electron.vite.config.ts pins the
       # key empty (src/shared/fork.ts), so nothing is injected here.
+      # TILES_KEY decrypts the licensed tile art (assets-private/tiles.bundle)
+      # into this build only; without it the app builds with the free art.
       - name: Compile (electron-vite → out/)
         run: npm run build
+        env:
+          TILES_KEY: ${{ secrets.TILES_KEY }}
 
       # Current NSIS for the Windows installers (why: electron-builder.yml, nsis).
       # The official 3.11 zip, plus elevate.exe from electron-builder's own NSIS
