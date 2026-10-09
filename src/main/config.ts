@@ -13,6 +13,7 @@ import { defaultMcpDefaults, trimRedundantMcp } from '../shared/mcpCatalog';
 import { MAX_AGENT_TOKEN_CAP } from '../shared/tokenCaps';
 import { cleanServerList } from '../shared/roleBundles';
 import { cleanAccessMap, isAccess, type Access } from '../shared/connectionAccess';
+import { mainRepoOfWorktree } from '../shared/gitWorktree';
 import { expandTilde, normalizeHiveHome } from './fs';
 import { distroHomeUnc, fromLinuxPath, parseWslPath } from './wsl';
 import { hasPlainSecrets, mergeSecrets, splitSecrets, type SecretCodec } from './configSecrets';
@@ -1099,6 +1100,8 @@ export function ensureClaudePermissionsAccepted(cwd?: string): void {
     if (!h) return;
     ensureClaudeGlobalPermissions(h);
     ensureClaudeProjectTrust(h, wsl.linuxPath);
+    const main = worktreeMainRepo(cwd!, wsl.linuxPath);
+    if (main) ensureClaudeProjectTrust(h, main);
     return;
   }
   try { home = homedir(); } catch { return; }
@@ -1107,5 +1110,21 @@ export function ensureClaudePermissionsAccepted(cwd?: string): void {
   ensureClaudeGlobalPermissions(home);
   if (cwd) {
     ensureClaudeProjectTrust(home, cwd);
+    const main = worktreeMainRepo(cwd, cwd);
+    if (main) ensureClaudeProjectTrust(home, process.platform === 'win32' ? main.replace(/\//g, '\\') : main);
+  }
+}
+
+/** In a git worktree Claude Code asks about the MAIN repository's folder, not
+ *  the worktree's: a temp isolated from a repo the user never opened in Claude
+ *  met the trust dialog, the first message's Enter picked "No, exit", and it
+ *  died. `dir` is where to read `.git`, `asSeen` the path the agent sees. */
+function worktreeMainRepo(dir: string, asSeen: string): string | null {
+  try {
+    const git = join(dir, '.git');
+    if (!statSync(git).isFile()) return null;
+    return mainRepoOfWorktree(readFileSync(git, 'utf8'), asSeen);
+  } catch {
+    return null;
   }
 }
