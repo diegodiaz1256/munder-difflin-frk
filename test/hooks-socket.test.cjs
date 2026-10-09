@@ -201,10 +201,11 @@ test('a probe with no answer in time is "busy", and the beat keeps the listener'
 });
 
 test('a hive with no root yet is not silent, and binds once the root appears', async (t) => {
-  const { home } = await floor(t);
+  const { home, hive: real } = await floor(t);
   const logs = [];
   let root = null;
-  const hive = { sockPath: () => (root ? path.join(root, 'hooks.sock') : null), appendLog: (e) => logs.push(e) };
+  // The real hive's path once there is a root: a named pipe on Windows, a file elsewhere.
+  const hive = { sockPath: () => (root ? real.sockPath() : null), appendLog: (e) => logs.push(e) };
   const a = new HookServer(hive, () => null, () => CONFIG, undefined, undefined);
   t.after(() => a.stop());
   const h = await a.ensureListening();

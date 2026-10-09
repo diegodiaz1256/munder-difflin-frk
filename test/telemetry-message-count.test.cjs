@@ -39,7 +39,8 @@ require.cache[posthogPath] = {
 
 const { Analytics, MESSAGE_SURFACES, isRendererMessageSurface } = loadTs('src/main/analytics.ts');
 
-const read = (rel) => fs.readFileSync(path.resolve(__dirname, '..', rel), 'utf8');
+// CRLF in a Windows checkout would break the source patterns below.
+const read = (rel) => fs.readFileSync(path.resolve(__dirname, '..', rel), 'utf8').replace(/\r\n/g, '\n');
 const main = read('src/main/index.ts');
 const preload = read('src/preload/index.ts');
 const telemetryDoc = read('TELEMETRY.md');

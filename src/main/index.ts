@@ -1126,7 +1126,9 @@ async function processSkillRequests(): Promise<void> {
 async function finalizeAgentWorktree(wtPath: string, origCwd: string, agentId: string): Promise<void> {
   try {
     const deps = await unlinkWorktreeDeps(origCwd, wtPath);
-    if (!deps.ok) console.error('[worktree] dependency unlink failed:', deps.error);
+    // Like the temp-worker GC: a link still in place is kept, never deleted
+    // through (Git for Windows would take the base's node_modules with it).
+    if (!deps.ok) { console.error('[worktree] dependency unlink failed (worktree kept):', deps.error); return; }
     const br = await getBranch(origCwd);
     const base = 'current' in br && br.current ? br.current : 'HEAD';
     const work = await worktreeHasUnintegratedWork(wtPath, base);
@@ -1152,7 +1154,7 @@ async function finalizeAgentWorktree(wtPath: string, origCwd: string, agentId: s
 async function finalizeWorkerWorktree(wtPath: string, origCwd: string, worker: WorkerRec): Promise<void> {
   try {
     const deps = await unlinkWorktreeDeps(origCwd, wtPath);
-    if (!deps.ok) console.error('[worktree] dependency unlink failed:', deps.error);
+    if (!deps.ok) { console.error('[worktree] dependency unlink failed (worktree kept):', deps.error); return; }
     const work = await worktreeHasUnintegratedWork(wtPath, worker.baseBranch);
     if (work.keep) {
       console.warn(`[worker] PRESERVING worktree with unintegrated work: ${wtPath} (${work.detail})`);

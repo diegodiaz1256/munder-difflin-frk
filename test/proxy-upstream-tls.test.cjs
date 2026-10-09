@@ -19,7 +19,8 @@ test('the proxy trusts the app\'s CA bundle, and skips verification only when to
   t.after(() => fs.rmSync(D, { recursive: true, force: true }));
   spawnSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(D, 'key.pem'), '-out', path.join(D, 'cert.pem'),
     '-days', '1', '-subj', '/CN=localhost', '-addext', 'subjectAltName=IP:127.0.0.1']);
-  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'hive.ts'), 'utf8');
+  // A Windows checkout has CRLF line endings.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'hive.ts'), 'utf8').replace(/\r\n/g, '\n');
   const shim = eval('`' + src.match(/const PROXY_BRIDGE_SHIM = `([\s\S]*?)`;\n/)[1] + '`'); // eslint-disable-line no-eval
   fs.writeFileSync(path.join(D, 'shim.cjs'), shim);
 
