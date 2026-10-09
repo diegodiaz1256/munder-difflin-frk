@@ -1,3 +1,2 @@
-- **Several offices at once**: File → New Floor.
-- **Half the size**, faster start, and the app logs its own freezes.
-- **The orchestrator knows the app**; your own skill marketplaces; PDF previews.
+- **Fix (Windows)**: removing an agent's isolated copy no longer empties your project's node_modules.
+- Includes everything from fork.36: several offices at once, a lighter app, the freeze log.
