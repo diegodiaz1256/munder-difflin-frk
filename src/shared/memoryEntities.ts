@@ -107,7 +107,7 @@ export function aliasPairs(text: string): Array<[string, string]> {
 export function buildEntities(docs: Array<{ label: string; text: string }>): Entity[] {
   const byKey = new Map<string, Entity>();
   /** The entity a name refers to: exact key, an alias, or a near spelling.
-   *  Names with a number in them (tickets like INFOSEC-44587, versions) only
+   *  Names with a number in them (tickets like ACME-101, versions) only
    *  match exactly: one digit apart is another ticket, not a typo. */
   const find = (n: string): Entity | undefined => {
     const k = entityKey(n);

@@ -52,14 +52,14 @@ test('tickets one digit apart stay separate, and each is listed once', () => {
   const { buildEntities: build } = require('./load-ts.cjs')('src/shared/memoryEntities.ts');
   const jira = (rows) => '| Key | Summary | Assignee |\n|---|---|---|\n' + rows.map((r) => `| ${r.join(' | ')} |`).join('\n');
   const docs = [
-    { label: 'jira-a.md', text: jira([['INFOSEC-44587', 'Add connector', 'rsoto'], ['INFOSEC-44589', 'Add image scan', 'tomaszgi'], ['INFOSEC-44650', 'RBAC for hub', 'rsoto']]) },
-    { label: 'jira-b.md', text: jira([['INFOSEC-44587', 'Add connector', 'rsoto'], ['INFOSEC-44588', 'Fix alias', 'ana'], ['INFOSEC-44650', 'RBAC for hub', 'rsoto']]) }
+    { label: 'tickets-a.md', text: jira([['ACME-101', 'Fix login', 'alice'], ['ACME-103', 'Add search', 'bob'], ['ACME-250', 'Update docs', 'alice']]) },
+    { label: 'tickets-b.md', text: jira([['ACME-101', 'Fix login', 'alice'], ['ACME-102', 'Fix logout', 'carol'], ['ACME-250', 'Update docs', 'alice']]) }
   ];
   const es = build(docs);
   const names = es.map((e) => e.name).sort();
-  assert.deepEqual(names, ['INFOSEC-44587', 'INFOSEC-44588', 'INFOSEC-44589', 'INFOSEC-44650']);
-  const a = es.find((e) => e.name === 'INFOSEC-44587');
-  assert.deepEqual(a.attrs.map((x) => `${x.label}=${x.value}`), ['Summary=Add connector', 'Assignee=rsoto'], 'its own fields only, once');
+  assert.deepEqual(names, ['ACME-101', 'ACME-102', 'ACME-103', 'ACME-250']);
+  const a = es.find((e) => e.name === 'ACME-101');
+  assert.deepEqual(a.attrs.map((x) => `${x.label}=${x.value}`), ['Summary=Fix login', 'Assignee=alice'], 'its own fields only, once');
 });
 
 test('numbered steps and timelines are not entities', () => {
