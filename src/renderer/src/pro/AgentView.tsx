@@ -124,7 +124,9 @@ export function AgentView({ agent, roster, tasks, directory, config, onOpen }: P
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="pro-card" style={{ padding: '10px 12px', fontSize: 13 }}>
+    // A goal can carry a long word without spaces (a/b/c/d, a URL): it wraps
+    // inside the card instead of running past the side column.
+    <div className="pro-card" style={{ padding: '10px 12px', fontSize: 13, minWidth: 0, overflowWrap: 'anywhere' }}>
       <div className="pro-sub" style={{ fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
       {children}
     </div>
