@@ -1705,7 +1705,14 @@
       "layout": "Layout",
       "layout_board": "Board",
       "layout_tree": "By request",
-      "parked": "Parked"
+      "parked": "Parked",
+      "dragHint": "Drag to another column to move it",
+      "moveKidsTitle": "Move {{key}} to {{to}}",
+      "moveKidsBody_one": "It has {{count}} subtask that is not in {{to}}. Move it too?",
+      "moveKidsBody_other": "It has {{count}} subtasks that are not in {{to}}. Move them too?",
+      "moveOnlyThis": "Only this one",
+      "moveWithKids_one": "Move it and its subtask",
+      "moveWithKids_other": "Move it and its {{count}} subtasks"
     },
     "automations": {
       "rules": "Schedules, context & webhooks",

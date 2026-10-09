@@ -4,7 +4,7 @@ import { useStore, type Agent } from '@/store/store';
 import { openQuestion, waitsOnHuman } from '@/components/TasksKanban';
 import { describeTaskEvent, useAgentName } from '@/components/TaskTimeline';
 import { statusSince, type TaskEvent } from '@shared/taskHistory';
-import { columnRoots, subtasksIn } from '@shared/taskBoard';
+import { columnRoots, descendantsOf, subtasksIn } from '@shared/taskBoard';
 import { deliverablePaths, splitPath } from '@shared/deliverables';
 import { FileTypeBadge } from '@/components/FileTypeBadge';
 import { ProIcon } from './ProIcon';
@@ -41,8 +41,33 @@ const COLUMNS: { status: KeyedTask['status']; color: string }[] = [
  * "New task" goes to him through his queue instead of inserting a card he
  * never heard about.
  */
-export function TasksView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agent[] }) {
+export function TasksView({ tasks: ledger, roster }: { tasks: KeyedTask[]; roster: Agent[] }) {
   const { t: tr } = useTranslation();
+  // Cards moved here show in their new column at once; the ledger poll
+  // catches up within seconds (and an override it already agrees with is moot).
+  const [moved, setMoved] = useState<Map<string, KeyedTask['status']>>(new Map());
+  const tasks = useMemo(() => ledger.map((t) => (moved.has(t.id) ? { ...t, status: moved.get(t.id)! } : t)), [ledger, moved]);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overCol, setOverCol] = useState<KeyedTask['status'] | null>(null);
+  /** A parent dropped on another column, waiting for "its subtasks too?". */
+  const [ask, setAsk] = useState<{ id: string; status: KeyedTask['status']; kids: KeyedTask[] } | null>(null);
+  const moveCards = async (ids: string[], status: KeyedTask['status']) => {
+    setMoved((m) => { const n = new Map(m); for (const id of ids) n.set(id, status); return n; });
+    for (const id of ids) {
+      // One field per card, on the raw ledger (as the task detail does).
+      try { await window.cth.hivePatchTask(id, { status }); } catch { /* the poll shows the truth */ }
+    }
+    setTimeout(() => setMoved((m) => { const n = new Map(m); for (const id of ids) n.delete(id); return n; }), 8000);
+  };
+  const dropOn = (status: KeyedTask['status']) => {
+    const id = dragId;
+    setDragId(null); setOverCol(null);
+    const card = id ? tasks.find((x) => x.id === id) : undefined;
+    if (!card || card.status === status) return;
+    const kids = descendantsOf(tasks, card.id).filter((k) => k.status !== status);
+    if (kids.length) setAsk({ id: card.id, status, kids });
+    else void moveCards([card.id], status);
+  };
   const [filter, setFilter] = useState<Filter>('all');
   const [q, setQ] = useState('');
   const [draft, setDraft] = useState<string | null>(null);
@@ -91,7 +116,10 @@ export function TasksView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agent
   const renderCard = (t: KeyedTask, nested = false) => {
     const owner = t.assignee ? byId.get(t.assignee) : undefined;
     return (
-      <button key={t.id} className="pro-card pro-task-card" style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6, ...(nested ? { width: '100%' } : {}) }}
+      <button key={t.id} className="pro-card pro-task-card" style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6, ...(nested ? { width: '100%' } : {}), ...(dragId === t.id ? { opacity: 0.5 } : {}) }}
+        draggable={layout === 'board'} title={layout === 'board' ? tr('pro.tasks.dragHint') : undefined}
+        onDragStart={(e) => { e.stopPropagation(); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', t.id); setDragId(t.id); }}
+        onDragEnd={() => { setDragId(null); setOverCol(null); }}
         onClick={() => useStore.getState().openTaskDetail(t.id)}>
         <span className="pro-row" style={{ justifyContent: 'space-between', gap: 6 }}>
           <span className="pro-ticket">{t.key ?? t.id}</span>
@@ -268,7 +296,10 @@ export function TasksView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agent
           // Done piles up and buries the board: the latest few, the rest on demand.
           const cards = col.status === 'done' && !showDone ? roots.slice(0, 8) : roots;
           return (
-            <section key={col.status} className="pro-col" aria-label={tr(`pro.tasks.col_${col.status}`)}>
+            <section key={col.status} className={`pro-col${overCol === col.status && dragId ? ' pro-col-drop' : ''}`} aria-label={tr(`pro.tasks.col_${col.status}`)}
+              onDragOver={(e) => { if (!dragId) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (overCol !== col.status) setOverCol(col.status); }}
+              onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOverCol(null); }}
+              onDrop={(e) => { e.preventDefault(); dropOn(col.status); }}>
               <div className="pro-col-head"><span className="pro-dot" style={{ background: col.color }} />{tr(`pro.tasks.col_${col.status}`)}<span className="pro-sub">{all.length}</span></div>
               {cards.map((t) => renderTree(t, all))}
               {col.status === 'done' && roots.length > 8 && (
@@ -281,6 +312,27 @@ export function TasksView({ tasks, roster }: { tasks: KeyedTask[]; roster: Agent
         })}
       </div>
       )}
+
+      {ask && (() => {
+        const parent = tasks.find((x) => x.id === ask.id);
+        const to = tr(`pro.tasks.col_${ask.status}`);
+        return (
+          <div className="pro-modal-back" role="presentation" onClick={() => setAsk(null)}>
+            <div className="pro-card pro-modal" role="dialog" aria-modal="true" aria-labelledby="move-kids-title" onClick={(e) => e.stopPropagation()}>
+              <strong id="move-kids-title" style={{ fontSize: 15 }}>{tr('pro.tasks.moveKidsTitle', { key: parent?.key ?? ask.id, to })}</strong>
+              <span className="pro-sub" style={{ fontSize: 13 }}>{tr('pro.tasks.moveKidsBody', { count: ask.kids.length, to })}</span>
+              <ul style={{ margin: 0, paddingInlineStart: 18, maxHeight: 160, overflowY: 'auto', fontSize: 13 }}>
+                {ask.kids.map((k) => <li key={k.id}><span className="pro-ticket">{k.key ?? k.id}</span> {k.title} <span className="pro-sub">· {tr(`pro.tasks.col_${k.status}`)}</span></li>)}
+              </ul>
+              <div className="pro-row" style={{ justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+                <button className="pro-btn" onClick={() => setAsk(null)}>{tr('common.cancel')}</button>
+                <button className="pro-btn" onClick={() => { void moveCards([ask.id], ask.status); setAsk(null); }}>{tr('pro.tasks.moveOnlyThis')}</button>
+                <button className="pro-btn pro-btn-primary" autoFocus onClick={() => { void moveCards([ask.id, ...ask.kids.map((k) => k.id)], ask.status); setAsk(null); }}>{tr('pro.tasks.moveWithKids', { count: ask.kids.length })}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
