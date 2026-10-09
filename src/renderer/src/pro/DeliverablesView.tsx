@@ -10,6 +10,7 @@ import type { KeyedTask } from './data';
 import { useProStore } from './proStore';
 import { FileTypeBadge } from '@/components/FileTypeBadge';
 import { AuthorAvatars } from './AuthorAvatars';
+import { PdfPreview } from './PdfPreview';
 
 /**
  * Deliverables — what the agents made for you, in one place: files linked from
@@ -279,7 +280,7 @@ export function DeliverablesView({ tasks, roster }: { tasks: KeyedTask[]; roster
               })}
             </div>
           </aside>
-          <div style={{ flex: '999 1 360px', minWidth: 0, minHeight: 360, display: 'flex' }}>
+          <div style={{ flex: '999 1 360px', minWidth: 0, minHeight: 360, maxHeight: '100%', display: 'flex' }}>
             {current ? <Preview key={current} abs={current}
               meta={all.find((i) => i.abs === current)}
               tasks={shown.filter((g) => g.kind === 'task' && g.items.some((i) => i.abs === current)).map((g) => ({ id: g.key.slice('task:'.length), label: g.label }))}
@@ -297,6 +298,7 @@ type Loaded =
   | { state: 'loading' }
   | { state: 'text'; text: string }
   | { state: 'image'; url: string }
+  | { state: 'pdf'; bytes: Uint8Array }
   | { state: 'none'; reason: string };
 
 function Preview({ abs, meta, tasks, hidden, deletable, onChanged }: { abs: string; meta?: Item; tasks: Array<{ id: string; label: string }>; hidden: boolean; deletable: boolean; onChanged: () => void }) {
@@ -355,7 +357,14 @@ function Preview({ abs, meta, tasks, hidden, deletable, onChanged }: { abs: stri
         url = URL.createObjectURL(new Blob([r.bytes], { type: extOf(name) === 'svg' ? 'image/svg+xml' : r.mime }));
         setLoaded({ state: 'image', url });
       });
-    } else if (kind === 'pdf' || kind === 'binary') {
+    } else if (kind === 'pdf') {
+      // Drawn by the app itself (PdfPreview, pdf.js).
+      void window.cth.readBinary(dir, name).then((r) => {
+        if (!alive) return;
+        if (!r.ok) { setLoaded({ state: 'none', reason: r.error }); return; }
+        setLoaded({ state: 'pdf', bytes: new Uint8Array(r.bytes) });
+      });
+    } else if (kind === 'binary') {
       setLoaded({ state: 'none', reason: t('pro.dlv.cannotPreview') });
     } else {
       void window.cth.readFile(dir, name).then((r) => {
@@ -367,7 +376,10 @@ function Preview({ abs, meta, tasks, hidden, deletable, onChanged }: { abs: stri
   }, [abs, dir, name, kind, t]);
 
   return (
-    <section className="pro-card" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10, padding: 0, minHeight: 0 }}>
+    // maxHeight: the row wraps on narrow windows, and a wrapping flex line grows
+    // to its content; without a cap the whole page scrolled, title and list too,
+    // instead of just the document.
+    <section className="pro-card" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10, padding: 0, minHeight: 0, maxHeight: '100%' }}>
       <div className="pro-row" style={{ padding: '10px 14px', borderBottom: '1px solid var(--pro-line)', gap: 8, flexWrap: 'wrap' }}>
         <FileTypeBadge name={name} />
         <strong style={{ fontSize: 14, overflowWrap: 'anywhere' }}>{name}</strong>
@@ -435,12 +447,13 @@ function Preview({ abs, meta, tasks, hidden, deletable, onChanged }: { abs: stri
           <button className="pro-btn" style={{ padding: '1px 8px' }} onClick={() => setVersion(null)}>{t('pro.dlv.backToCurrent')}</button>
         </div>
       )}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '4px 18px 18px' }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '4px 18px 18px', ...(loaded.state === 'pdf' && !diff && !version ? { display: 'flex', flexDirection: 'column' } : {}) }}>
         {diff ? <DiffView text={diff.text} label={t('pro.dlv.changesBy', { who: diff.author === 'Hive' ? t('pro.dlv.app') : diff.author, when: fmtWhen(new Date(diff.ts).getTime()) })} onClose={() => setDiff(null)} />
         : version ? <TextPreview kind={source ? 'text' : kind} text={version.text} dir={dir} name={name} /> : <>
         {loaded.state === 'loading' && <p className="pro-sub">{t('pro.dlv.loading')}</p>}
         {loaded.state === 'none' && <p className="pro-sub">{loaded.reason}</p>}
         {loaded.state === 'image' && <img src={loaded.url} alt={name} style={{ maxWidth: '100%', imageRendering: 'auto' }} />}
+        {loaded.state === 'pdf' && <PdfPreview bytes={loaded.bytes} name={name} />}
         {loaded.state === 'text' && <TextPreview kind={source ? 'text' : kind} text={loaded.text} dir={dir} name={name} />}
         </>}
       </div>

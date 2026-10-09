@@ -199,7 +199,7 @@ function fetchReleaseBody(version: string, done: (notes: string | undefined) => 
       (res) => {
         let body = '';
         res.setEncoding('utf8');
-        res.on('data', (d) => { body += d; if (body.length > 262_144) req.destroy(); });
+        res.on('data', (d) => { body += d; if (body.length > 262_144) req.destroy(new Error('release body too large')); });
         res.on('end', () => {
           try {
             const rel = JSON.parse(body) as { body?: string };
@@ -231,7 +231,7 @@ function fallbackCheck(reason: string | undefined, force = false): void {
       (res) => {
         let body = '';
         res.setEncoding('utf8');
-        res.on('data', (d) => { body += d; if (body.length > 262_144) req.destroy(); });
+        res.on('data', (d) => { body += d; if (body.length > 262_144) req.destroy(new Error('release body too large')); });
         res.on('end', () => {
           try {
             const rel = JSON.parse(body) as { tag_name?: string; html_url?: string; body?: string; assets?: Array<{ name?: string; browser_download_url?: string }> };

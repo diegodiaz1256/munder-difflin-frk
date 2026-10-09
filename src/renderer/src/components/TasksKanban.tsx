@@ -12,6 +12,21 @@ import { MarkdownPreview } from '@/markdown/MarkdownPreview';
 import { useRtl } from '@/i18n/useDirection';
 import { useProStore } from '@/pro/proStore';
 import { SpritePortrait } from './SpritePortrait';
+import { formatTaskKey } from '@shared/taskKeys';
+
+/** The ticket people use for a card (DUN-12); the ledger id only when it has none yet. */
+export function ticketOf(task: HiveTask & { key?: string }): string {
+  return task.key ?? task.id;
+}
+
+/** The board with its ticket keys (the same numbering the Pro board shows). */
+export async function loadKeyedTasks(): Promise<Array<HiveTask & { key?: string }>> {
+  const [raw, keys] = await Promise.all([
+    window.cth.hiveTasks(),
+    window.cth.hiveTaskKeys().catch(() => ({ prefix: 'md', keys: {} as Record<string, number> }))
+  ]);
+  return parseTasks(raw).map((t) => ({ ...t, key: formatTaskKey(keys.prefix, keys.keys[t.id]) }));
+}
 
 /** A card on the task kanban. Mirrors HiveTask in the main/preload process —
  *  re-declared locally so the renderer doesn't reach into the preload package
@@ -144,7 +159,7 @@ export function TasksKanban() {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refresh = useCallback(async () => {
-    try { setTasks(parseTasks(await window.cth.hiveTasks())); } catch { /* keep last good */ }
+    try { setTasks(await loadKeyedTasks()); } catch { /* keep last good */ }
   }, []);
 
   // Dismiss a card off the board (human-initiated). The kanban is otherwise the
@@ -279,7 +294,7 @@ function TaskCard({ task, accent, assigneeName, all, onOpen, onDismiss }: {
           <span style={{
             fontFamily: 'var(--cth-font-mono)', fontSize: 10,
             color: 'var(--cth-ink-500)'
-          }}>{task.id}</span>
+          }} title={task.id}>{ticketOf(task)}</span>
           {parent && (
             <span style={{ fontSize: 10.5, color: 'var(--cth-ink-500)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t('kanban.partOf')}>↳ {parent.title}</span>
           )}
@@ -421,7 +436,7 @@ export function TaskDetail({ task, all, assigneeName, onMove, onAssign, onClose 
                   this task, so it should be the first thing here too. */}
               <span style={{
                 fontFamily: 'var(--cth-font-mono)', fontSize: 10, color: 'var(--cth-ink-500)'
-              }}>{task.id}</span>
+              }} title={task.id}>{ticketOf(task)}</span>
               <span style={{
                 fontFamily: 'var(--cth-font-display)', fontSize: 8, padding: '2px 6px 1px',
                 background: col.accent, color: 'var(--cth-ink-900)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)'

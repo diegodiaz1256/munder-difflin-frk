@@ -2,8 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState } from 'react';
 import { useStore, type Agent } from '@/store/store';
 import { SpritePortrait } from '@/components/SpritePortrait';
-import { parseTasks, waitsOnHuman, type HiveTask } from '@/components/TasksKanban';
-import { formatTaskKey } from '@shared/taskKeys';
+import { loadKeyedTasks, waitsOnHuman, type HiveTask } from '@/components/TasksKanban';
 import { terminalTail } from '@/components/terminalPool';
 
 /**
@@ -40,13 +39,7 @@ export interface KeyedTask extends HiveTask {
 
 /** The board with its ticket keys, polled every 5 s (the Classic kanban's cadence). */
 export function useTasks(): KeyedTask[] {
-  return usePoll(async () => {
-    const [raw, keys] = await Promise.all([
-      window.cth.hiveTasks(),
-      window.cth.hiveTaskKeys().catch(() => ({ prefix: 'md', keys: {} as Record<string, number> }))
-    ]);
-    return parseTasks(raw).map((t) => ({ ...t, key: formatTaskKey(keys.prefix, keys.keys[t.id]) }));
-  }, 5000, [] as KeyedTask[]);
+  return usePoll(loadKeyedTasks, 5000, [] as KeyedTask[]);
 }
 
 // Types flow from the typed `window.cth` global, as elsewhere in the renderer,
@@ -129,6 +122,27 @@ export function askingAgents(tasks: HiveTask[]): Set<string> {
 
 /** agentState's labels → their i18n keys (`pro.state.*`). */
 const STATE_KEY: Record<string, string> = { 'Needs you': 'needsYou', Working: 'working', Thinking: 'thinking', Breaker: 'breaker', Done: 'done', Idle: 'idle', Stopped: 'stopped' };
+
+/** Marks the orchestrator (the "god agent") wherever agents are listed, so it
+ *  never reads as just another worker. `star` is the one-glyph form for tight
+ *  rows; the tooltip says what the role is either way. */
+export function GodBadge({ star = false }: { star?: boolean }) {
+  const { t } = useTranslation();
+  const tip = t('pro.god.tip');
+  if (star) return <span className="pro-god-star" title={tip} aria-label={t('pro.god.badge')}>★</span>;
+  return <span className="pro-badge pro-badge-god" title={tip}>★ {t('pro.god.badge')} <span className="pro-badge-god-sub">· god agent</span></span>;
+}
+
+/** The same state as StateBadge, as a quiet line (a dot and a word) for dense rows. */
+export function StateLine({ label, tone }: { label: string; tone: Tone }) {
+  const { t } = useTranslation();
+  const key = STATE_KEY[label];
+  return (
+    <span className="pro-state-line">
+      <span className="pro-dot" style={{ background: TONE_COLOR[tone] }} /> {key ? t(`pro.state.${key}`) : label}
+    </span>
+  );
+}
 
 export function StateBadge({ label, tone }: { label: string; tone: Tone }) {
   const { t } = useTranslation();

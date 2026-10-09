@@ -7,7 +7,7 @@ import { canResumeAgent, restartAgent } from '@/components/restartAgent';
 import { MCP_CATALOG } from '@shared/mcpCatalog';
 import { mcpLabel } from '@shared/roleBundles';
 import { useProStore } from './proStore';
-import { Avatar, Bar, StateBadge, agentState, fmtTokens, isActive, type AgentDirectoryEntry, type KeyedTask } from './data';
+import { Avatar, Bar, GodBadge, StateBadge, agentState, fmtTokens, isActive, type AgentDirectoryEntry, type KeyedTask } from './data';
 import { currentTicket, spendLine } from './AgentsView';
 import { StepsView } from './StepsView';
 import { delegations, envelopeReturning, type Delegation, type LogMessage } from '@shared/delegations';
@@ -69,7 +69,7 @@ export function AgentView({ agent, roster, tasks, directory, config, onOpen }: P
         <Avatar agent={agent} />
         <h2>{agent.name}</h2>
         {agent.isGod
-          ? <span className="pro-badge" style={{ background: 'var(--cth-lemon-light)' }}>{t('pro.nav.orchestrator')}</span>
+          ? <GodBadge />
           : <StateBadge {...st} />}
         <div className="pro-head-end" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         {agent.ptyId && (

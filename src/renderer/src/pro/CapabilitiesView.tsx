@@ -268,6 +268,8 @@ export function CapabilitiesView({ roster, config }: { roster: Agent[]; config: 
             {t('pro.caps.footer')}{' '}
             <button className="pro-btn" style={{ padding: '1px 6px' }} onClick={() => setView({ kind: 'section', section: 'connections' })}>{t('pro.nav.connections')}</button>
           </p>
+          {/* What the folder and git rules can and cannot see (shared/toolGuard.ts). */}
+          <p className="pro-sub" style={{ fontSize: 12 }}>{t('pro.caps.guardLimits')}</p>
         </>
       )}
     </div>

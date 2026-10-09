@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '@/store/store';
-import { TaskDetail, parseTasks, type HiveTask } from './TasksKanban';
+import { TaskDetail, loadKeyedTasks, type HiveTask } from './TasksKanban';
 
 /**
  * App-wide host for the task detail: whoever calls store.openTaskDetail(id) —
@@ -23,7 +23,7 @@ export function TaskDetailOverlay() {
     // parseTasks NORMALIZES (the ledger is a hand-written file; cards may lack
     // dependsOn/priority/etc.) — a raw card without dependsOn crashed the
     // detail once. Never feed TaskDetail unparsed ledger entries.
-    try { setTasks(parseTasks(await window.cth.hiveTasks())); } catch { /* keep last good */ }
+    try { setTasks(await loadKeyedTasks()); } catch { /* keep last good */ }
   }, []);
 
   useEffect(() => {
