@@ -38,13 +38,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # The release job's runners, which have the toolchain node-pty builds with.
+        os: [ubuntu-24.04, windows-2022]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
+      # node-gyp (node-pty's rebuild) imports distutils, gone in Python 3.12.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Provide distutils for node-gyp
+        run: python -m pip install --upgrade setuptools
       # A full install: some tests start real terminals (node-pty) and one runs
       # the Electron binary, both of which come from install scripts.
       - name: Install dependencies
