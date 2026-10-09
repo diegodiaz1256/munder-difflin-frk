@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import { join } from 'node:path';
+import { lstat, readdir, rmdir, unlink } from 'node:fs/promises';
 import { openForRead, safeResolve } from './fs';
 import { gitInvocation, parseWslPath, toWslUnc } from './wsl';
 
@@ -275,11 +277,35 @@ export async function addWorktree(
   return { ok: false, error: fallback.error };
 }
 
+/** Remove the symlinks and junctions directly inside `dir` (the links only). */
+async function unlinkTopLevelLinks(dir: string): Promise<{ ok: true } | { ok: false; path: string; error: string }> {
+  let names: string[] = [];
+  try { names = await readdir(dir); } catch { return { ok: true }; }
+  for (const name of names) {
+    const p = join(dir, name);
+    try {
+      if (!(await lstat(p)).isSymbolicLink()) continue;
+      // A directory junction is removed with rmdir on Windows; unlink elsewhere.
+      try { await unlink(p); } catch { await rmdir(p); }
+    } catch (e) {
+      return { ok: false, path: p, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+  return { ok: true };
+}
+
 /** Best-effort removal of an agent's worktree. Forced so a dirty tree doesn't
- *  block teardown; failures are surfaced but callers may ignore them. */
+ *  block teardown; failures are surfaced but callers may ignore them.
+ *
+ *  Git for Windows deletes THROUGH a directory junction, so the node_modules
+ *  link into the base checkout (worktreeDeps.ts) would take the base's
+ *  dependencies with it. Every link at the top of the worktree is removed first
+ *  (the link, never its target); if one cannot be, the worktree is kept. */
 export async function removeWorktree(
   cwd: string, wtPath: string
 ): Promise<{ ok: boolean; error?: string }> {
+  const links = await unlinkTopLevelLinks(wtPath);
+  if (!links.ok) return { ok: false, error: `kept: could not remove the link ${links.path} first (${links.error})` };
   const res = await runGit(cwd, ['worktree', 'remove', '--force', wtPath]);
   if (res.ok) return { ok: true };
   return { ok: false, error: res.error };

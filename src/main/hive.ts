@@ -24,7 +24,7 @@ import {
   readdirSync, statSync, lstatSync, realpathSync, rmSync, appendFileSync,
   symlinkSync, unlinkSync, copyFileSync, cpSync, chmodSync
 } from 'node:fs';
-import { join, dirname, basename, isAbsolute, relative, resolve } from 'node:path';
+import { join, dirname, basename, isAbsolute, relative, resolve, posix } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { spawnSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes, createHash } from 'node:crypto';
@@ -239,6 +239,9 @@ const MAX_SOCK_PATH = 100;
  * private per-user folder) when there is one, else a 0700 folder in the temp dir.
  */
 export function hookSockPath(root: string, env: { runtimeDir?: string; tmp: string; uid?: number }): string {
+  // POSIX only (Windows uses a named pipe, see sockPath), so POSIX joins: the
+  // same answer whatever OS computes it.
+  const join = posix.join;
   const normal = join(root, 'hooks.sock');
   if (Buffer.byteLength(normal) <= MAX_SOCK_PATH) return normal;
   const id = createHash('sha1').update(root).digest('hex').slice(0, 12);

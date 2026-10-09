@@ -46,7 +46,8 @@ test('links the base node_modules into an isolated worktree', async () => {
   assert.deepEqual(result, { ok: true, skipped: false });
   const worktreeNodeModules = path.join(wtPath, 'node_modules');
   assert.equal(fs.lstatSync(worktreeNodeModules).isSymbolicLink(), true);
-  assert.equal(fs.readlinkSync(worktreeNodeModules), baseNodeModules);
+  // A Windows junction reads back with a trailing separator.
+  assert.equal(path.resolve(fs.readlinkSync(worktreeNodeModules)), path.resolve(baseNodeModules));
   assert.equal(fs.readFileSync(path.join(worktreeNodeModules, 'sentinel.txt'), 'utf8'), 'base\n');
 });
 
@@ -102,7 +103,8 @@ test('leaves a dangling worktree dependency symlink untouched', async () => {
   const result = await linkWorktreeDeps(repo, wtPath);
 
   assert.deepEqual(result, { ok: true, skipped: true });
-  assert.equal(fs.readlinkSync(worktreeNodeModules), '/does-not-exist');
+  // Windows reads a rooted link back with its drive (G:\does-not-exist).
+  assert.equal(path.resolve(fs.readlinkSync(worktreeNodeModules)), path.resolve('/does-not-exist'));
 });
 
 test('reports a failed link without throwing', async () => {
@@ -114,7 +116,7 @@ test('reports a failed link without throwing', async () => {
   const result = await linkWorktreeDeps(repo, notADirectory);
 
   assert.equal(result.ok, false);
-  assert.match(result.error, /EEXIST|ENOTDIR/);
+  assert.match(result.error, /EEXIST|ENOTDIR|ENOENT/); // ENOENT: Windows, for a junction under a file
 });
 
 test('removes only the linked dependencies before checking worktree status', async () => {
@@ -125,7 +127,8 @@ test('removes only the linked dependencies before checking worktree status', asy
   const worktreeNodeModules = path.join(wtPath, 'node_modules');
 
   assert.deepEqual(await linkWorktreeDeps(repo, wtPath), { ok: true, skipped: false });
-  assert.notEqual(git(wtPath, 'status', '--porcelain'), '', 'the unignored link makes the worktree dirty');
+  // Git sees the link as an untracked file on POSIX; Git for Windows does not list a junction.
+  if (process.platform !== 'win32') assert.notEqual(git(wtPath, 'status', '--porcelain'), '', 'the unignored link makes the worktree dirty');
 
   assert.deepEqual(await unlinkWorktreeDeps(repo, wtPath), { ok: true, removed: true });
   assert.throws(() => fs.lstatSync(worktreeNodeModules), /ENOENT/);

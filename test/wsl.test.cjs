@@ -38,14 +38,15 @@ test('UNC paths inside text (prompts, settings) become Linux paths', () => {
 });
 
 test('the wsl.exe command runs through a login shell, in the right folder, with env', () => {
-  const c = wslCommand('Ubuntu', '/home/d/o', 'claude', ['--model', 'opus'], { MD_AGENT_ID: 'god', MD_BROKER_TOKEN: 's3cret', 'BAD-NAME': 'x' }, undefined);
+  const c = wslCommand('Ubuntu', '/home/d/o', 'claude', ['--model', 'opus'], { MD_AGENT_ID: 'god', MD_BROKER_TOKEN: 's3cret', 'BAD-NAME': 'x' }, '');
   assert.equal(c.file, 'wsl.exe');
   assert.deepEqual(c.args, ['-d', 'Ubuntu', '--cd', '/home/d/o', '--exec', 'bash', '-lc', WSL_PRELUDE, 'bash', 'claude', '--model', 'opus']);
   // env goes through the process environment + WSLENV, never the command line
   assert.ok(!c.args.join(' ').includes('s3cret'));
   assert.deepEqual(c.env, { MD_AGENT_ID: 'god', MD_BROKER_TOKEN: 's3cret', WSLENV: 'MD_AGENT_ID:MD_BROKER_TOKEN' });
   assert.equal(wslCommand('U', '/', 'x', [], { A: '1' }, 'USERPROFILE/p').env.WSLENV, 'A:USERPROFILE/p', 'keeps the user\'s own WSLENV');
-  assert.deepEqual(wslCommand('U', '/', 'x', []).env, {});
+  // '' = no WSLENV of the user's own (undefined would read this process's, e.g. Windows Terminal's).
+  assert.deepEqual(wslCommand('U', '/', 'x', [], {}, '').env, {});
   assert.match(WSL_PRELUDE, /nvm.sh/);
   assert.ok(WSL_PRELUDE.endsWith('exec "$@"'), "the prelude ends by running the command");
 });
