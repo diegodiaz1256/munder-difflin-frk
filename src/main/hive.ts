@@ -18,6 +18,7 @@
  *
  * Everything here runs in the Electron main process.
  */
+import { messageBody } from '../shared/messageBody';
 import { readdir as readdirAsync, readFile as readFileAsync, stat as statAsync } from 'node:fs/promises';
 import { gitInvocation, linuxizeText, parseWslPath, runInDistro, toWslUnc, type WslLocation } from './wsl';
 import {
@@ -2318,7 +2319,7 @@ export class HiveManager {
       to: partial.to ?? 'god',
       act,
       subject: partial.subject ?? '',
-      body: partial.body ?? '',
+      body: messageBody(partial as Record<string, unknown>),
       // hops is harness-owned (PROTOCOL.md: "The harness fills in `id`, `from`,
       // `hops`, and timestamps"), so an agent-authored value is only a carried
       // count, never authoritative. Clamp it into range: an echoed relay must
